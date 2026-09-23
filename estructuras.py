@@ -1,12 +1,6 @@
 """
-ALCALDE DIGITAL - Estructuras de datos
-Universidad del Norte - Estructura de Datos II - Primera entrega
-
-Este modulo contiene UNICAMENTE las estructuras de datos. No importa pygame
-ni nada de la interfaz: se puede probar y sustentar de forma aislada.
-
-Se implementan DOS arboles generales (n-arios) distintos, porque resuelven
-dos problemas diferentes dentro del juego:
+Se implementarom dos arboles generales distintos, porque resuelven las
+dos problematicas diferentes dentro del juego:
 
   1. ArbolHabilidades  -> arbol de PRERREQUISITOS. Persistente, uno por
      jugador, crece durante la partida. Responde: "que puede hacer este
@@ -16,24 +10,17 @@ dos problemas diferentes dentro del juego:
      publicacion, se recorre una vez y se descarta. Responde: "que pasa en
      Ciudad Nova si el jugador elige esta opcion".
 
-Ninguno de los dos es un arbol binario de busqueda: no existe un criterio de
-orden entre "Verificacion" y "Redaccion", existe una jerarquia de dependencia.
-Por eso son arboles generales y no BST.
 """
 
 from collections import deque
 
 
-# ===================================================================
-#  1. ARBOL DE HABILIDADES  (persistente, de prerrequisitos)
-# ===================================================================
+#  1. ARBOL DE HABILIDADES
 
 class NodoHabilidad:
-    """Un nodo del arbol de habilidades.
-
-    Cada nodo representa una habilidad que cambia una REGLA del juego
-    (no un bono numerico): al desbloquearse inserta una opcion nueva en el
-    arbol de decision de las escenas.
+    """
+    Cada nodo representa una habilidad que cambia una REGLA del juego:
+    al desbloquearse inserta una opcion nueva en el arbol de decision de las escenas.
     """
 
     def __init__(self, id_hab, nombre, descripcion, costo, simbolo="+"):
@@ -47,11 +34,7 @@ class NodoHabilidad:
         self.hijos = []
         self.padre = None
 
-        # True si el nodo NO venia en el arbol inicial, sino que fue
-        # insertado en tiempo de ejecucion por el comportamiento del jugador.
         self.dinamico = False
-
-        # Posicion calculada para dibujar (la llena calcular_posiciones)
         self.x = 0.0
         self.profundidad = 0
 
@@ -69,22 +52,19 @@ class NodoHabilidad:
 
 
 class ArbolHabilidades:
-    """Arbol general (n-ario) de prerrequisitos.
+    """Arbol general de prerrequisitos.
 
-    INVARIANTE CENTRAL: un nodo solo puede desbloquearse si su PADRE ya
-    esta desbloqueado. Esa restriccion es la razon de ser de la estructura:
-    con una lista o un diccionario habria que guardar las dependencias
-    aparte; con un arbol la dependencia *es* la forma de la estructura.
+    Un nodo solo puede desbloquearse si su PADRE ya
+    esta desbloqueado. Esa restriccion es la razon de ser de la estructura
     """
 
     def __init__(self, raiz):
         self.raiz = raiz
-        self.raiz.desbloqueada = True   # la raiz es el rol, se tiene de entrada
+        self.raiz.desbloqueada = True  
 
-    # ---------------- BUSQUEDA ----------------
+    # Buscar
 
     def buscar(self, id_hab, nodo=None):
-        """Busqueda en profundidad (DFS recursivo). O(n)."""
         nodo = nodo or self.raiz
         if nodo.id == id_hab:
             return nodo
@@ -94,15 +74,10 @@ class ArbolHabilidades:
                 return encontrado
         return None
 
-    # ---------------- RECORRIDOS ----------------
+    # Recorrer
 
     def recorrido_bfs(self):
-        """Recorrido por NIVELES (anchura), con cola.
-
-        Se usa para dos cosas reales:
-          - dibujar el arbol por niveles en la interfaz
-          - calcular la 'frontera' de habilidades desbloqueables
-        """
+        
         resultado = []
         cola = deque([self.raiz])
         while cola:
@@ -113,11 +88,7 @@ class ArbolHabilidades:
         return resultado
 
     def recorrido_dfs(self, nodo=None):
-        """Recorrido en PROFUNDIDAD, preorden (padre antes que hijos).
-
-        Se usa para acumular las mecanicas activas siguiendo cada rama
-        completa, y para recolectar subarboles al eliminar.
-        """
+        
         nodo = nodo or self.raiz
         resultado = [nodo]
         for hijo in nodo.hijos:
@@ -125,28 +96,22 @@ class ArbolHabilidades:
         return resultado
 
     def altura(self, nodo=None):
-        """Altura del arbol (niveles). Recursiva."""
+        
         nodo = nodo or self.raiz
         if nodo.es_hoja():
             return 1
         return 1 + max(self.altura(h) for h in nodo.hijos)
 
-    # ---------------- OPERACIONES DEL JUEGO ----------------
+    #Operaciones del juego
 
     def se_puede_desbloquear(self, id_hab):
-        """Regla de prerrequisito: el padre debe estar desbloqueado."""
         nodo = self.buscar(id_hab)
         if nodo is None or nodo.desbloqueada:
             return False
         return nodo.padre is not None and nodo.padre.desbloqueada
 
     def frontera(self):
-        """Habilidades que el jugador PUEDE comprar ahora mismo.
-
-        Se calcula con BFS: son los nodos bloqueados cuyo padre ya esta
-        desbloqueado. Es literalmente el borde entre lo desbloqueado y lo
-        que todavia no.
-        """
+        """Habilidades que el jugador PUEDE comprar ahora mismo."""
         return [n for n in self.recorrido_bfs()
                 if not n.desbloqueada and n.padre and n.padre.desbloqueada]
 
@@ -165,66 +130,50 @@ class ArbolHabilidades:
         nodo.desbloqueada = True
         return True, puntos - nodo.costo, f"Desbloqueaste '{nodo.nombre}'."
 
-    # ---------------- INSERCION ----------------
+    # Insercion
 
     def insertar(self, id_padre, nodo_nuevo):
-        """INSERCION: cuelga una habilidad nueva de un padre existente.
-
-        No es decorativa: el comportamiento del jugador hace aparecer ramas
-        que no estaban en el arbol inicial (ver perfil de personalidad en
-        juego.py). El arbol de un jugador que verifica todo termina con una
-        FORMA distinta al de uno que comparte sin pensar.
+        """
+        El comportamiento del jugador hace aparecer ramas
+        que no estaban en el arbol inicial
+        El arbol de un jugador termina con una forma distinta de acuerdo a lo que escoge
         """
         padre = self.buscar(id_padre)
         if padre is None:
             return False
         if self.buscar(nodo_nuevo.id) is not None:
-            return False        # ya existe, no duplicar
+            return False        
         nodo_nuevo.dinamico = True
         padre.agregar_hijo(nodo_nuevo)
         return True
 
-    # ---------------- ELIMINACION ----------------
+    #Eliminacion
 
     def recolectar_subarbol(self, nodo):
-        """Ids de un nodo y toda su descendencia (DFS)."""
         ids = [nodo.id]
         for hijo in nodo.hijos:
             ids.extend(self.recolectar_subarbol(hijo))
         return ids
 
     def eliminar_en_cascada(self, id_hab):
-        """ELIMINACION EN CASCADA.
-
+        """
         Si el jugador pierde credibilidad se le revoca una habilidad base
-        Y TODA su descendencia, porque por el invariante de prerrequisitos
-        las hijas no pueden sobrevivir sin la madre.
-
-        Devuelve la lista de ids eliminados (para que el arbol de decision
-        pode las opciones que esas habilidades habian insertado).
+        Y TODA su descendencia.
         """
         nodo = self.buscar(id_hab)
         if nodo is None or nodo.padre is None:
-            return []           # la raiz (el rol) nunca se elimina
+            return []           
         ids = self.recolectar_subarbol(nodo)
         nodo.padre.hijos.remove(nodo)
         nodo.padre = None
         return ids
 
-    # ---------------- APOYO A LA INTERFAZ ----------------
+    # Interfaz
 
     def mecanicas_activas(self):
-        """Ids de todas las habilidades desbloqueadas, recorriendo en DFS."""
         return [n.id for n in self.recorrido_dfs() if n.desbloqueada]
 
     def calcular_posiciones(self):
-        """Asigna a cada nodo una posicion (x, profundidad) para dibujarlo.
-
-        Algoritmo clasico de layout de arboles: las hojas se reparten en
-        posiciones consecutivas y cada padre se centra sobre sus hijos.
-        Como es automatico, funciona tambien con los nodos insertados en
-        tiempo de ejecucion.
-        """
         contador = [0]
 
         def asignar(nodo, prof):
@@ -241,9 +190,7 @@ class ArbolHabilidades:
         return max(contador[0], 1)
 
 
-# ===================================================================
-#  2. ARBOL DE DECISION  (transitorio, de consecuencias)
-# ===================================================================
+#  2. ARBOL DE DECISION 
 
 class NodoDecision:
     """Un nodo del arbol de decision de una publicacion.
@@ -259,23 +206,17 @@ class NodoDecision:
                  bandera=None, jugador_origen=None):
         self.id = id_nodo
         self.texto = texto
-        # etiqueta breve para dibujar el nodo; si no se da, se usa texto
         self.corto = corto or texto
         # bandera que deja marcada en la partida si el camino pasa por aqui.
         # Es la memoria estilo Detroit: los dias siguientes la consultan.
         self.bandera = bandera
-        # si la rama la inserto OTRO jugador con una carta de intervencion,
-        # aqui queda su indice. Sirve para dibujarla con su color.
         self.jugador_origen = jugador_origen
         # puntos de habilidad que otorga elegir esta opcion
         self.puntos = puntos
         # efectos: {"desinformacion": +8, "confianza": -3, ...}
         self.efectos = efectos or {}
-        # rasgo: que suma al perfil de personalidad ("rigor", "impulso", ...)
         self.rasgo = rasgo
-        # detalle: el texto de retroalimentacion que se le muestra al jugador
         self.detalle = detalle
-        # habilidad_origen: si esta opcion fue INSERTADA por una habilidad,
         # guarda su id. Sirve para poder podarla si la habilidad se revoca.
         self.habilidad_origen = habilidad_origen
 
@@ -299,7 +240,8 @@ class NodoDecision:
 
 
 class ArbolDecision:
-    """Arbol general (n-ario) de consecuencias, con un CURSOR.
+    """
+    Arbol general de consecuencias.
 
     A diferencia del arbol de habilidades, este no se consulta: se CAMINA.
     El cursor arranca en la raiz (la publicacion) y cada eleccion del
@@ -307,8 +249,6 @@ class ArbolDecision:
     indicadores de la ciudad. Cuando el cursor llega a una hoja, la escena
     termina.
 
-    Es un arbol y no un grafo porque una escena no tiene ciclos: no puedes
-    "des-compartir" una publicacion para volver al estado anterior.
     """
 
     def __init__(self, raiz):
@@ -317,7 +257,7 @@ class ArbolDecision:
         self.raiz.visitado = True
         self.camino = [raiz]
 
-    # ---------------- BUSQUEDA Y RECORRIDOS ----------------
+    # Buscar y Recorrer
 
     def buscar(self, id_nodo, nodo=None):
         nodo = nodo or self.raiz
@@ -330,7 +270,6 @@ class ArbolDecision:
         return None
 
     def recorrido_bfs(self):
-        """Por niveles. Se usa para dibujar el arbol completo en pantalla."""
         resultado = []
         cola = deque([self.raiz])
         while cola:
@@ -341,7 +280,6 @@ class ArbolDecision:
         return resultado
 
     def recorrido_dfs(self, nodo=None):
-        """En profundidad, preorden. Recorre cada final posible de la escena."""
         nodo = nodo or self.raiz
         resultado = [nodo]
         for hijo in nodo.hijos:
@@ -352,14 +290,12 @@ class ArbolDecision:
         """Cuantos desenlaces distintos tiene la escena = numero de hojas."""
         return sum(1 for n in self.recorrido_dfs() if n.es_hoja())
 
-    # ---------------- CAMINAR EL ARBOL ----------------
+    # Caminar el arbol
 
     def opciones_actuales(self):
-        """Los hijos del cursor: lo que el jugador puede elegir ahora."""
         return list(self.cursor.hijos)
 
     def elegir(self, id_hijo):
-        """Baja el cursor a ese hijo. Devuelve el nodo o None si no es hijo."""
         for hijo in self.cursor.hijos:
             if hijo.id == id_hijo:
                 hijo.visitado = True
@@ -371,11 +307,10 @@ class ArbolDecision:
     def termino(self):
         return self.cursor.es_hoja()
 
-    # ---------------- INSERCION ----------------
+    #Insercion
 
     def insertar_opcion(self, id_padre, nodo_nuevo):
-        """INSERCION: una habilidad desbloqueada agrega una rama nueva.
-
+        """
         Aqui es donde los dos arboles se tocan: el arbol de habilidades
         modifica la FORMA del arbol de decision. Dos jugadores con roles
         distintos ven arboles de decision distintos para la misma
@@ -389,11 +324,10 @@ class ArbolDecision:
         padre.agregar_hijo(nodo_nuevo)
         return True
 
-    # ---------------- ELIMINACION ----------------
+    # Eliminar
 
     def podar_por_habilidad(self, ids_habilidades, nodo=None):
-        """ELIMINACION: quita las ramas que venian de habilidades revocadas.
-
+        """
         Se llama despues de eliminar_en_cascada en el arbol de habilidades:
         si el jugador perdio 'Verificacion', la opcion 'Verificacion express'
         desaparece de sus escenas.
@@ -413,7 +347,7 @@ class ArbolDecision:
             eliminados += self.podar_por_habilidad(ids_habilidades, hijo)
         return eliminados
 
-    # ---------------- APOYO A LA INTERFAZ ----------------
+    #Interfaz
 
     def calcular_posiciones(self):
         contador = [0]
