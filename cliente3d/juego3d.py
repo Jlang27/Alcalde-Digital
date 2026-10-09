@@ -49,9 +49,20 @@ class Cliente:
         self.nodo_pendiente = None    # consecuencia en curso
         self.espera = 0.0
         self.mundo = None
+        self.confirmando = None
+        self.confirmacion = []
+        self.ocultos = []
 
 
 cl = Cliente()
+
+def _rgb32(r, g, b, a=255):
+    return color.Color(r / 255, g / 255, b / 255, a / 255)
+
+color.rgb32 = _rgb32
+color.rgba = _rgb32
+color.rgb = _rgb32
+
 
 
 def limpiar(lista):
@@ -104,7 +115,59 @@ def empezar_partida():
     construir_hud()
     iniciar_dia(0)
 
+TEXTOS_CONFIRMACION = {
+    "menu": ("¿Volver al menú?", "Se pierde la partida en curso."),
+    "salir": ("¿Salir del juego?", ""),
+}
 
+def abrir_confirmacion(accion):
+    if cl.confirmando:
+        return
+    cl.confirmando = accion
+    titulo, linea = TEXTOS_CONFIRMACION[accion]
+
+    #2. apagar los botones que quedan debajo
+    for e in cl.opciones + cl.modal:
+        if isinstance(e, Button) and e.enabled:
+            e.enabled = False
+            cl.ocultos.append(e)
+
+    #3. velo oscuro + textos
+    velo = Entity(parent = camera.ui, model="quad",
+                   color=color.rgba(0,0,0,215), scale=(2,1), z=-0.5 )
+    t1 = E.etiqueta(titulo, (-0.15, 0.06), 1.5, E.TEXTO)
+    t2 = E.etiqueta(linea, (-0.15,0.015), 0.9, E.TEXTO_TENUE)
+    t1.z = t2.z = -0.6
+    cl.confirmacion += [velo, t1, t2]
+
+    #4. si/no
+    for texto, i, acepta in (("Si", 0, True), ("No", 1, False)):
+        y = -0.06 - i * 0.075
+        et = E.etiqueta(texto, (-0.15, y), 1.05,
+                        E.TEXTO if acepta else E.TEXTO_TENUE)
+        et.z = -0.6
+        boton = Button(parent = camera.ui,
+                       color = color.rgba(255,255,255,0),
+                       highlight_color= color.rgba(255,255,255,30),
+                       scale=(0.40,0.060), position=(0.0, y-0.018),
+                       on_click=Func(cerrar_confirmacion, acepta))
+        boton.z=-0.7
+        cl.confirmacion += [et, boton]
+
+def cerrar_confirmacion(acepta):
+    accion = cl.confirmando
+    limpiar(cl.confirmacion)
+    for e in cl.ocultos:
+        e.enabled = True
+    cl.ocultos.clear()
+    cl.confirmando = None
+
+    if not acepta:
+        return
+    if accion == "salir":
+        application.quit()
+    elif accion == "menu":
+        volver_al_menu()
 # ===================================================================
 #  INTERFAZ DE LA ESCENA
 # ===================================================================
@@ -532,6 +595,20 @@ def volver_al_menu():
 
 
 def input(tecla):
+    if cl.confirmando:
+        if tecla in ("y", "s"):
+            cerrar_confirmacion(True)
+        elif tecla in ("escape", "n", "enter"):
+            cerrar_confirmacion(False)
+        return
+
+    if tecla == "escape" and cl.estado != "carga":
+        abrir_confirmacion("salir" if cl.estado == "menu" else "menu")
+        return
+
+    if cl.estado == "final" and tecla in ("enter", "space"):
+        volver_al_menu()
+
     if cl.estado == "final" and tecla in ("enter", "space"):
         volver_al_menu()
     elif cl.estado == "menu" and cl.menu is not None:
@@ -543,8 +620,6 @@ def input(tecla):
             cl.menu.activar()
     elif cl.dia_cerrado and tecla in ("enter", "space"):
         siguiente_dia()
-    elif tecla == "escape":
-        application.quit()
 
 
 def main():
