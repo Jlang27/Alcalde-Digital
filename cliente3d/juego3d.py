@@ -52,6 +52,7 @@ class Cliente:
         self.confirmando = None
         self.confirmacion = []
         self.ocultos = []
+        self.pantalla = []
 
 
 cl = Cliente()
@@ -94,9 +95,56 @@ def elegir_del_menu(indice):
         cl.menu.cerrar()
         cl.menu = None
         abrir_carga()
+    elif indice in (1,2):
+        cl.menu.cerrar()
+        cl.menu = None
+        abrir_capitulos() if indice == 1 else abrir_creditos()
     elif indice == 3:
         application.quit()
 
+CAPITULOS = [("01", "El primer rumor", True)] + \
+            [(f"{n:02d}", "Proximamente", False) for n in range(2, 13)]
+
+def abrir_capitulos():
+    cl.estado = "capitulos"
+    p = cl.pantalla
+    p.append(E.lienzo(E.PAPEL))
+    p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.47), E.TINTA, escala=0.62))
+    p.append(E.titular("Capitulos", (-0.84,0.375), 2.4, E.TINTA))
+    p += E.filete(1.68, (-0.84, 0.30))
+    for i, (num,titulo,libre) in enumerate(CAPITULOS):
+        y = 0.25 - i * 0.050
+        col = E.TINTA if libre else E.TINTA_TENUE
+        p.append(E.pequena(num, (-0.84, y), col, escala=0.6))
+        p.append(E.etiqueta(titulo, (-0.74, y), 0.9, col))
+    p.append(E.pequena("Enter para jugar    ·   Esc para volver", (0.84, -0.465),
+                       E.TINTA_TENUE, escala=0.48, origen=(0.5,0.5)))
+
+EQUIPO = ["David Martinez", "Jose Angulo", "Yuceth Gil", ""]
+
+def leer_creditos(maximo=12):
+    try:
+        with open(os.path.join(RAIZ, "CREDITOS.md"), encoding="utf-8") as f:
+            lineas = [l.strip(" #-*|\t\r\n") for l in f]
+    except (OSError, UnicodeDecodeError):
+        return[]
+    return[l[:70] for l in lineas if l][:maximo]
+
+def abrir_creditos():
+    cl.estado = "creditos"
+    p = cl.pantalla
+    p.append(E.lienzo(E.PAPEL))
+    p.append(E.titular("Creditos", (-0.84, 0.375), 2.4, E.TINTA))
+    p += E.filete(1.68, (-0.84, 0.30))
+    p.append(E.pequena("Estructura de Datos II  ·   Universidad del Norte",
+                        (-0.84, 0.25), E.TINTA_TENUE, escala=0.55))
+    for i, nombre in enumerate(EQUIPO):
+        p.append(E.etiqueta(nombre, (-0.84, 0.17 - i * 0.06), 1.0, E.TINTA))
+    p.append(E.pequena("AUDIO Y RECURSOS", (-0.84, -0.10), E.TINTA_TENUE, escala=0.5))
+    for i, linea in enumerate(leer_creditos()):
+        p.append(E.pequena(linea, (-0.84, -0.14 - i * 0.026), E.TINTA, escala=0.46))
+    p.append(E.pequena("Esc para volver", (0.84, -0.465), E.TINTA_TENUE,
+                       escala=0.48, origen=(0.5,0.5)))
 
 def abrir_carga():
     cl.estado = "carga"
@@ -593,6 +641,12 @@ def volver_al_menu():
     cl.dia_cerrado = False
     abrir_menu()
 
+def cerrar_pantalla(jugar = False):
+    limpiar(cl.pantalla)
+    if jugar:
+        abrir_carga()
+    else:
+        abrir_menu()
 
 def input(tecla):
     if cl.confirmando:
@@ -602,7 +656,13 @@ def input(tecla):
             cerrar_confirmacion(False)
         return
 
-    if tecla == "escape" and cl.estado != "carga":
+    elif cl.estado in ("capitulos", "creditos"):
+        if tecla == "escape":
+            cerrar_pantalla()
+        elif tecla in ("enter", "space"):
+            cerrar_pantalla(jugar=cl.estado == "capitulos")
+    
+    elif tecla == "escape" and cl.estado != "carga":
         abrir_confirmacion("salir" if cl.estado == "menu" else "menu")
         return
 
