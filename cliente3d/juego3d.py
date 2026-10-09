@@ -53,6 +53,8 @@ class Cliente:
         self.confirmacion = []
         self.ocultos = []
         self.pantalla = []
+        self.zonas = []
+        self.marcas = []
 
 
 cl = Cliente()
@@ -100,7 +102,7 @@ def elegir_del_menu(indice):
         cl.menu = None
         abrir_capitulos() if indice == 1 else abrir_creditos()
     elif indice == 3:
-        application.quit()
+        abrir_confirmacion("salir")
 
 CAPITULOS = [("01", "El primer rumor", True)] + \
             [(f"{n:02d}", "Proximamente", False) for n in range(2, 13)]
@@ -181,8 +183,7 @@ def abrir_confirmacion(accion):
             cl.ocultos.append(e)
 
     #3. velo oscuro + textos
-    velo = Entity(parent = camera.ui, model="quad",
-                   color=color.rgba(0,0,0,215), scale=(2,1), z=-0.5 )
+    velo = E.velo(color.rgb32(6,8,12,215), z=-0.5)
     t1 = E.etiqueta(titulo, (-0.15, 0.06), 1.5, E.TEXTO)
     t2 = E.etiqueta(linea, (-0.15,0.015), 0.9, E.TEXTO_TENUE)
     t1.z = t2.z = -0.6
@@ -196,7 +197,7 @@ def abrir_confirmacion(accion):
         et.z = -0.6
         boton = Button(parent = camera.ui,
                        color = color.rgba(255,255,255,0),
-                       highlight_color= color.rgba(255,255,255,30),
+                       highlight_color= color.rgb32(255,255,255,30),
                        scale=(0.40,0.060), position=(0.0, y-0.018),
                        on_click=Func(cerrar_confirmacion, acepta))
         boton.z=-0.7
@@ -216,6 +217,14 @@ def cerrar_confirmacion(acepta):
         application.quit()
     elif accion == "menu":
         volver_al_menu()
+
+ZONAS = {
+    "perfil": (-0.650, 0.365, 0.20, 0.050),
+    "fecha": (-0.300, 0.365, 0.180, 0.060),
+    "foto": (-0.800, 0.365, 0.055, 0.055),
+    "comentarios": (-0.640, 0.170, 0.34, 0.090),
+}
+
 # ===================================================================
 #  INTERFAZ DE LA ESCENA
 # ===================================================================
@@ -230,11 +239,13 @@ reloj_barra = None
 reloj_cifra = None
 detalle = None
 modal_reloj = None
+pistas_texto = None
 
 
 def construir_hud():
     global cabecera, pub_marco, pub_autor, pub_texto, pub_pie
     global reloj_riel, reloj_barra, reloj_cifra, detalle
+    global pistas_texto
 
     cabecera = E.micro("", (-0.86, 0.46), E.TEXTO_TENUE)
     cl.hud.append(cabecera)
@@ -265,6 +276,11 @@ def construir_hud():
 
     detalle = E.etiqueta("", (0.14, -0.34), 0.68, E.TEXTO_TENUE)
     cl.hud.append(detalle)
+    
+    pistas_texto = E.pequena("", (-0.215, 0.409), E.LLERAS, escala=0.5,
+                             origen=(0.5, 0.5))
+    cl.hud.append(pistas_texto)
+
     construir_indicadores()
 
 
@@ -306,6 +322,90 @@ def pintar_indicadores():
         lleno.color = E.GAITAN if clave in malos else E.RESTREPO
         cifra.text = str(valor)
 
+STUB_HALLADAS= set()
+
+def construir_zonas():
+    global hay_zonas
+    limpiar(cl.zonas); limpiar(cl.marcas)
+    STUB_HALLADAS.clear()
+    pub = cl.partida.publicacion
+    hay = True # TEMPORAL
+    hay_zonas = hay
+
+    pintar_pistas()
+
+    pub_marco.scale_y, pub_marco.y = (0.42, 0.2125) if hay else (0.275, 0.285)
+    pub_pie.y = 0.108 if hay else 0.185
+    pub_autor.x, pub_autor.y = (-0.755, 0.385) if hay else (-0.82, 0.368)
+    if not hay:
+        return
+
+    z = E.Z_ADORNO - 0.01
+    cl.marcas += [
+        E.banda(0.05, 0.05, (-0.795, 0.365), color.rgb32(70,76,90), z=z),
+        E.banda(0.34, 0.09, (-0.640, 0.170), color.rgb32(52,58,70), z=z),
+        E.pequena(pub.get("fecha", "hace 2 h"), (-0.215, 0.382),
+                  E.TEXTO_TENUE, escala=0.46, origen=(0.5,0.5)),
+    ]
+    for i, (usuario, texto) in enumerate(pub.get("comentarios", [])[:3]):
+        cl.marcas.append(E.pequena(f"{usuario}:{texto}",
+                                   (-0.82, 0.078 - i * 0.022), E.TEXTO_TENUE,
+                                   escala=0.44))
+    for id_zona, (x,y,w,h) in ZONAS.items():
+        cl.zonas.append(Button(parent=camera.ui,
+                               color=color.rgb32(255,255,255,0),
+                               highlight_color=color.rgb32(255,255,255,40),
+                               scale=(w,h), position=(x,y),
+                               on_click=Func(inspeccionar, id_zona)))
+
+def estado_pistas():
+    """(encontradas, total). Jueves: stub. Viernes: la API de B."""
+    return len(STUB_HALLADAS), 4
+
+def pintar_pistas():
+    encontradas, total = estado_pistas()
+    if total == 0:
+        pistas_texto.text = ""
+        return
+    pistas_texto.text = f"{encontradas} de {total} señales encontradas"
+    pistas_texto.color = E.RESTREPO if encontradas == total else E.LLERAS
+
+def consultar_pista(id_zona):
+    if id_zona in STUB_HALLADAS:
+        return None
+    STUB_HALLADAS.add(id_zona)
+    return f"Señal en «{id_zona}»", None, 3.0
+
+def inspeccionar(id_zona):
+    if not zonas_activas():
+        return
+    resultado = consultar_pista(id_zona)
+    if resultado is None:
+        return
+    texto, _nodo, costo = resultado
+    x,y,w,h = ZONAS[id_zona]
+    cl.marcas.append(E.banda(w,h,(x,y), color.rgb32(224, 164, 42, 90),
+                             z=E.Z_ADORNO - 0.02))
+    detalle.text = f"{texto} (-{costo:.0f} s)"
+    detalle.wordwrap = 60
+    pintar_pistas()
+    refrescar_opciones()
+
+def zonas_activas():
+    p = cl.partida
+    if (p is None or cl.dia_cerrado or cl.nodo_pendiente is not None
+        or cl.confirmando or p.interrupcion is not None):
+        return False
+    arbol = p.arbol_decision
+    if arbol is None:
+        return False
+    return arbol.cursor is arbol.raiz
+
+def refrescar_zonas():
+    activas = zonas_activas()
+    for b in cl.zonas:
+        if b.enabled != activas:
+            b.enabled = activas
 
 def pintar_publicacion():
     p = cl.partida
@@ -318,6 +418,7 @@ def pintar_publicacion():
     pintar_indicadores()
     cabecera.text = (f"CAPÍTULO {p.dia_actual + 1} DE {p.total_dias}"
                      f"   ·   {p.protagonista.nombre}")
+    construir_zonas()
 
 
 def refrescar_opciones():
@@ -470,6 +571,8 @@ def cerrar_dia():
     cl.nodo_pendiente = None
     retirar_invitado()
     limpiar(cl.opciones)
+    limpiar(cl.zonas)
+    limpiar(cl.marcas)
     animar("idle")
     mundo.corte("PG")
     for e in cl.hud:
@@ -583,6 +686,9 @@ def pantalla_final():
 # ===================================================================
 
 def update():
+    refrescar_zonas()
+    if cl.confirmando:
+        return
     if cl.estado == "carga":
         cl.reloj_carga += time.dt
         cl.carga.avance(cl.reloj_carga / DURACION_CARGA)
@@ -637,6 +743,8 @@ def volver_al_menu():
     limpiar(cl.diagrama)
     limpiar(cl.hud)
     limpiar(cl.opciones)
+    limpiar(cl.zonas)
+    limpiar(cl.marcas)
     cl.partida = None
     cl.dia_cerrado = False
     abrir_menu()
@@ -665,9 +773,6 @@ def input(tecla):
     elif tecla == "escape" and cl.estado != "carga":
         abrir_confirmacion("salir" if cl.estado == "menu" else "menu")
         return
-
-    if cl.estado == "final" and tecla in ("enter", "space"):
-        volver_al_menu()
 
     if cl.estado == "final" and tecla in ("enter", "space"):
         volver_al_menu()
