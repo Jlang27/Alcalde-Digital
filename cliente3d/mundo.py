@@ -1,15 +1,3 @@
-"""El mundo 3D: escenario, luz, niebla, camaras y personaje.
-
-Todo cuelga de un nodo propio ("mundo") al que se le aplica simplepbr.
-La interfaz queda deliberadamente fuera: aplicado al grafo entero,
-simplepbr se come la UI de Ursina y lava los colores.
-
-El escenario es geometria primitiva a proposito. Lo que lo hace leer
-como una ciudad no es el detalle del modelado sino tres cosas baratas:
-ventanas emisivas, niebla por distancia y una luz de contra que separa
-las siluetas del fondo.
-"""
-
 import os
 
 import simplepbr
@@ -17,10 +5,11 @@ from direct.actor.Actor import Actor
 from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
                           LColor, Material, PNMImage, PointLight, Texture,
                           TextureAttrib)
-from ursina import Entity, application, camera, color, Vec3
+from ursina import Entity, application, camera, color, destroy, Vec3
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUTA_PERSONAJE = os.path.join(RAIZ, "assets", "personajes", "prueba.glb")
+RUTA_CAFETERIA = os.path.join(RAIZ, "assets", "escenarios", "cafeteria.glb")
 
 # Atardecer: ambar calido contra azul frio. Es el contraste que usa
 # Detroit para que una escena quieta no se vea muerta.
@@ -36,7 +25,10 @@ NIEBLA = LColor(0.011, 0.015, 0.026, 1)
 # al personaje: si en vez de eso se desplaza el punto de mira, a corta
 # distancia el sujeto se sale del cuadro. Es el error que dejaba el
 # primer plano sin personaje.
-PLANOS = {
+#
+# Hay un juego de planos por escenario. crear() deja activo el del
+# escenario que monta; corte() siempre lee PLANOS.
+PLANOS_PLAZA = {
     "PG":      (Vec3(1.10, 1.95, -6.60), 1.05, 7.0),
     "PM":      (Vec3(0.65, 1.52, -2.85), 1.26, 7.5),
     "PP":      (Vec3(0.34, 1.60, -1.25), 1.57, 6.0),
@@ -46,6 +38,59 @@ PLANOS = {
     # desde el eje contrario, para que se lea como un corte de montaje.
     "DOS":     (Vec3(-1.35, 1.78, -4.70), 1.22, 11.0),
 }
+
+# Cafeteria (capitulo 1). El local mide x -3.8..3.8, z -5.8..4.8, alto 3.2.
+# El personaje esta en el origen y la barra con el televisor queda al
+# fondo (z positivo). La lente de Ursina es cerrada (fov 40 HORIZONTAL),
+# asi que cada plano ve un cono estrecho: por eso el fondo de cada uno
+# esta pensado a proposito (ver comentarios).
+PLANOS_CAFETERIA = {
+    # Todo el local: ventana al fondo a la izquierda, barra y tele a la
+    # derecha. Es el unico plano con lente propia (fov 66): a 40 grados
+    # el local no cabe. El personaje cae en el hueco entre la
+    # publicacion de Civitas y las opciones.
+    "PG":      (Vec3(1.60, 2.35, -5.40), 1.10, 0.0, 66),
+    # Detras del personaje queda la ventana con la calle; la tele cae
+    # en el hueco entre la publicacion de Civitas y los indicadores.
+    "PM":      (Vec3(0.65, 1.52, -2.85), 1.26, 7.5),
+    # La cara contra la ventana: farola y siluetas de gente discutiendo.
+    "PP":      (Vec3(0.34, 1.60, -1.25), 1.57, 6.0),
+    "LATERAL": (Vec3(-2.30, 1.48, -2.10), 1.28, -6.0),
+    "AFICHE":  (Vec3(0.30, 1.46, -2.30), 1.30, -11.0),
+    "DOS":     (Vec3(-1.35, 1.78, -4.70), 1.22, 11.0),
+}
+
+PLANOS = PLANOS_CAFETERIA
+
+# La emision que viene en el .glb se queda corta (glTF no pasa de 1.0).
+# Aqui se sube la de las superficies que tienen que "brillar" de verdad.
+# Las claves son los nombres de material del .glb.
+EMISION_EXTRA = {
+    "tv_pantalla":    (0.30, 0.62, 1.15, 1),
+    "tv_banner":      (1.30, 0.08, 0.06, 1),
+    "tv_texto":       (1.00, 1.05, 1.20, 1),
+    "bombillos":      (2.20, 1.50, 0.75, 1),
+    "vitrina":        (0.30, 0.19, 0.08, 1),
+    "nevera_luz":     (0.40, 0.75, 1.00, 1),
+    "ventanas_calle": (1.40, 0.95, 0.45, 1),
+    "cruz_farmacia":  (0.15, 1.30, 0.45, 1),
+    "farola":         (2.60, 1.60, 0.70, 1),
+    "carro_luces":    (1.50, 0.06, 0.05, 1),
+    "letrero_neon":   (1.50, 0.62, 0.16, 1),
+}
+
+
+def _encender(esc, luz):
+    """Enciende una luz para TODO el mundo, personajes incluidos.
+
+    La luz cuelga del nodo del escenario (asi desaparece con el cuando se
+    cambia de escenario) pero se activa en la raiz, de donde tambien
+    cuelgan los personajes. Si se activara en el escenario, el personaje
+    quedaria a oscuras."""
+    esc.getParent().setLight(luz)
+
+
+_ENTIDADES = []   # primitivas de Ursina del escenario actual (hay que destruirlas)
 
 
 def _material(base, rugosidad=0.85, metalico=0.0, emision=None):
@@ -65,6 +110,7 @@ def _pieza(mundo, modelo, mat, escala, posicion, giro=0):
     cada Entity, y ese shader ignora los materiales PBR.
     """
     e = Entity(model=modelo)
+    _ENTIDADES.append(e)
     e.reparentTo(mundo)
     e.clearShader()
     e.setMaterial(mat, 1)
@@ -73,6 +119,60 @@ def _pieza(mundo, modelo, mat, escala, posicion, giro=0):
     e.rotation_y = giro
     return e
 
+
+# ===================================================================
+#  ESCENARIO 1: CAFETERIA (capitulo 1, "El primer rumor")
+# ===================================================================
+
+def _cafeteria(mundo):
+    """Carga cafeteria.glb y le sube la emision a lo que tiene que brillar."""
+    ruta = Filename.from_os_specific(RUTA_CAFETERIA).getFullpath()
+    modelo = application.base.loader.loadModel(ruta)
+    modelo.reparentTo(mundo)
+
+    for mat in modelo.findAllMaterials():
+        extra = EMISION_EXTRA.get(mat.getName())
+        if extra is not None:
+            mat.setEmission(LColor(*extra))
+    return modelo
+
+
+def _luces_cafeteria(mundo):
+    """Luz del local. Maximo 6 luces en el mundo: simplepbr usa 8 y el
+    personaje (o el invitado) trae 2 propias.
+
+    Se reparten asi: ambiente + relleno suave, dos lamparas colgantes
+    calidas, el resplandor frio de la tele y la farola de la calle.
+    Si algo se ve muy oscuro o muy quemado, estos son los numeros a mover.
+    """
+    ambiente = mundo.attachNewNode(AmbientLight("ambiente"))
+    ambiente.node().setColor((0.060, 0.066, 0.090, 1))
+    _encender(mundo, ambiente)
+
+    # No hay sombras: esta luz es solo relleno, no pretende ser el sol.
+    relleno = mundo.attachNewNode(DirectionalLight("relleno"))
+    relleno.node().setColor((0.16, 0.13, 0.10, 1))
+    relleno.setHpr(28, -50, 0)
+    _encender(mundo, relleno)
+
+    # (x, y, z, color, atenuacion)
+    puntos = (
+        ("lampara_1", (-1.8, 2.30, 0.9),  (2.0, 1.35, 0.70), (1, 0.10, 0.16)),
+        ("lampara_2", (1.7, 2.30, -0.2),  (1.7, 1.15, 0.60), (1, 0.10, 0.16)),
+        ("luz_tele",  (1.4, 2.00, 4.0),   (0.38, 0.70, 1.40), (1, 0.16, 0.30)),
+        ("farola",    (-1.6, 4.20, 5.6),  (1.9, 1.15, 0.50), (1, 0.12, 0.18)),
+    )
+    for nombre, pos, col, att in puntos:
+        luz = mundo.attachNewNode(PointLight(nombre))
+        luz.node().setColor((*col, 1))
+        luz.node().setAttenuation(att)
+        luz.setPos(*pos)
+        _encender(mundo, luz)
+
+
+# ===================================================================
+#  ESCENARIO 2: PLAZA NOCTURNA (capitulo 5, "La plaza")
+# ===================================================================
 
 def _suelo(mundo):
     asfalto = _material((0.022, 0.024, 0.030, 1), rugosidad=0.30)
@@ -130,7 +230,7 @@ def _farolas(mundo):
         luz.node().setColor((0.85, 0.60, 0.33, 1))
         luz.node().setAttenuation((1, 0.14, 0.30))
         luz.setPos(x, 3.3, z)
-        mundo.setLight(luz)
+        _encender(mundo, luz)
 
 
 def _arboles(mundo):
@@ -151,7 +251,7 @@ def _bancas(mundo):
                    (x + dx, 0.22, z), giro)
 
 
-def _luces(mundo):
+def _luces_plaza(mundo):
     """Tres puntos: clave calida, relleno frio y contraluz.
 
     La contraluz es la que mas trabaja: dibuja el borde del personaje
@@ -159,19 +259,31 @@ def _luces(mundo):
     """
     ambiente = mundo.attachNewNode(AmbientLight("ambiente"))
     ambiente.node().setColor((0.030, 0.038, 0.058, 1))
-    mundo.setLight(ambiente)
+    _encender(mundo, ambiente)
 
     clave = mundo.attachNewNode(DirectionalLight("clave"))
     clave.node().setColor((0.78, 0.60, 0.40, 1))
     clave.setHpr(28, -38, 0)
-    mundo.setLight(clave)
+    _encender(mundo, clave)
 
     relleno = mundo.attachNewNode(DirectionalLight("relleno"))
     relleno.node().setColor((0.10, 0.15, 0.26, 1))
     relleno.setHpr(-115, -16, 0)
-    mundo.setLight(relleno)
+    _encender(mundo, relleno)
 
 
+def _plaza(mundo):
+    _suelo(mundo)
+    _edificios(mundo)
+    _farolas(mundo)
+    _arboles(mundo)
+    _bancas(mundo)
+    _luces_plaza(mundo)
+
+
+# ===================================================================
+#  PERSONAJE
+# ===================================================================
 
 def _luz_de_personaje(mundo, actor):
     """Contraluz dirigida SOLO al personaje.
@@ -229,26 +341,66 @@ def _quitar_mapa_de_brillo(actor):
         actor.setTexture(etapa, textura, 10000)
 
 
-def _niebla(mundo):
+def _niebla(mundo, densidad=0.038):
     """Niebla exponencial: separa los planos y esconde donde se acaba
-    el escenario, que es el truco mas barato que existe."""
+    el escenario, que es el truco mas barato que existe.
+
+    En la plaza hace falta mucha (0.038) porque el escenario se acaba
+    en el horizonte. En la cafeteria el local ya tiene paredes, asi que
+    basta una niebla leve que solo oscurece el fondo."""
     f = Fog("niebla")
     f.setColor(NIEBLA)
-    f.setExpDensity(0.038)
+    f.setExpDensity(densidad)
     mundo.setFog(f)
 
 
-def crear():
-    """Monta el mundo entero y devuelve (nodo_raiz, actor)."""
-    mundo = application.base.render.attachNewNode("mundo")
+_ACTUAL = {"nombre": None, "contenedor": None}
 
-    _suelo(mundo)
-    _edificios(mundo)
-    _farolas(mundo)
-    _arboles(mundo)
-    _bancas(mundo)
-    _luces(mundo)
-    _niebla(mundo)
+
+def _montar(mundo, escenario):
+    """Construye un escenario colgado de su propio nodo, para poder quitarlo."""
+    global PLANOS
+    cont = mundo.attachNewNode("escenario_" + escenario)
+    if escenario == "plaza":
+        PLANOS = PLANOS_PLAZA
+        _plaza(cont)
+        _niebla(mundo, 0.038)
+    else:
+        escenario = "cafeteria"
+        PLANOS = PLANOS_CAFETERIA
+        _cafeteria(cont)
+        _luces_cafeteria(cont)
+        _niebla(mundo, 0.014)
+    _ACTUAL["nombre"] = escenario
+    _ACTUAL["contenedor"] = cont
+
+
+def cambiar_escenario(mundo, escenario):
+    """Cambia de escenario sin tocar a los personajes ni la camara.
+
+    escenario: "cafeteria" o "plaza". Si ya es el activo, no hace nada.
+    Despues de cambiar, los planos (PLANOS) son los del escenario nuevo.
+    """
+    if escenario == _ACTUAL["nombre"]:
+        return
+    mundo.clearLight()          # luces del escenario viejo (las de los actores no se tocan)
+    mundo.clearFog()
+    for e in _ENTIDADES:
+        destroy(e)
+    _ENTIDADES.clear()
+    if _ACTUAL["contenedor"] is not None:
+        _ACTUAL["contenedor"].removeNode()
+    _montar(mundo, escenario)
+
+
+def crear(escenario="cafeteria"):
+    """Monta el mundo entero y devuelve (nodo_raiz, actor).
+
+    escenario: "cafeteria" (por defecto) o "plaza". Despues se puede
+    cambiar con cambiar_escenario().
+    """
+    mundo = application.base.render.attachNewNode("mundo")
+    _montar(mundo, escenario)
 
     ruta = Filename.from_os_specific(RUTA_PERSONAJE).getFullpath()
     actor = Actor(ruta)
@@ -293,13 +445,24 @@ def invitado(mundo, color_jugador):
     return actor, [clave, contra]
 
 
+FOV_BASE = 40   # el de Ursina: HORIZONTAL, lente cerrada
+
+
 def corte(plano, sujeto=Vec3(0, 0, 0)):
     """Coloca la camara en un plano fijo y encuadra al sujeto.
 
     desvio positivo empuja al personaje hacia la izquierda del cuadro y
     deja limpia la derecha, que es donde van las opciones.
+
+    Un plano puede traer un cuarto valor: el fov de ese plano. Sirve para
+    el plano general, que con la lente cerrada de 40 grados no cabe en un
+    local de 7 metros. Los planos de 3 valores siguen usando FOV_BASE.
     """
-    pos, altura, desvio = PLANOS[plano]
+    pos, altura, desvio, *extra = PLANOS[plano]
+    camera.fov = extra[0] if extra else FOV_BASE
     camera.position = pos
+    # look_at parte de la orientacion anterior: sin esto el mismo plano sale
+    # ligeramente distinto segun de que plano vengas.
+    camera.rotation = Vec3(0, 0, 0)
     camera.look_at(Vec3(sujeto.x, altura, sujeto.z))
     camera.rotation_y += desvio
