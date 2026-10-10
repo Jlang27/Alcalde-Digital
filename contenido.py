@@ -295,9 +295,9 @@ PUBLICACIONES = [
         "id": "colegio",
         "escenario": "colegio",
         "autor": "@NovaAlerta",
-        "texto": "El candidato Juan quiere cerrar el colegio del barrio.",
+        "texto": "El candidato Daniel Ospina quiere cerrar el colegio del barrio.",
         "veracidad": "falsa",
-        "contexto": "Juan propuso REMODELAR el colegio. Alguien recorto el video.",
+        "contexto": "Daniel Ospina propuso REMODELAR el colegio. Alguien recorto el video.",
         "compartidos": 1240,
     },
     {
