@@ -105,14 +105,14 @@ def elegir_del_menu(indice):
         abrir_confirmacion("salir")
 
 CAPITULOS = [("01", "El primer rumor", True)] + \
-            [(f"{n:02d}", "Proximamente", False) for n in range(2, 13)]
+            [(f"{n:02d}", "Próximamente", False) for n in range(2, 13)]
 
 def abrir_capitulos():
     cl.estado = "capitulos"
     p = cl.pantalla
     p.append(E.lienzo(E.PAPEL))
     p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.47), E.TINTA, escala=0.62))
-    p.append(E.titular("Capitulos", (-0.84,0.375), 2.4, E.TINTA))
+    p.append(E.titular("Capítulos", (-0.84,0.375), 2.4, E.TINTA))
     p += E.filete(1.68, (-0.84, 0.30))
     for i, (num,titulo,libre) in enumerate(CAPITULOS):
         y = 0.25 - i * 0.050
@@ -136,7 +136,7 @@ def abrir_creditos():
     cl.estado = "creditos"
     p = cl.pantalla
     p.append(E.lienzo(E.PAPEL))
-    p.append(E.titular("Creditos", (-0.84, 0.375), 2.4, E.TINTA))
+    p.append(E.titular("Créditos", (-0.84, 0.375), 2.4, E.TINTA))
     p += E.filete(1.68, (-0.84, 0.30))
     p.append(E.pequena("Estructura de Datos II  ·   Universidad del Norte",
                         (-0.84, 0.25), E.TINTA_TENUE, escala=0.55))
@@ -153,7 +153,7 @@ def abrir_carga():
     cl.reloj_carga = 0.0
     mundo.corte("AFICHE")
     animar("idle")
-    cl.carga = pantallas.Carga("el primer dia",
+    cl.carga = pantallas.Carga("el primer día",
                                random.choice(pantallas.PISTAS))
 
 
@@ -595,7 +595,7 @@ def dibujar_diagrama():
     cl.diagrama.append(E.lienzo(E.PAPEL))
     cl.diagrama.append(E.diagonal(0.8, 1.3, (0.60, 0.0), E.PAPEL_SOMBRA))
     dia = cl.partida.dia_actual + 1
-    cl.diagrama.append(E.micro(f"flujo de decisiones / dia 0{dia}",
+    cl.diagrama.append(E.micro(f"flujo de decisiones / día 0{dia}",
                                (-0.86, 0.46)))
     cl.diagrama.append(E.titulo(cl.partida.publicacion["id"],
                                 (-0.84, 0.42), 2.0, E.TINTA))
@@ -621,7 +621,7 @@ def dibujar_diagrama():
     finales = arbol.contar_finales()
     cl.diagrama.append(E.etiqueta(
         f"recorriste {recorridos} de {len(nodos)} nodos   -   "
-        f"esta escena tenia {finales} desenlaces",
+        f"esta escena tenía {finales} desenlaces",
         (-0.84, -0.40), 0.66, E.TINTA_TENUE))
     cl.diagrama.append(E.etiqueta("enter para continuar", (0.86, -0.46), 0.6,
                                   E.TINTA_TENUE, origen=(0.5, 0.5)))
