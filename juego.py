@@ -48,11 +48,11 @@ DURACION_FLASH = 2.6
 DIAS_PARTIDA = 5
 
 CANDIDATOS = [
-    ("Elena Ruiz", "Campana basada en datos verificables",
+    ("Elena Ruiz", "Campaña basada en datos verificables",
      {"info_verificada": 1.2, "confianza": 1.0, "desinformacion": -0.8}),
-    ("Juan Medina", "Campana centrada en la convivencia del barrio",
+    ("Juan Medina", "Campaña centrada en la convivencia del barrio",
      {"convivencia": 1.2, "bienestar": 1.0, "conflictos": -1.0}),
-    ("Hugo Bravo", "Campana que vive del escandalo y el rumor",
+    ("Hugo Bravo", "Campaña que vive del escándalo y el rumor",
      {"desinformacion": 1.3, "conflictos": 1.1, "confianza": -0.9}),
 ]
 
@@ -270,13 +270,13 @@ class Partida:
         self.flash_tiempo = 0.0
         self.opcion_nueva = None
 
-        self.avisar(f"Dia {indice + 1}: protagoniza {prota.nombre}.", "info", prota)
+        self.avisar(f"Día {indice + 1}: protagoniza {prota.nombre}.", "info", prota)
         if propias:
-            self.avisar(f"Sus habilidades abrieron {propias} opcion(es).",
+            self.avisar(f"Sus habilidades abrieron {propias} opción(es).",
                         "bien", prota)
         if memoria:
-            self.avisar(f"La ciudad recuerda lo de dias pasados: "
-                        f"{memoria} opcion(es) nueva(s).", "info")
+            self.avisar(f"La ciudad recuerda lo de días pasados: "
+                        f"{memoria} opción(es) nueva(s).", "info")
         return True
 
     def _cerrar_dia(self):
@@ -292,7 +292,7 @@ class Partida:
             self.dias_completados = self.dia_actual + 1
             prota.puntos += 1
             prota.dias_como_protagonista += 1
-            self.avisar(f"{prota.nombre} cierra el dia: +1 punto.", "bien", prota)
+            self.avisar(f"{prota.nombre} cierra el día: +1 punto.", "bien", prota)
             for j in self.secundarios_de(self.dia_actual):
                 j.puntos += 1
 
@@ -414,12 +414,12 @@ class Partida:
 
         if acepta and self.jugar_carta(carta):
             self.flash = (f"{carta.jugador.nombre} interviene: "
-                          f"nueva opcion para {self.protagonista.nombre}",
+                          f"nueva opción para {self.protagonista.nombre}",
                           carta.jugador.color)
             self.opcion_nueva = carta.spec[1]
         else:
             carta.rechazada = True
-            motivo = "no alcanzo a reaccionar" if expirada else "dejo pasar el momento"
+            motivo = "no alcanzó a reaccionar" if expirada else "dejó pasar el momento"
             self.flash = (f"{carta.jugador.nombre} {motivo}.", carta.jugador.color)
             self.avisar(f"{carta.jugador.nombre} {motivo}.", "info", carta.jugador)
         self.flash_tiempo = DURACION_FLASH
@@ -446,7 +446,7 @@ class Partida:
         carta.jugador.reputacion = min(100, carta.jugador.reputacion + 2)
         self.avisar(f"{carta.jugador.nombre} intervino: '{carta.etiqueta}'.",
                     "bien", carta.jugador)
-        self.avisar(f"{self.protagonista.nombre} tiene una opcion nueva.",
+        self.avisar(f"{self.protagonista.nombre} tiene una opción nueva.",
                     "info", self.protagonista)
         return True
 
@@ -493,7 +493,7 @@ class Partida:
                            opciones[0] if opciones else None)
         if por_defecto is None:
             return
-        self.avisar("Se acabo el tiempo: la publicacion siguio su camino.", "mal")
+        self.avisar("Se acabó el tiempo: la publicación siguió su camino.", "mal")
         self.elegir(por_defecto.id)
 
     def _aplicar_efectos(self, efectos):
@@ -542,11 +542,11 @@ class Partida:
         if self.arbol_decision is not None and jugador is self.protagonista:
             podados = self.arbol_decision.podar_por_habilidad(set(ids))
         jugador.reputacion = max(0, jugador.reputacion - 15)
-        self.avisar(f"{jugador.nombre} perdio credibilidad: se revoco "
+        self.avisar(f"{jugador.nombre} perdió credibilidad: se revocó "
                     f"'{nombre}' y {len(ids) - 1} habilidad(es) dependientes.",
                     "mal", jugador)
         if podados:
-            self.avisar(f"Desaparecieron {podados} opcion(es) de la escena.",
+            self.avisar(f"Desaparecieron {podados} opción(es) de la escena.",
                         "mal", jugador)
 
     # =============================================================
@@ -575,7 +575,7 @@ class Partida:
         buenos = sum(self.indicadores[k] for k, _, b in INDICADORES_META if b) / 4
         malos = sum(self.indicadores[k] for k, _, b in INDICADORES_META if not b) / 2
         if buenos >= 70 and malos <= 25:
-            return ("Ciudad Nova cierra la campana mas sana que como empezo.", "bien")
+            return ("Ciudad Nova cierra la campaña más sana que como empezó.", "bien")
         if buenos >= 55 and malos <= 40:
-            return ("Ciudad Nova sobrevivio la campana, con cicatrices.", "info")
-        return ("La desinformacion gano la campana. Ciudad Nova queda dividida.", "mal")
+            return ("Ciudad Nova sobrevivió la campaña, con cicatrices.", "info")
+        return ("La desinformación ganó la campaña. Ciudad Nova queda dividida.", "mal")

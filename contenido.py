@@ -29,11 +29,11 @@ INDICADORES_INICIALES = {
 
 # Nombre legible y si subir es bueno o malo
 INDICADORES_META = [
-    ("info_verificada", "Informacion verificada", True),
+    ("info_verificada", "Información verificada", True),
     ("confianza", "Confianza ciudadana", True),
     ("convivencia", "Convivencia", True),
     ("bienestar", "Bienestar digital", True),
-    ("desinformacion", "Desinformacion", False),
+    ("desinformacion", "Desinformación", False),
     ("conflictos", "Conflictos", False),
 ]
 
@@ -53,7 +53,7 @@ INDICADORES_META = [
 
 INYECCIONES = {
     # ---------- PERIODISTA ----------
-    "verificacion": ("raiz", "d_express", "Verificacion express",
+    "verificacion": ("raiz", "d_express", "Verificación express",
                      {"info_verificada": 8, "desinformacion": -5}, "rigor", 1,
                      "Tu cuenta verificada zanja el rumor en minutos."),
     "deteccion_bots": ("raiz", "d_bots", "Detectar cuentas bot",
@@ -61,36 +61,36 @@ INYECCIONES = {
                        "Descubres que 40 cuentas que la comparten son bots."),
     "fuentes": ("d_resultado", "d_fuentes", "Contrastar tres fuentes",
                 {"info_verificada": 10, "confianza": 5}, "rigor", 1,
-                "Tres fuentes independientes confirman tu version."),
+                "Tres fuentes independientes confirman tu versión."),
     "redaccion": ("raiz", "d_nota", "Escribir una nota informativa",
                   {"info_verificada": 6, "bienestar": 3}, "rigor", 1,
                   "Publicas una nota corta explicando el contexto."),
     "titular": ("d_nota", "d_titular", "Titular sin amarillismo",
                 {"convivencia": 7, "conflictos": -5}, "empatia", 1,
                 "Un titular sobrio: informa sin encender a nadie."),
-    "investigacion": ("raiz", "d_investigar", "Abrir una investigacion",
+    "investigacion": ("raiz", "d_investigar", "Abrir una investigación",
                       {"info_verificada": 7, "desinformacion": -4}, "rigor", 1,
-                      "Dedicas el dia a reconstruir la historia completa."),
+                      "Dedicas el día a reconstruir la historia completa."),
     "rastreo": ("d_investigar", "d_rastreo", "Rastrear el origen del rumor",
                 {"desinformacion": -12, "confianza": 6}, "rigor", 2,
-                "Llegas a la cuenta que lo invento. Queda expuesta."),
+                "Llegas a la cuenta que lo inventó. Queda expuesta."),
 
     # ---------- CIUDADANO ----------
     "consumo_critico": ("raiz", "d_calma", "Leer con calma antes de reaccionar",
                         {"bienestar": 6, "conflictos": -4}, "rigor", 1,
                         "Respiras. Lo lees dos veces. Ya ves las costuras."),
-    "ojo_entrenado": ("raiz", "d_senales", "Buscar senales de manipulacion",
+    "ojo_entrenado": ("raiz", "d_senales", "Buscar señales de manipulación",
                       {"info_verificada": 8, "desinformacion": -6}, "rigor", 1,
-                      "Foto reciclada de otra ciudad y de hace tres anos."),
+                      "Foto reciclada de otra ciudad y de hace tres años."),
     "pausa": ("d_calma", "d_24h", "Esperar 24 horas antes de opinar",
               {"bienestar": 8, "conflictos": -6}, "empatia", 1,
-              "Al dia siguiente el rumor ya se habia desinflado solo."),
+              "Al día siguiente el rumor ya se había desinflado solo."),
     "participacion": ("raiz", "d_barrio", "Preguntar en el grupo del barrio",
                       {"confianza": 6, "convivencia": 5}, "empatia", 1,
                       "Los vecinos aportan datos que no estaban en la red."),
     "puente_vecinal": ("d_barrio", "d_mediar", "Mediar entre los vecinos",
                        {"convivencia": 10, "conflictos": -8}, "empatia", 2,
-                       "Bajas el tono de una discusion que iba a estallar."),
+                       "Bajas el tono de una discusión que iba a estallar."),
     "autocuidado": ("raiz", "d_silenciar", "Silenciar el tema por hoy",
                     {"bienestar": 7, "conflictos": -3}, "empatia", 1,
                     "Proteges tu salud mental sin alimentar el ruido."),
@@ -108,26 +108,26 @@ INYECCIONES = {
     "colaboracion": ("raiz", "d_colab", "Colaborar con un verificador",
                      {"info_verificada": 9, "confianza": 7}, "rigor", 2,
                      "Haces un vivo con el periodista. La gente lo agradece."),
-    "autenticidad": ("raiz", "d_proceso", "Mostrar como lo verifique",
+    "autenticidad": ("raiz", "d_proceso", "Mostrar cómo lo verifiqué",
                      {"confianza": 8, "info_verificada": 5}, "rigor", 1,
-                     "Ensenas el proceso completo. Tu audiencia aprende contigo."),
+                     "Enseñas el proceso completo. Tu audiencia aprende contigo."),
     "sello": ("d_proceso", "d_sello", "Ponerle mi sello de confianza",
               {"confianza": 10, "desinformacion": -7}, "rigor", 2,
               "Tu sello ya significa algo en Ciudad Nova."),
-    "responsabilidad": ("raiz", "d_admitir", "Admitir que me equivoque",
+    "responsabilidad": ("raiz", "d_admitir", "Admitir que me equivoqué",
                         {"confianza": 7, "convivencia": 5}, "empatia", 1,
-                        "Cuesta, pero tu audiencia te respeta mas despues."),
-    "retractacion": ("d_admitir", "d_retractacion", "Retractacion masiva",
+                        "Cuesta, pero tu audiencia te respeta más después."),
+    "retractacion": ("d_admitir", "d_retractacion", "Retractación masiva",
                      {"desinformacion": -14, "confianza": 9}, "empatia", 2,
                      "Llegas a todos los que vieron el error original."),
 
     # ---------- CANDIDATO ----------
-    "comunicacion": ("raiz", "d_responder", "Responder publicamente",
+    "comunicacion": ("raiz", "d_responder", "Responder públicamente",
                      {"confianza": 5, "conflictos": 3}, "alcance", 1,
                      "Das la cara. Algunos te creen, otros no."),
     "discurso_claro": ("d_responder", "d_datos", "Explicarlo con datos",
                        {"info_verificada": 9, "confianza": 8}, "rigor", 2,
-                       "Muestras el presupuesto linea por linea."),
+                       "Muestras el presupuesto línea por línea."),
     "debate": ("raiz", "d_debate", "Convocar un debate abierto",
                {"convivencia": 8, "confianza": 6}, "empatia", 2,
                "Invitas a los otros candidatos. La plaza se llena."),
@@ -139,8 +139,8 @@ INYECCIONES = {
                       "Cortas el rumor antes de que llegue a los noticieros."),
     "confianza_cand": ("raiz", "d_vecinos", "Reunirme con los vecinos",
                        {"confianza": 7, "convivencia": 6}, "empatia", 1,
-                       "Sin camaras. Solo escuchar durante dos horas."),
-    "promesa": ("d_vecinos", "d_compromiso", "Firmar un compromiso publico",
+                       "Sin cámaras. Solo escuchar durante dos horas."),
+    "promesa": ("d_vecinos", "d_compromiso", "Firmar un compromiso público",
                 {"confianza": 11, "bienestar": 5}, "empatia", 2,
                 "Lo firmas delante de todos. Ahora es verificable."),
 }
@@ -159,49 +159,49 @@ ROLES = {
         "nombre": "Ciudadano",
         "simbolo": "C",
         "lema": "Interactuar con responsabilidad y cuidar la convivencia.",
-        "descripcion": "Recibe la informacion como cualquier habitante.\n"
-                       "Su fuerza esta en no amplificar lo que no verifico.",
+        "descripcion": "Recibe la información como cualquier habitante.\n"
+                       "Su fuerza está en no amplificar lo que no verificó.",
         "arbol": [
             # (id, nombre, descripcion, costo, simbolo, id_padre)
-            ("consumo_critico", "Consumo critico", "Leer antes de reaccionar", 1, "o", None),
-            ("ojo_entrenado", "Ojo entrenado", "Detectar manipulacion", 2, "*", "consumo_critico"),
+            ("consumo_critico", "Consumo crítico", "Leer antes de reaccionar", 1, "o", None),
+            ("ojo_entrenado", "Ojo entrenado", "Detectar manipulación", 2, "*", "consumo_critico"),
             ("pausa", "Pausa reflexiva", "Esperar antes de opinar", 2, "~", "consumo_critico"),
-            ("participacion", "Participacion", "Hablar con el barrio", 1, "o", None),
+            ("participacion", "Participación", "Hablar con el barrio", 1, "o", None),
             ("puente_vecinal", "Puente vecinal", "Mediar en conflictos", 2, "^", "participacion"),
             ("autocuidado", "Autocuidado", "Cuidar tu bienestar digital", 1, "o", None),
-            ("desconexion", "Desconexion sana", "Pausa colectiva", 2, "~", "autocuidado"),
+            ("desconexion", "Desconexión sana", "Pausa colectiva", 2, "~", "autocuidado"),
         ],
     },
     "periodista": {
         "nombre": "Periodista",
         "simbolo": "P",
         "lema": "Investigar, verificar y ayudar a distinguir lo confiable.",
-        "descripcion": "Puede revelar la veracidad de una publicacion\n"
-                       "y rastrear de donde salio el rumor.",
+        "descripcion": "Puede revelar la veracidad de una publicación\n"
+                       "y rastrear de dónde salió el rumor.",
         "arbol": [
-            ("verificacion", "Verificacion", "Comprobar hechos", 1, "o", None),
-            ("deteccion_bots", "Deteccion de bots", "Identificar cuentas falsas", 2, "*", "verificacion"),
+            ("verificacion", "Verificación", "Comprobar hechos", 1, "o", None),
+            ("deteccion_bots", "Detección de bots", "Identificar cuentas falsas", 2, "*", "verificacion"),
             ("fuentes", "Fuentes confiables", "Contrastar fuentes", 2, "^", "verificacion"),
-            ("redaccion", "Redaccion", "Escribir para informar", 1, "o", None),
+            ("redaccion", "Redacción", "Escribir para informar", 1, "o", None),
             ("titular", "Titular responsable", "Informar sin encender", 2, "~", "redaccion"),
-            ("investigacion", "Investigacion", "Reconstruir la historia", 1, "o", None),
-            ("rastreo", "Rastreo de origen", "Encontrar al que lo invento", 2, "*", "investigacion"),
+            ("investigacion", "Investigación", "Reconstruir la historia", 1, "o", None),
+            ("rastreo", "Rastreo de origen", "Encontrar al que lo inventó", 2, "*", "investigacion"),
         ],
     },
     "influencer": {
         "nombre": "Influencer",
         "simbolo": "I",
-        "lema": "Gran alcance: cada decision pesa el doble.",
+        "lema": "Gran alcance: cada decisión pesa el doble.",
         "descripcion": "Lo que comparte llega a miles al instante.\n"
                        "Su poder puede limpiar la ciudad o incendiarla.",
         "arbol": [
             ("alcance", "Alcance", "Llegar a mucha gente", 1, "o", None),
             ("mega_viral", "Mega viral", "Empujar a tendencia", 2, "*", "alcance"),
-            ("colaboracion", "Colaboracion", "Aliarte con verificadores", 2, "^", "alcance"),
+            ("colaboracion", "Colaboración", "Aliarte con verificadores", 2, "^", "alcance"),
             ("autenticidad", "Autenticidad", "Mostrar tu proceso", 1, "o", None),
             ("sello", "Sello de confianza", "Tu firma vale", 2, "~", "autenticidad"),
             ("responsabilidad", "Responsabilidad", "Hacerte cargo", 1, "o", None),
-            ("retractacion", "Retractacion", "Corregir a gran escala", 2, "^", "responsabilidad"),
+            ("retractacion", "Retractación", "Corregir a gran escala", 2, "^", "responsabilidad"),
         ],
     },
     "candidato": {
@@ -209,13 +209,13 @@ ROLES = {
         "simbolo": "A",
         "lema": "Construir confianza y enfrentar los rumores de frente.",
         "descripcion": "Es blanco de los ataques y a la vez\n"
-                       "quien mas puede calmar a Ciudad Nova.",
+                       "quien más puede calmar a Ciudad Nova.",
         "arbol": [
-            ("comunicacion", "Comunicacion", "Dar la cara", 1, "o", None),
+            ("comunicacion", "Comunicación", "Dar la cara", 1, "o", None),
             ("discurso_claro", "Discurso claro", "Explicar con datos", 2, "^", "comunicacion"),
-            ("debate", "Debate directo", "Debatir en publico", 2, "*", "comunicacion"),
-            ("gestion_crisis", "Gestion de crisis", "Responder coordinado", 1, "o", None),
-            ("control_danos", "Control de danos", "Cortar el rumor", 2, "~", "gestion_crisis"),
+            ("debate", "Debate directo", "Debatir en público", 2, "*", "comunicacion"),
+            ("gestion_crisis", "Gestión de crisis", "Responder coordinado", 1, "o", None),
+            ("control_danos", "Control de daños", "Cortar el rumor", 2, "~", "gestion_crisis"),
             ("confianza_cand", "Confianza", "Escuchar a la gente", 1, "o", None),
             ("promesa", "Promesa cumplida", "Comprometerte en firme", 2, "^", "confianza_cand"),
         ],
@@ -249,24 +249,24 @@ def construir_arbol_habilidades(id_rol):
 
 RAMAS_DINAMICAS = [
     ("rigor", 4, "criterio_propio", "Criterio propio",
-     "De tanto verificar, te salio callo", 1, "*",
-     "Tu forma de jugar abrio una rama nueva: CRITERIO PROPIO."),
-    ("empatia", 4, "mediacion", "Mediacion",
+     "De tanto verificar, te salió callo", 1, "*",
+     "Tu forma de jugar abrió una rama nueva: CRITERIO PROPIO."),
+    ("empatia", 4, "mediacion", "Mediación",
      "La ciudad te reconoce como quien calma", 1, "^",
-     "Tu forma de jugar abrio una rama nueva: MEDIACION."),
+     "Tu forma de jugar abrió una rama nueva: MEDIACIÓN."),
     ("alcance", 4, "altavoz", "Altavoz",
-     "Tu voz pesa mas que hace unos dias", 1, "o",
-     "Tu forma de jugar abrio una rama nueva: ALTAVOZ."),
+     "Tu voz pesa más que hace unos días", 1, "o",
+     "Tu forma de jugar abrió una rama nueva: ALTAVOZ."),
     ("impulso", 4, "sensacionalismo", "Sensacionalismo",
      "Potente, pero envenena la ciudad", 1, "!",
-     "Cuidado: tu impulsividad abrio la rama SENSACIONALISMO."),
+     "Cuidado: tu impulsividad abrió la rama SENSACIONALISMO."),
 ]
 
 INYECCIONES_DINAMICAS = {
     "criterio_propio": ("raiz", "d_pruebas", "Exigir pruebas antes de opinar",
                         {"info_verificada": 7, "desinformacion": -5}, "rigor", 1,
-                        "Pides la fuente. El que lo publico no la tiene."),
-    "mediacion": ("raiz", "d_calmar", "Calmar la discusion",
+                        "Pides la fuente. El que lo publicó no la tiene."),
+    "mediacion": ("raiz", "d_calmar", "Calmar la discusión",
                   {"convivencia": 9, "conflictos": -7}, "empatia", 1,
                   "Escribes algo sensato y la pelea se apaga."),
     "altavoz": ("raiz", "d_altavoz", "Usar tu altavoz con cuidado",
@@ -274,7 +274,7 @@ INYECCIONES_DINAMICAS = {
                 "Mucha gente te lee. Esta vez lo usas bien."),
     "sensacionalismo": ("raiz", "d_explosivo", "Titular explosivo",
                         {"desinformacion": 14, "conflictos": 10, "confianza": -8}, "impulso", 0,
-                        "Explota de likes. Ciudad Nova se envenena un poco mas."),
+                        "Explota de likes. Ciudad Nova se envenena un poco más."),
 }
 
 # Si la impulsividad llega a este umbral, se revoca en cascada la primera
@@ -282,7 +282,7 @@ INYECCIONES_DINAMICAS = {
 UMBRAL_CASCADA = 7
 
 CAPITULO_1 = "colegio"
-EVENTO_CAPITULO_1 = ("Dia tranquilo en Civitas", {})
+EVENTO_CAPITULO_1 = ("Día tranquilo en Civitas", {})
 
 
 # ===================================================================
@@ -297,33 +297,33 @@ PUBLICACIONES = [
         "autor": "@NovaAlerta",
         "texto": "El candidato Daniel Ospina quiere cerrar el colegio del barrio.",
         "veracidad": "falsa",
-        "contexto": "Daniel Ospina propuso REMODELAR el colegio. Alguien recorto el video.",
+        "contexto": "Daniel Ospina propuso REMODELAR el colegio. Alguien recortó el video.",
         "compartidos": 1240,
     },
     {
         "id": "alcalde",
         "escenario": "alcaldia",
         "autor": "@VecinoIndignado",
-        "texto": "El alcalde actual esta robando dinero de la ciudad.",
+        "texto": "El alcalde actual está robando dinero de la ciudad.",
         "veracidad": "opinion",
-        "contexto": "Es una sospecha sin pruebas. Hay una auditoria en curso,\n"
-                    "todavia sin resultados publicos.",
+        "contexto": "Es una sospecha sin pruebas. Hay una auditoría en curso,\n"
+                    "todavía sin resultados públicos.",
         "compartidos": 3180,
     },
     {
         "id": "parques",
         "escenario": "plaza",
         "autor": "@UrgenteNova",
-        "texto": "Manana cerraran todos los parques de Ciudad Nova.",
+        "texto": "Mañana cerrarán todos los parques de Ciudad Nova.",
         "veracidad": "falsa",
-        "contexto": "Solo cierra el parque norte, por mantenimiento, medio dia.",
+        "contexto": "Solo cierra el parque norte, por mantenimiento, medio día.",
         "compartidos": 890,
     },
     {
         "id": "biblioteca",
         "escenario": "barrio",
         "autor": "@BibliotecaNova",
-        "texto": "La biblioteca del barrio abrira tambien los domingos.",
+        "texto": "La biblioteca del barrio abrirá también los domingos.",
         "veracidad": "verdadera",
         "contexto": "Confirmado en el acta del concejo de la semana pasada.",
         "compartidos": 210,
@@ -332,22 +332,22 @@ PUBLICACIONES = [
         "id": "debate",
         "escenario": "plaza",
         "autor": "@ClipsNova",
-        "texto": "Video: la candidata Ruiz llego tarde al debate.",
+        "texto": "Video: la candidata Ruiz llegó tarde al debate.",
         "veracidad": "verdadera",
-        "contexto": "Es cierto, pero llego tarde por un accidente en la via.\n"
-                    "El video omite esa parte a proposito.",
+        "contexto": "Es cierto, pero llegó tarde por un accidente en la vía.\n"
+                    "El video omite esa parte a propósito.",
         "compartidos": 2050,
     },
 ]
 
 # Eventos aleatorios del dia (seccion 8 del enunciado)
 EVENTOS_ALEATORIOS = [
-    ("Se activo una red de bots", {"desinformacion": 4}),
-    ("Una campana de convivencia recorre la ciudad", {"convivencia": 5}),
-    ("Un noticiero repitio el rumor sin verificar", {"info_verificada": -4}),
-    ("Un grupo de vecinos organizo una jornada de verificacion", {"info_verificada": 5}),
-    ("Estallo una discusion en los comentarios", {"conflictos": 4}),
-    ("Dia tranquilo en Civitas", {}),
+    ("Se activó una red de bots", {"desinformacion": 4}),
+    ("Una campaña de convivencia recorre la ciudad", {"convivencia": 5}),
+    ("Un noticiero repitió el rumor sin verificar", {"info_verificada": -4}),
+    ("Un grupo de vecinos organizó una jornada de verificación", {"info_verificada": 5}),
+    ("Estalló una discusión en los comentarios", {"conflictos": 4}),
+    ("Día tranquilo en Civitas", {}),
 ]
 
 
@@ -372,7 +372,7 @@ def construir_arbol_decision(pub):
     """
     ver = pub["veracidad"]
 
-    raiz = NodoDecision("raiz", pub["texto"], corto="PUBLICACION")
+    raiz = NodoDecision("raiz", pub["texto"], corto="PUBLICACIÓN")
     arbol = ArbolDecision(raiz)
 
     # ---------- COMPARTIR sin verificar ----------
@@ -380,14 +380,14 @@ def construir_arbol_decision(pub):
         ef_comp = {"desinformacion": 14, "confianza": -7,
                    "info_verificada": -8, "conflictos": 6}
         det_comp = ("Era falsa. La compartiste y ahora la creen cientos\n"
-                    "de vecinos. La desinformacion sube de golpe.")
+                    "de vecinos. La desinformación sube de golpe.")
     elif ver == "verdadera":
         ef_comp = {"info_verificada": 4, "conflictos": 4, "convivencia": -3}
         det_comp = ("Era cierta, pero la compartiste sin contexto.\n"
-                    "Media verdad tambien enciende a la gente.")
+                    "Media verdad también enciende a la gente.")
     else:
         ef_comp = {"conflictos": 9, "convivencia": -7, "desinformacion": 6}
-        det_comp = ("Era una opinion y la compartiste como si fuera un hecho.\n"
+        det_comp = ("Era una opinión y la compartiste como si fuera un hecho.\n"
                     "Los comentarios se convirtieron en una pelea.")
 
     compartir = raiz.agregar_hijo(NodoDecision(
@@ -408,9 +408,9 @@ def construir_arbol_decision(pub):
 
     etiqueta = {"falsa": "Resultado: es FALSA",
                 "verdadera": "Resultado: es VERDADERA",
-                "opinion": "Resultado: es una OPINION"}[ver]
+                "opinion": "Resultado: es una OPINIÓN"}[ver]
     corto = {"falsa": "Es FALSA", "verdadera": "Es VERDADERA",
-             "opinion": "Es OPINION"}[ver]
+             "opinion": "Es OPINIÓN"}[ver]
     resultado = verificar.agregar_hijo(NodoDecision(
         "d_resultado", etiqueta, rasgo="rigor", detalle=pub["contexto"],
         corto=corto))
@@ -420,9 +420,9 @@ def construir_arbol_decision(pub):
             "v_reportar", "Reportarla",
             efectos={"desinformacion": -10, "convivencia": 5},
             rasgo="rigor", puntos=1, bandera="reportaste_con_prueba",
-            detalle="La reportas con la prueba. Moderacion la baja rapido."))
+            detalle="La reportas con la prueba. Moderación la baja rápido."))
         resultado.agregar_hijo(NodoDecision(
-            "v_desmentir", "Desmentirla publicamente",
+            "v_desmentir", "Desmentirla públicamente",
             efectos={"desinformacion": -12, "confianza": 8, "info_verificada": 8},
             rasgo="rigor", puntos=2, bandera="desmentiste_una_falsa",
             detalle="Publicas el desmentido con la fuente. La gente lo agradece."))
@@ -431,19 +431,19 @@ def construir_arbol_decision(pub):
             "v_compartir", "Compartirla con su contexto",
             efectos={"info_verificada": 12, "confianza": 6, "bienestar": 4},
             rasgo="rigor", puntos=2, bandera="informaste_bien",
-            detalle="La compartes explicando el contexto completo. Asi si."))
+            detalle="La compartes explicando el contexto completo. Así sí."))
         resultado.agregar_hijo(NodoDecision(
-            "v_guardar", "Guardarla para despues",
+            "v_guardar", "Guardarla para después",
             efectos={"info_verificada": 2},
-            detalle="La guardas. No hace dano, pero tampoco ayuda a nadie."))
+            detalle="La guardas. No hace daño, pero tampoco ayuda a nadie."))
     else:
         resultado.agregar_hijo(NodoDecision(
-            "v_aclarar", "Aclarar que es una opinion",
+            "v_aclarar", "Aclarar que es una opinión",
             efectos={"convivencia": 8, "conflictos": -6, "info_verificada": 6},
             rasgo="empatia", puntos=2, bandera="calmaste_una_opinion",
             detalle="Comentas que es una sospecha, no un hecho probado."))
         resultado.agregar_hijo(NodoDecision(
-            "v_esperar", "Esperar a la auditoria",
+            "v_esperar", "Esperar a la auditoría",
             efectos={"bienestar": 5, "conflictos": -3},
             rasgo="rigor", puntos=1,
             detalle="Decides no opinar hasta que haya datos reales."))
@@ -452,28 +452,28 @@ def construir_arbol_decision(pub):
     ignorar = raiz.agregar_hijo(NodoDecision(
         "ignorar", "Ignorar", detalle="Sigues bajando por el feed."))
     ef_ign = {"desinformacion": 5} if ver == "falsa" else {"bienestar": 2}
-    det_ign = ("La ignoraste, pero siguio circulando sin ti."
+    det_ign = ("La ignoraste, pero siguió circulando sin ti."
                if ver == "falsa"
-               else "No pasa nada. A veces ignorar tambien es una opcion.")
+               else "No pasa nada. A veces ignorar también es una opción.")
     ignorar.agregar_hijo(NodoDecision(
         "i_result", "Circula sin ti", efectos=ef_ign, detalle=det_ign,
         bandera="dejaste_correr_una_falsa" if ver == "falsa" else None))
 
     # ---------- REPORTAR ----------
     reportar = raiz.agregar_hijo(NodoDecision(
-        "reportar", "Reportar", detalle="Lo mandas a moderacion."))
+        "reportar", "Reportar", detalle="Lo mandas a moderación."))
     if ver == "falsa":
         ef_rep = {"desinformacion": -7, "convivencia": 4}
-        det_rep = "Moderacion la revisa y la marca. Buen reflejo."
+        det_rep = "Moderación la revisa y la marca. Buen reflejo."
     elif ver == "verdadera":
         ef_rep = {"confianza": -6, "conflictos": 5, "info_verificada": -4}
         det_rep = ("Era verdadera y la reportaste. Reportar lo que no te gusta\n"
-                   "tambien hace dano: la gente pierde confianza en el sistema.")
+                   "también hace daño: la gente pierde confianza en el sistema.")
     else:
         ef_rep = {"conflictos": 3, "convivencia": -2}
-        det_rep = "Era una opinion. Moderacion la deja, no infringe nada."
+        det_rep = "Era una opinión. Moderación la deja, no infringe nada."
     reportar.agregar_hijo(NodoDecision(
-        "r_result", "Moderacion la revisa", efectos=ef_rep, detalle=det_rep,
+        "r_result", "Moderación la revisa", efectos=ef_rep, detalle=det_rep,
         bandera="reportaste_algo_cierto" if ver == "verdadera" else None))
 
     return arbol
@@ -513,12 +513,12 @@ RAMAS_POR_BANDERA = {
     "desmentiste_una_falsa": (
         "raiz", "b_recordar", "Recordar el desmentido de ayer",
         {"confianza": 9, "desinformacion": -8}, "rigor", 1,
-        "La gente se acuerda de que ayer tuviste razon. Ahora te creen.",
+        "La gente se acuerda de que ayer tuviste razón. Ahora te creen.",
         "Recordar ayer"),
     "difundiste_una_falsa": (
         "raiz", "b_cargar", "Cargar con lo que difundiste ayer",
         {"confianza": 6, "convivencia": 5, "bienestar": -3}, "empatia", 1,
-        "Reconoces en publico el error de ayer antes de opinar de esto.",
+        "Reconoces en público el error de ayer antes de opinar de esto.",
         "Cargar con ayer"),
     "reportaste_algo_cierto": (
         "raiz", "b_disculpa", "Pedir disculpas por el reporte de ayer",
@@ -541,14 +541,14 @@ RAMAS_POR_BANDERA = {
         "Vuelves al hilo de ayer a poner paz. Algunos te lo agradecen.",
         "Apagar el fuego"),
     "reportaste_con_prueba": (
-        "raiz", "b_moderacion", "Pedirle a moderacion que actue rapido",
+        "raiz", "b_moderacion", "Pedirle a moderación que actúe rápido",
         {"desinformacion": -8, "convivencia": 4}, "rigor", 1,
-        "Moderacion ya te conoce de ayer: esta vez responden en minutos.",
-        "Via rapida"),
+        "Moderación ya te conoce de ayer: esta vez responden en minutos.",
+        "Vía rápida"),
     "informaste_bien": (
         "raiz", "b_peso", "Tu palabra ya tiene peso en Civitas",
         {"confianza": 8, "info_verificada": 6}, "rigor", 1,
-        "Lo que publicaste ayer resulto cierto. Hoy la gente te lee distinto.",
+        "Lo que publicaste ayer resultó cierto. Hoy la gente te lee distinto.",
         "Tu palabra pesa"),
     "compartiste_sin_contexto": (
         "raiz", "b_contexto", "Poner el contexto que faltaba ayer",
@@ -583,11 +583,11 @@ def aplicar_banderas(arbol_decision, banderas):
 CARTAS_BASE = {
     "ciudadano": ("raiz", "x_ciudadano", "Un vecino te pasa un dato",
                   {"convivencia": 5, "confianza": 4}, "empatia", 1,
-                  "Un vecino te escribe por privado con lo que el si vio.",
+                  "Un vecino te escribe por privado con lo que él sí vio.",
                   "Dato del vecino"),
     "periodista": ("raiz", "x_periodista", "Un periodista te comparte su chequeo",
                    {"info_verificada": 7, "desinformacion": -4}, "rigor", 1,
-                   "Te llega el chequeo de un periodista que ya lo miro.",
+                   "Te llega el chequeo de un periodista que ya lo miró.",
                    "Chequeo ajeno"),
     "influencer": ("raiz", "x_influencer", "Un influencer pone el tema en tendencia",
                    {"conflictos": 4, "desinformacion": 5, "confianza": -2}, "alcance", 1,
