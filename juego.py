@@ -32,8 +32,9 @@ from estructuras import NodoHabilidad, NodoDecision
 from contenido import (
     INDICADORES_INICIALES, INDICADORES_META, ROLES, PUBLICACIONES,
     EVENTOS_ALEATORIOS, RAMAS_DINAMICAS, INYECCIONES, INYECCIONES_DINAMICAS,
-    CARTAS_BASE, UMBRAL_CASCADA, construir_arbol_habilidades,
-    construir_arbol_decision, aplicar_habilidades, aplicar_banderas,
+    CARTAS_BASE, UMBRAL_CASCADA, CAPITULO_1, EVENTO_CAPITULO_1,
+    construir_arbol_habilidades, construir_arbol_decision,
+    aplicar_habilidades, aplicar_banderas,
 )
 
 RASGOS = ["rigor", "empatia", "alcance", "impulso"]
@@ -43,6 +44,8 @@ RASGOS = ["rigor", "empatia", "alcance", "impulso"]
 TIEMPO_ESCENA = 25.0
 TIEMPO_INTERVENCION = 8.0
 DURACION_FLASH = 2.6
+
+DIAS_PARTIDA = 5
 
 CANDIDATOS = [
     ("Elena Ruiz", "Campana basada en datos verificables",
@@ -154,8 +157,14 @@ class Partida:
 
         # --- columna vertebral ---
         self.publicaciones = PUBLICACIONES[:]
-        random.shuffle(self.publicaciones)
-        self.total_dias = len(self.publicaciones)
+        capitulo_primero = next((p for p in self.publicaciones if p["id"] == CAPITULO_1), None)
+        if capitulo_primero:
+            self.publicaciones.remove(capitulo_primero)
+            random.shuffle(self.publicaciones)
+            self.publicaciones.insert(0, capitulo_primero)
+        else:
+            random.shuffle(self.publicaciones)
+        self.total_dias = min(DIAS_PARTIDA, len(self.publicaciones))
         self.dia_actual = 0
         self.dias_completados = 0
 
@@ -244,7 +253,10 @@ class Partida:
         self._repartir_cartas()
 
         # 5. evento aleatorio del dia
-        nombre, efectos = random.choice(EVENTOS_ALEATORIOS)
+        if self.publicacion["id"] == CAPITULO_1:
+            nombre, efectos = EVENTO_CAPITULO_1
+        else:
+            nombre, efectos = random.choice(EVENTOS_ALEATORIOS)
         self.evento_dia = nombre
         self._aplicar_efectos(efectos)
 
@@ -303,8 +315,12 @@ class Partida:
             return
 
         # cuantos jugadores alcanzan a intervenir hoy (varia entre dias)
-        cupo = random.randint(1, len(secundarios))
-        intervienen = random.sample(secundarios, cupo)
+        es_capitulo_1 = self.publicacion["id"] == CAPITULO_1
+        if es_capitulo_1:
+            intervienen = secundarios
+        else:
+            cupo = random.randint(1, len(secundarios))
+            intervienen = random.sample(secundarios, cupo)
 
         for jugador in intervienen:
             opciones = []
@@ -328,13 +344,20 @@ class Partida:
                                       base[7], base, es_base=True))
 
             if opciones:
-                self.cartas.append(random.choice(opciones))
+                if es_capitulo_1:
+                    self.cartas.append(opciones[0])
+                else:
+                    self.cartas.append(random.choice(opciones))
 
         # Cada carta salta en un momento distinto del reloj del protagonista,
         # escalonadas para que no se pisen una con otra.
-        random.shuffle(self.cartas)
+        if not es_capitulo_1:
+            random.shuffle(self.cartas)
         for i, carta in enumerate(self.cartas):
-            transcurrido = 5.0 + i * 5.5 + random.uniform(0.0, 2.0)
+            if es_capitulo_1:
+                transcurrido = 5.0 + i * 5.5
+            else:
+                transcurrido = 5.0 + i * 5.5 + random.uniform(0.0, 2.0)
             carta.momento = max(3.0, TIEMPO_ESCENA - transcurrido)
 
     def cartas_disponibles(self):

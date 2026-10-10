@@ -281,6 +281,9 @@ INYECCIONES_DINAMICAS = {
 # rama que el jugador haya desbloqueado (y toda su descendencia).
 UMBRAL_CASCADA = 7
 
+CAPITULO_1 = "colegio"
+EVENTO_CAPITULO_1 = ("Dia tranquilo en Civitas", {})
+
 
 # ===================================================================
 #  PUBLICACIONES DE CIVITAS  (seccion 3 del enunciado)
