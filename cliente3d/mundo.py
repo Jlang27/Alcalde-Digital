@@ -9,6 +9,21 @@ from ursina import Entity, application, camera, color, destroy, Vec3
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUTA_PERSONAJE = os.path.join(RAIZ, "assets", "personajes", "prueba.glb")
+
+
+def ruta_personaje(rol=None):
+    """El modelo de cada rol.
+
+    Los archivos se llaman como el ROL (candidato.glb, influencer.glb...)
+    y no como el personaje, porque el rol es la clave que ya usa la
+    logica: asi no hace falta ninguna tabla de traduccion. Si todavia no
+    existe el modelo de ese rol, se usa el de prueba.
+    """
+    if rol:
+        ruta = os.path.join(RAIZ, "assets", "personajes", f"{rol}.glb")
+        if os.path.exists(ruta):
+            return ruta
+    return RUTA_PERSONAJE
 RUTA_CAFETERIA = os.path.join(RAIZ, "assets", "escenarios", "cafeteria.glb")
 
 # Atardecer: ambar calido contra azul frio. Es el contraste que usa
@@ -375,6 +390,46 @@ def _montar(mundo, escenario):
     _ACTUAL["contenedor"] = cont
 
 
+# Por donde se puede andar y donde no. Los numeros salen de medir la
+# geometria real del .glb, no de ojo.
+#
+# Solo se bloquean los muebles GRANDES: la barra y la banqueta corrida.
+# Las mesas vienen fusionadas en un unico nodo que abarca media sala, asi
+# que su caja envolvente no sirve de nada; se acepta que el personaje las
+# roce. Para bloquearlas de verdad harian falta nodos separados por
+# mueble en el .glb, lo que choca con juntarlo todo para el rendimiento.
+LIMITES = {
+    "cafeteria": (-3.45, 3.45, -5.45, 4.45),
+    "plaza": (-9.0, 9.0, -9.0, 9.0),
+}
+BLOQUEOS = {
+    "cafeteria": (
+        (0.30, 3.80, 3.30, 4.80),      # la barra
+        (0.76, 3.54, 2.59, 2.97),      # la banqueta corrida
+    ),
+    "plaza": (),
+}
+
+
+def limites():
+    """Rectangulo andable del escenario activo."""
+    return LIMITES.get(_ACTUAL["nombre"], LIMITES["cafeteria"])
+
+
+def bloqueos():
+    """Rectangulos por los que no se puede pasar."""
+    return BLOQUEOS.get(_ACTUAL["nombre"], ())
+
+
+def nodo_escenario():
+    """El nodo que cuelga SOLO del decorado, sin los personajes.
+
+    Hace falta para las colisiones: si se le pone mascara a todo el
+    mundo, el personaje choca con su propio cuerpo.
+    """
+    return _ACTUAL["contenedor"]
+
+
 def cambiar_escenario(mundo, escenario):
     """Cambia de escenario sin tocar a los personajes ni la camara.
 
@@ -393,7 +448,7 @@ def cambiar_escenario(mundo, escenario):
     _montar(mundo, escenario)
 
 
-def crear(escenario="cafeteria"):
+def crear(escenario="cafeteria", rol=None):
     """Monta el mundo entero y devuelve (nodo_raiz, actor).
 
     escenario: "cafeteria" (por defecto) o "plaza". Despues se puede
@@ -402,7 +457,7 @@ def crear(escenario="cafeteria"):
     mundo = application.base.render.attachNewNode("mundo")
     _montar(mundo, escenario)
 
-    ruta = Filename.from_os_specific(RUTA_PERSONAJE).getFullpath()
+    ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
     actor = Actor(ruta)
     actor.reparentTo(mundo)
     _luz_de_personaje(mundo, actor)
@@ -417,7 +472,7 @@ POSICION_INVITADO = Vec3(1.05, 0.0, 0.30)
 PUNTO_MEDIO = Vec3(0.52, 0.0, 0.15)
 
 
-def invitado(mundo, color_jugador):
+def invitado(mundo, color_jugador, rol=None):
     """Hace entrar a otro personaje a la escena.
 
     Solo hay un modelo, asi que no se distingue por la cara sino por la
@@ -425,7 +480,7 @@ def invitado(mundo, color_jugador):
     azul quedaria ridiculo; iluminarlo de azul se lee como lenguaje de
     cine y no como error.
     """
-    ruta = Filename.from_os_specific(RUTA_PERSONAJE).getFullpath()
+    ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
     actor = Actor(ruta)
     actor.reparentTo(mundo)
     actor.setPos(POSICION_INVITADO)

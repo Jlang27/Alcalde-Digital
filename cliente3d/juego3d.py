@@ -62,9 +62,12 @@ cl = Cliente()
 def _rgb32(r, g, b, a=255):
     return color.Color(r / 255, g / 255, b / 255, a / 255)
 
+
+# rgb32 y rgba se usan aqui SIEMPRE con valores 0-255, y Ursina no los
+# normaliza. color.rgb se deja en paz a proposito: espera valores 0-1 y
+# lo usa la propia Ursina por dentro.
 color.rgb32 = _rgb32
 color.rgba = _rgb32
-color.rgb = _rgb32
 
 
 
@@ -383,6 +386,9 @@ def inspeccionar(id_zona):
     if resultado is None:
         return
     texto, _nodo, costo = resultado
+    # Investigar tiene que DOLER. Sin coste se pueden destapar las cuatro
+    # senales gratis, y entonces mirar deja de ser una decision.
+    cl.partida.tiempo_restante = max(0.0, cl.partida.tiempo_restante - costo)
     x,y,w,h = ZONAS[id_zona]
     cl.marcas.append(E.banda(w,h,(x,y), color.rgb32(224, 164, 42, 90),
                              z=E.Z_ADORNO - 0.02))
@@ -519,8 +525,8 @@ def abrir_modal():
     carta = cl.partida.interrupcion
     col = color.rgb32(*carta.jugador.color)
 
-    cl.invitado, cl.luces_invitado = mundo.invitado(cl.mundo,
-                                                    carta.jugador.color)
+    cl.invitado, cl.luces_invitado = mundo.invitado(
+        cl.mundo, carta.jugador.color, carta.jugador.id_rol)
     cl.invitado.loop("hablar")
     mundo.corte("DOS", mundo.PUNTO_MEDIO)
     animar("idle")
@@ -769,6 +775,10 @@ def input(tecla):
             cerrar_pantalla()
         elif tecla in ("enter", "space"):
             cerrar_pantalla(jugar=cl.estado == "capitulos")
+        # Sin este return, cerrar_pantalla() deja el estado en "menu" y la
+        # MISMA pulsacion sigue viva hasta cl.menu.activar(): salir de
+        # Creditos con Enter arrancaba la partida sin pedirlo.
+        return
     
     elif tecla == "escape" and cl.estado != "carga":
         abrir_confirmacion("salir" if cl.estado == "menu" else "menu")
@@ -789,7 +799,7 @@ def input(tecla):
 
 def main():
     app = Ursina(title="Alcalde Digital", borderless=False, vsync=True)
-    window.color = color.rgb(*mundo.CIELO)
+    window.color = color.Color(*mundo.CIELO)
     E.ocultar_depuracion()
 
     cl.mundo, cl.actor = mundo.crear()
