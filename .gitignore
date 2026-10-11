@@ -2,3 +2,4 @@ venv/
 venv-win/
 __pycache__/
 .claude/
+diagnostico_blender.txt
