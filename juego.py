@@ -32,8 +32,9 @@ from estructuras import NodoHabilidad, NodoDecision
 from contenido import (
     INDICADORES_INICIALES, INDICADORES_META, ROLES, PUBLICACIONES,
     EVENTOS_ALEATORIOS, RAMAS_DINAMICAS, INYECCIONES, INYECCIONES_DINAMICAS,
-    CARTAS_BASE, UMBRAL_CASCADA, construir_arbol_habilidades,
-    construir_arbol_decision, aplicar_habilidades, aplicar_banderas,
+    CARTAS_BASE, UMBRAL_CASCADA, CAPITULO_1, EVENTO_CAPITULO_1,
+    construir_arbol_habilidades, construir_arbol_decision,
+    aplicar_habilidades, aplicar_banderas,
 )
 
 RASGOS = ["rigor", "empatia", "alcance", "impulso"]
@@ -44,12 +45,14 @@ TIEMPO_ESCENA = 25.0
 TIEMPO_INTERVENCION = 8.0
 DURACION_FLASH = 2.6
 
+DIAS_PARTIDA = 5
+
 CANDIDATOS = [
-    ("Elena Ruiz", "Campana basada en datos verificables",
+    ("Elena Ruiz", "Campaña basada en datos verificables",
      {"info_verificada": 1.2, "confianza": 1.0, "desinformacion": -0.8}),
-    ("Juan Medina", "Campana centrada en la convivencia del barrio",
+    ("Juan Medina", "Campaña centrada en la convivencia del barrio",
      {"convivencia": 1.2, "bienestar": 1.0, "conflictos": -1.0}),
-    ("Hugo Bravo", "Campana que vive del escandalo y el rumor",
+    ("Hugo Bravo", "Campaña que vive del escándalo y el rumor",
      {"desinformacion": 1.3, "conflictos": 1.1, "confianza": -0.9}),
 ]
 
@@ -154,8 +157,14 @@ class Partida:
 
         # --- columna vertebral ---
         self.publicaciones = PUBLICACIONES[:]
-        random.shuffle(self.publicaciones)
-        self.total_dias = len(self.publicaciones)
+        capitulo_primero = next((p for p in self.publicaciones if p["id"] == CAPITULO_1), None)
+        if capitulo_primero:
+            self.publicaciones.remove(capitulo_primero)
+            random.shuffle(self.publicaciones)
+            self.publicaciones.insert(0, capitulo_primero)
+        else:
+            random.shuffle(self.publicaciones)
+        self.total_dias = min(DIAS_PARTIDA, len(self.publicaciones))
         self.dia_actual = 0
         self.dias_completados = 0
 
@@ -244,7 +253,10 @@ class Partida:
         self._repartir_cartas()
 
         # 5. evento aleatorio del dia
-        nombre, efectos = random.choice(EVENTOS_ALEATORIOS)
+        if self.publicacion["id"] == CAPITULO_1:
+            nombre, efectos = EVENTO_CAPITULO_1
+        else:
+            nombre, efectos = random.choice(EVENTOS_ALEATORIOS)
         self.evento_dia = nombre
         self._aplicar_efectos(efectos)
 
@@ -258,13 +270,13 @@ class Partida:
         self.flash_tiempo = 0.0
         self.opcion_nueva = None
 
-        self.avisar(f"Dia {indice + 1}: protagoniza {prota.nombre}.", "info", prota)
+        self.avisar(f"Día {indice + 1}: protagoniza {prota.nombre}.", "info", prota)
         if propias:
-            self.avisar(f"Sus habilidades abrieron {propias} opcion(es).",
+            self.avisar(f"Sus habilidades abrieron {propias} opción(es).",
                         "bien", prota)
         if memoria:
-            self.avisar(f"La ciudad recuerda lo de dias pasados: "
-                        f"{memoria} opcion(es) nueva(s).", "info")
+            self.avisar(f"La ciudad recuerda lo de días pasados: "
+                        f"{memoria} opción(es) nueva(s).", "info")
         return True
 
     def _cerrar_dia(self):
@@ -280,7 +292,7 @@ class Partida:
             self.dias_completados = self.dia_actual + 1
             prota.puntos += 1
             prota.dias_como_protagonista += 1
-            self.avisar(f"{prota.nombre} cierra el dia: +1 punto.", "bien", prota)
+            self.avisar(f"{prota.nombre} cierra el día: +1 punto.", "bien", prota)
             for j in self.secundarios_de(self.dia_actual):
                 j.puntos += 1
 
@@ -303,8 +315,12 @@ class Partida:
             return
 
         # cuantos jugadores alcanzan a intervenir hoy (varia entre dias)
-        cupo = random.randint(1, len(secundarios))
-        intervienen = random.sample(secundarios, cupo)
+        es_capitulo_1 = self.publicacion["id"] == CAPITULO_1
+        if es_capitulo_1:
+            intervienen = secundarios
+        else:
+            cupo = random.randint(1, len(secundarios))
+            intervienen = random.sample(secundarios, cupo)
 
         for jugador in intervienen:
             opciones = []
@@ -328,13 +344,20 @@ class Partida:
                                       base[7], base, es_base=True))
 
             if opciones:
-                self.cartas.append(random.choice(opciones))
+                if es_capitulo_1:
+                    self.cartas.append(opciones[0])
+                else:
+                    self.cartas.append(random.choice(opciones))
 
         # Cada carta salta en un momento distinto del reloj del protagonista,
         # escalonadas para que no se pisen una con otra.
-        random.shuffle(self.cartas)
+        if not es_capitulo_1:
+            random.shuffle(self.cartas)
         for i, carta in enumerate(self.cartas):
-            transcurrido = 5.0 + i * 5.5 + random.uniform(0.0, 2.0)
+            if es_capitulo_1:
+                transcurrido = 5.0 + i * 5.5
+            else:
+                transcurrido = 5.0 + i * 5.5 + random.uniform(0.0, 2.0)
             carta.momento = max(3.0, TIEMPO_ESCENA - transcurrido)
 
     def cartas_disponibles(self):
@@ -391,12 +414,12 @@ class Partida:
 
         if acepta and self.jugar_carta(carta):
             self.flash = (f"{carta.jugador.nombre} interviene: "
-                          f"nueva opcion para {self.protagonista.nombre}",
+                          f"nueva opción para {self.protagonista.nombre}",
                           carta.jugador.color)
             self.opcion_nueva = carta.spec[1]
         else:
             carta.rechazada = True
-            motivo = "no alcanzo a reaccionar" if expirada else "dejo pasar el momento"
+            motivo = "no alcanzó a reaccionar" if expirada else "dejó pasar el momento"
             self.flash = (f"{carta.jugador.nombre} {motivo}.", carta.jugador.color)
             self.avisar(f"{carta.jugador.nombre} {motivo}.", "info", carta.jugador)
         self.flash_tiempo = DURACION_FLASH
@@ -423,7 +446,7 @@ class Partida:
         carta.jugador.reputacion = min(100, carta.jugador.reputacion + 2)
         self.avisar(f"{carta.jugador.nombre} intervino: '{carta.etiqueta}'.",
                     "bien", carta.jugador)
-        self.avisar(f"{self.protagonista.nombre} tiene una opcion nueva.",
+        self.avisar(f"{self.protagonista.nombre} tiene una opción nueva.",
                     "info", self.protagonista)
         return True
 
@@ -470,7 +493,7 @@ class Partida:
                            opciones[0] if opciones else None)
         if por_defecto is None:
             return
-        self.avisar("Se acabo el tiempo: la publicacion siguio su camino.", "mal")
+        self.avisar("Se acabó el tiempo: la publicación siguió su camino.", "mal")
         self.elegir(por_defecto.id)
 
     def _aplicar_efectos(self, efectos):
@@ -519,11 +542,11 @@ class Partida:
         if self.arbol_decision is not None and jugador is self.protagonista:
             podados = self.arbol_decision.podar_por_habilidad(set(ids))
         jugador.reputacion = max(0, jugador.reputacion - 15)
-        self.avisar(f"{jugador.nombre} perdio credibilidad: se revoco "
+        self.avisar(f"{jugador.nombre} perdió credibilidad: se revocó "
                     f"'{nombre}' y {len(ids) - 1} habilidad(es) dependientes.",
                     "mal", jugador)
         if podados:
-            self.avisar(f"Desaparecieron {podados} opcion(es) de la escena.",
+            self.avisar(f"Desaparecieron {podados} opción(es) de la escena.",
                         "mal", jugador)
 
     # =============================================================
@@ -552,7 +575,7 @@ class Partida:
         buenos = sum(self.indicadores[k] for k, _, b in INDICADORES_META if b) / 4
         malos = sum(self.indicadores[k] for k, _, b in INDICADORES_META if not b) / 2
         if buenos >= 70 and malos <= 25:
-            return ("Ciudad Nova cierra la campana mas sana que como empezo.", "bien")
+            return ("Ciudad Nova cierra la campaña más sana que como empezó.", "bien")
         if buenos >= 55 and malos <= 40:
-            return ("Ciudad Nova sobrevivio la campana, con cicatrices.", "info")
-        return ("La desinformacion gano la campana. Ciudad Nova queda dividida.", "mal")
+            return ("Ciudad Nova sobrevivió la campaña, con cicatrices.", "info")
+        return ("La desinformación ganó la campaña. Ciudad Nova queda dividida.", "mal")
