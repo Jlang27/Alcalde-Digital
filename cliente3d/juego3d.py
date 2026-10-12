@@ -228,6 +228,9 @@ ZONAS = {
     "comentarios": (-0.640, 0.170, 0.34, 0.090),
 }
 
+COSTO_PISTA = 3.0 #Segundos por inspeccion
+MARGEN_MINIMO = 2.0 #Lo que siempre debe quedar para decidir
+
 # ===================================================================
 #  INTERFAZ DE LA ESCENA
 # ===================================================================
@@ -377,10 +380,15 @@ def consultar_pista(id_zona):
     if id_zona in STUB_HALLADAS:
         return None
     STUB_HALLADAS.add(id_zona)
-    return f"Señal en «{id_zona}»", None, 3.0
+    return f"Señal en «{id_zona}»", None, COSTO_PISTA
 
 def inspeccionar(id_zona):
     if not zonas_activas():
+        return
+    if id_zona in STUB_HALLADAS:
+        return
+    if cl.partida.tiempo_restante < COSTO_PISTA + MARGEN_MINIMO:
+        detalle.text = "No queda tiempo para mirar esto."
         return
     resultado = consultar_pista(id_zona)
     if resultado is None:
@@ -392,7 +400,11 @@ def inspeccionar(id_zona):
     x,y,w,h = ZONAS[id_zona]
     cl.marcas.append(E.banda(w,h,(x,y), color.rgb32(224, 164, 42, 90),
                              z=E.Z_ADORNO - 0.02))
-    detalle.text = f"{texto} (-{costo:.0f} s)"
+    t = E.etiqueta(f"-{costo:.0f} s", (reloj_cifra.x, reloj_cifra.y),
+                   1.0, E.GAITAN)
+    t.animate_y(t.y + 0.12, duration=0.8)
+    t.fade_out(duration=0.8)
+    destroy(t, delay=0.9)
     detalle.wordwrap = 60
     pintar_pistas()
     refrescar_opciones()
