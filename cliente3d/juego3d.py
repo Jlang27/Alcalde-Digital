@@ -19,10 +19,14 @@ sys.path.insert(0, RAIZ)
 from ursina import (Ursina, Entity, Text, Button, Func, application, camera,
                     color, destroy, time, window)
 
+import ajustes as A
+import audio
 import estilo as E
 import mundo
 import pantallas
+from jugador import Jugador
 from contenido import INDICADORES_META
+from contenido import ROLES
 from juego import (CANDIDATOS, Partida, TIEMPO_ESCENA,
                    TIEMPO_INTERVENCION)
 
@@ -37,6 +41,18 @@ class Cliente:
         self.partida = None
         self.actor = None
         self.menu = None
+        self.ajustes = None
+        self.como = None
+        self.seleccion = None
+        self.elenco = []
+        self.rol_elegido = "ciudadano"
+        self.reparto = []
+        self.confirmacion_sel = 1
+        self.confirmacion_marca = []
+        self.jugador = None
+        self.rotulo = None
+        self.contexto = None
+        self.aviso = None
         self.carga = None
         self.reloj_carga = 0.0
         self.hud = []
@@ -89,23 +105,119 @@ def animar(nombre, bucle=True):
 
 def abrir_menu():
     cl.estado = "menu"
+    audio.musica(True)
     mundo.corte("PM")
     cl.menu = pantallas.Menu(
-        ["Jugar", "Capítulos", "Créditos", "Salir"], elegir_del_menu,
+        ["Jugar", "Cómo se juega", "Capítulos", "Ajustes", "Créditos",
+         "Salir"], elegir_del_menu,
         candidatos=[nombre for nombre, _lema, _pesos in CANDIDATOS])
+    # Sin esto el del fondo se queda en bucle de idle y la portada
+    # parece una captura; con esto saca el telefono y habla.
+    cl.menu.actor = cl.actor
 
 
 def elegir_del_menu(indice):
-    if indice == 0:
-        cl.menu.cerrar()
-        cl.menu = None
-        abrir_carga()
-    elif indice in (1,2):
-        cl.menu.cerrar()
-        cl.menu = None
-        abrir_capitulos() if indice == 1 else abrir_creditos()
-    elif indice == 3:
+    if indice == len(cl.menu.opciones) - 1:      # Salir, el ultimo renglon
         abrir_confirmacion("salir")
+        return
+    cl.menu.cerrar()
+    cl.menu = None
+    (abrir_seleccion, abrir_como_jugar, abrir_capitulos, abrir_ajustes,
+     abrir_creditos)[indice]()
+
+
+# ===================================================================
+#  CÓMO SE JUEGA  Y  REPARTO
+# ===================================================================
+
+def abrir_como_jugar():
+    cl.estado = "comojugar"
+    cl.como = pantallas.ComoJugar()
+
+
+def cerrar_como_jugar():
+    cl.como.cerrar()
+    cl.como = None
+    abrir_menu()
+
+
+def fichas_de_rol():
+    """Lo que la pantalla de reparto enseña de cada rol.
+
+    Las ramas salen del arbol de habilidades, que es el que manda en el
+    juego: si mañana cambia el arbol, cambia la ficha sola y no hay dos
+    sitios que puedan contradecirse.
+    """
+    fichas = []
+    for id_rol in mundo.ROLES_JUGABLES:
+        rol = ROLES[id_rol]
+        ramas = [nodo[1] for nodo in rol["arbol"] if nodo[5] is None]
+        fichas.append((id_rol, rol["nombre"], rol["lema"],
+                       rol["descripcion"], ramas))
+    return fichas
+
+
+def abrir_seleccion():
+    cl.estado = "seleccion"
+    cl.actor.hide()                 # el protagonista deja sitio al reparto
+    cl.elenco = mundo.elenco(cl.mundo)
+    cl.seleccion = pantallas.Seleccion(fichas_de_rol(), confirmar_reparto,
+                                       alumbrar_reparto)
+
+
+def alumbrar_reparto(indice):
+    tinta = E.CANDIDATOS[indice % len(E.CANDIDATOS)]
+    mundo.iluminar_elenco(cl.elenco, indice, (tinta.r, tinta.g, tinta.b))
+    for i, actor in enumerate(cl.elenco):
+        nombre = "idle" if i != indice else "hablar"
+        if nombre in actor.getAnimNames():
+            actor.loop(nombre)
+
+
+def cerrar_seleccion():
+    mundo.quitar_elenco(cl.elenco)
+    cl.elenco = []
+    cl.seleccion.cerrar()
+    cl.seleccion = None
+    cl.actor.show()
+
+
+def confirmar_reparto(indices):
+    """indices: la ficha de cada puesto, en orden de jugador.
+
+    El primero es quien esta delante de esta pantalla; los demas son
+    los otros puestos de la partida. Cuando entren los sockets, esta
+    lista es justo lo que habra que mandar al servidor.
+    """
+    cl.reparto = [mundo.ROLES_JUGABLES[i] for i in indices]
+    cl.rol_elegido = cl.reparto[0]
+    cl.seleccion.cerrar()
+    cl.seleccion = None
+    # El del jugador 1 se queda y pasa a ser el protagonista: asi no hay
+    # que releer un .glb al arrancar la partida.
+    cl.actor.cleanup()
+    cl.actor.removeNode()
+    cl.actor = mundo.consagrar(cl.elenco, indices[0])
+    cl.elenco = []
+    animar("idle")
+    abrir_carga()
+
+
+def abrir_ajustes(seleccion=0):
+    cl.estado = "ajustes"
+    cl.ajustes = pantallas.Ajustes(rehacer_ajustes, seleccion)
+
+
+def rehacer_ajustes(_clave):
+    """Alto contraste y texto grande se leen al NACER cada pieza.
+
+    Cambiarlos en caliente no repinta nada, asi que hay que tirar la
+    pantalla y levantarla otra vez, conservando el renglon donde estaba
+    el jugador para que no pierda el sitio.
+    """
+    donde = cl.ajustes.seleccion
+    cl.ajustes.cerrar()
+    abrir_ajustes(donde)
 
 CAPITULOS = [("01", "El primer rumor", True)] + \
             [(f"{n:02d}", "Próximamente", False) for n in range(2, 13)]
@@ -113,19 +225,24 @@ CAPITULOS = [("01", "El primer rumor", True)] + \
 def abrir_capitulos():
     cl.estado = "capitulos"
     p = cl.pantalla
-    p.append(E.lienzo(E.PAPEL))
-    p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.47), E.TINTA, escala=0.62))
-    p.append(E.titular("Capítulos", (-0.84,0.375), 2.4, E.TINTA))
-    p += E.filete(1.68, (-0.84, 0.30))
-    for i, (num,titulo,libre) in enumerate(CAPITULOS):
-        y = 0.25 - i * 0.050
-        col = E.TINTA if libre else E.TINTA_TENUE
-        p.append(E.pequena(num, (-0.84, y), col, escala=0.6))
-        p.append(E.etiqueta(titulo, (-0.74, y), 0.9, col))
-    p.append(E.pequena("Enter para jugar    ·   Esc para volver", (0.84, -0.465),
-                       E.TINTA_TENUE, escala=0.48, origen=(0.5,0.5)))
+    p.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
+    p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.462), E.TEXTO_TENUE,
+                       escala=0.56))
+    p.append(E.titular("Capítulos", (-0.84, 0.405), 2.4, E.TEXTO))
+    p.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
+    for i, (num, titulo, libre) in enumerate(CAPITULOS):
+        y = 0.272 - i * 0.052
+        col = E.TEXTO if libre else E.TEXTO_TENUE
+        # El numero en la tinta del capitulo abierto: es lo unico que
+        # distingue lo jugable de lo que todavia esta en maquina.
+        p.append(E.pequena(num, (-0.84, y),
+                           E.UI if libre else E.TEXTO_TENUE, escala=0.62))
+        p.append(E.etiqueta(titulo, (-0.74, y), 0.92, col))
+    p.append(E.banda(2.4, 0.003, (0, -0.408), E.luz(46), z=E.Z_ADORNO))
+    p += E.leyenda((("enter", "jugar"), ("esc", "volver")), -0.448)
 
-EQUIPO = ["David Martinez", "Jose Angulo", "Yuceth Gil", ""]
+EQUIPO = ["David Martínez", "José Angulo", "Yuceth Gil",
+          "Sebastián Ibáñez"]
 
 def leer_creditos(maximo=12):
     try:
@@ -138,18 +255,23 @@ def leer_creditos(maximo=12):
 def abrir_creditos():
     cl.estado = "creditos"
     p = cl.pantalla
-    p.append(E.lienzo(E.PAPEL))
-    p.append(E.titular("Créditos", (-0.84, 0.375), 2.4, E.TINTA))
-    p += E.filete(1.68, (-0.84, 0.30))
-    p.append(E.pequena("Estructura de Datos II  ·   Universidad del Norte",
-                        (-0.84, 0.25), E.TINTA_TENUE, escala=0.55))
-    for i, nombre in enumerate(EQUIPO):
-        p.append(E.etiqueta(nombre, (-0.84, 0.17 - i * 0.06), 1.0, E.TINTA))
-    p.append(E.pequena("AUDIO Y RECURSOS", (-0.84, -0.10), E.TINTA_TENUE, escala=0.5))
-    for i, linea in enumerate(leer_creditos()):
-        p.append(E.pequena(linea, (-0.84, -0.14 - i * 0.026), E.TINTA, escala=0.46))
-    p.append(E.pequena("Esc para volver", (0.84, -0.465), E.TINTA_TENUE,
-                       escala=0.48, origen=(0.5,0.5)))
+    p.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
+    p.append(E.pequena("QUIÉNES SOMOS", (-0.84, 0.462), E.TEXTO_TENUE,
+                       escala=0.56))
+    p.append(E.titular("Créditos", (-0.84, 0.405), 2.4, E.TEXTO))
+    p.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
+    p.append(E.pequena("Estructura de Datos II  ·  Universidad del Norte",
+                       (-0.84, 0.296), E.TEXTO_TENUE, escala=0.56))
+    for i, nombre in enumerate(n for n in EQUIPO if n):
+        p.append(E.banda(0.016, 0.0030, (-0.832, 0.212 - i * 0.062), E.UI))
+        p.append(E.etiqueta(nombre, (-0.805, 0.221 - i * 0.062), 1.0, E.TEXTO))
+    p.append(E.pequena("AUDIO Y RECURSOS", (-0.84, -0.040), E.TEXTO_TENUE,
+                       escala=0.52))
+    for i, linea in enumerate(leer_creditos(10)):
+        p.append(E.pequena(linea, (-0.84, -0.082 - i * 0.028), E.TEXTO,
+                           escala=0.48))
+    p.append(E.banda(2.4, 0.003, (0, -0.408), E.luz(46), z=E.Z_ADORNO))
+    p += E.leyenda((("esc", "volver"),), -0.448)
 
 def abrir_carga():
     cl.estado = "carga"
@@ -161,10 +283,16 @@ def abrir_carga():
 
 
 def empezar_partida():
+    audio.musica(False)        # a partir de aqui manda la escena
     cl.carga.cerrar()
     cl.carga = None
     cl.estado = "juego"
-    cl.partida = Partida(["ciudadano", "periodista", "influencer"])
+    # El reparto sale de la pantalla de seleccion, tal cual: si solo
+    # ficharon a uno, la partida es de uno. Rellenarla por detras
+    # contradiria lo que acaba de ver el jugador, que dejo tres puestos
+    # marcados como libres.
+    roles = list(cl.reparto) or [cl.rol_elegido]
+    cl.partida = Partida(roles)
     construir_hud()
     iniciar_dia(0)
 
@@ -173,41 +301,69 @@ TEXTOS_CONFIRMACION = {
     "salir": ("¿Salir del juego?", ""),
 }
 
+OPCIONES_CONFIRMACION = (("Sí", True), ("No", False))
+
+
 def abrir_confirmacion(accion):
+    """Pregunta de sí o no, manejable solo con el teclado.
+
+    La version anterior dibujaba dos botones de raton encima de un velo.
+    Con el juego a pantalla completa y sin cursor no habia forma de
+    darle a ninguno: se veia la pregunta y la unica salida era cerrar el
+    juego a mano. Ahora es un selector como los demas.
+    """
     if cl.confirmando:
         return
     cl.confirmando = accion
+    # Arranca en «No»: la opcion que cierra el juego o tira la partida
+    # no puede ser la que esta marcada de serie.
+    cl.confirmacion_sel = 1
     titulo, linea = TEXTOS_CONFIRMACION[accion]
 
-    #2. apagar los botones que quedan debajo
     for e in cl.opciones + cl.modal:
         if isinstance(e, Button) and e.enabled:
             e.enabled = False
             cl.ocultos.append(e)
 
-    #3. velo oscuro + textos
-    velo = E.velo(color.rgb32(6,8,12,215), z=-0.5)
-    t1 = E.etiqueta(titulo, (-0.15, 0.06), 1.5, E.TEXTO)
-    t2 = E.etiqueta(linea, (-0.15,0.015), 0.9, E.TEXTO_TENUE)
-    t1.z = t2.z = -0.6
-    cl.confirmacion += [velo, t1, t2]
+    c = cl.confirmacion
+    c.append(E.velo(color.rgb32(5, 6, 9, 234), z=-0.50))
+    t = E.titular(titulo, (0, 0.105), 1.9, E.TEXTO, origen=(0, 0.5))
+    t.z = -0.60
+    c.append(t)
+    if linea:
+        sub = E.pequena(linea, (0, 0.040), E.TEXTO_TENUE, escala=0.68,
+                        origen=(0, 0.5))
+        sub.z = -0.60
+        c.append(sub)
+    c += E.leyenda((("flechas", "elegir"), ("enter", "confirmar"),
+                    ("esc", "cancelar")), -0.458, z=-0.60)
+    pintar_confirmacion()
 
-    #4. si/no
-    for texto, i, acepta in (("Si", 0, True), ("No", 1, False)):
-        y = -0.06 - i * 0.075
-        et = E.etiqueta(texto, (-0.15, y), 1.05,
-                        E.TEXTO if acepta else E.TEXTO_TENUE)
-        et.z = -0.6
-        boton = Button(parent = camera.ui,
-                       color = color.rgba(255,255,255,0),
-                       highlight_color= color.rgb32(255,255,255,30),
-                       scale=(0.40,0.060), position=(0.0, y-0.018),
-                       on_click=Func(cerrar_confirmacion, acepta))
-        boton.z=-0.7
-        cl.confirmacion += [et, boton]
+
+def pintar_confirmacion():
+    limpiar(cl.confirmacion_marca)
+    for i, (texto, _acepta) in enumerate(OPCIONES_CONFIRMACION):
+        x = -0.17 + i * 0.34
+        elegido = i == cl.confirmacion_sel
+        caja = E.banda(0.28, 0.076, (x, -0.055),
+                       E.luz(36 if elegido else 14), z=-0.55)
+        et = E.titular(texto, (x, -0.036), 1.35,
+                       E.TEXTO if elegido else E.TEXTO_TENUE, origen=(0, 0.5))
+        et.z = -0.60
+        filo = E.banda(0.28, 0.0040, (x, -0.094),
+                       E.UI if elegido else E.luz(26), z=-0.60)
+        cl.confirmacion_marca += [caja, et, filo]
+
+
+def mover_confirmacion(paso):
+    cl.confirmacion_sel = (cl.confirmacion_sel + paso) % len(
+        OPCIONES_CONFIRMACION)
+    pintar_confirmacion()
+
 
 def cerrar_confirmacion(acepta):
     accion = cl.confirmando
+    limpiar(cl.confirmacion_marca)
     limpiar(cl.confirmacion)
     for e in cl.ocultos:
         e.enabled = True
@@ -220,6 +376,7 @@ def cerrar_confirmacion(acepta):
         application.quit()
     elif accion == "menu":
         volver_al_menu()
+
 
 ZONAS = {
     "perfil": (-0.650, 0.365, 0.20, 0.050),
@@ -405,6 +562,11 @@ def inspeccionar(id_zona):
     t.animate_y(t.y + 0.12, duration=0.8)
     t.fade_out(duration=0.8)
     destroy(t, delay=0.9)
+
+    # El «-3 s» dice lo que CUESTA mirar; esto dice lo que SE DESCUBRE,
+    # que es la razon de ser de investigar. Sin esta linea el jugador
+    # paga el tiempo y no recibe la informacion.
+    detalle.text = texto
     detalle.wordwrap = 60
     pintar_pistas()
     refrescar_opciones()
@@ -511,16 +673,100 @@ def al_elegir(id_opcion):
         refrescar_opciones()
 
 
+def capitulo_de(indice):
+    """(titulo, dias que faltan, lugar) del dia que empieza."""
+    tabla = pantallas.CAPITULOS
+    return tabla[min(indice + 1, len(tabla) - 1)]
+
+
 def iniciar_dia(indice):
+    """Arranca la jornada como una escena, no como una pantalla de HUD.
+
+    Rotulo de dia -> el protagonista leyendo el telefono -> control del
+    personaje. Las opciones no aparecen hasta que el jugador saca el
+    telefono: caer de golpe en una lista de botones se leia como abrir
+    una pestaña, no como empezar un dia.
+    """
     cl.dia_cerrado = False
     cl.nodo_pendiente = None
     retirar_invitado()
     cl.partida.iniciar_dia(indice)
-    pintar_publicacion()
-    refrescar_opciones()
+    cl.partida.tiempo_restante *= A.factor_tiempo()
+    detalle.text = ""
+    limpiar(cl.opciones)
+    for e in cl.hud:
+        e.enabled = False
+    abrir_rotulo(indice)
+
+
+def abrir_rotulo(indice):
+    cl.estado = "rotulo"
     animar("idle")
     mundo.corte("PG")
-    detalle.text = ""
+    titulo, _dias, lugar = capitulo_de(indice)
+    cl.rotulo = pantallas.Rotulo(indice + 1, titulo, lugar)
+
+
+def cerrar_rotulo():
+    if cl.rotulo is None:
+        return
+    cl.rotulo.cerrar()
+    cl.rotulo = None
+    abrir_contexto()
+
+
+def abrir_contexto():
+    cl.estado = "contexto"
+    # PM y no PP: en primer plano solo se le ve la cara y no se entiende
+    # que esta mirando el telefono, que es justo lo que cuenta la escena.
+    mundo.corte("PM")
+    animar("celular")
+    pub = cl.partida.publicacion
+    titulo, dias, _lugar = capitulo_de(cl.partida.dia_actual)
+    cl.contexto = pantallas.Contexto(cl.partida.dia_actual + 1, dias,
+                                     pub["autor"], pub["contexto"], titulo)
+
+
+def cerrar_contexto():
+    if cl.contexto is None:
+        return
+    cl.contexto.cerrar()
+    cl.contexto = None
+    abrir_libre()
+
+
+def abrir_libre():
+    """Le devuelve el personaje al jugador, en tercera persona."""
+    cl.estado = "libre"
+    animar("idle")
+    if cl.jugador is None:
+        cl.jugador = Jugador(cl.actor, limites=mundo.limites(),
+                             bloqueos=mundo.bloqueos())
+    else:
+        cl.jugador.actor = cl.actor
+        cl.jugador.limites = mundo.limites()
+        cl.jugador.bloqueos = list(mundo.bloqueos())
+    cl.jugador.encuadrar()
+    cl.jugador.activar()
+    cl.aviso = pantallas.AvisoLibre()
+
+
+def cerrar_libre():
+    if cl.jugador is not None:
+        cl.jugador.desactivar()
+    if cl.aviso is not None:
+        cl.aviso.cerrar()
+        cl.aviso = None
+
+
+def empezar_decision():
+    """Saca el telefono: aqui si aparecen las opciones del dia."""
+    cerrar_libre()
+    cl.estado = "juego"
+    animar("idle")
+    mundo.corte("PG")
+    pintar_publicacion()
+    refrescar_opciones()
     for e in cl.hud:
         e.enabled = True
 
@@ -610,20 +856,22 @@ def dibujar_diagrama():
     nodos = arbol.recorrido_bfs()
     hondo = max(n.profundidad for n in nodos) or 1
 
-    cl.diagrama.append(E.lienzo(E.PAPEL))
-    cl.diagrama.append(E.diagonal(0.8, 1.3, (0.60, 0.0), E.PAPEL_SOMBRA))
+    cl.diagrama.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
     dia = cl.partida.dia_actual + 1
-    cl.diagrama.append(E.micro(f"flujo de decisiones / día 0{dia}",
-                               (-0.86, 0.46)))
-    cl.diagrama.append(E.titulo(cl.partida.publicacion["id"],
-                                (-0.84, 0.42), 2.0, E.TINTA))
-    cl.diagrama.append(E.regla(0.7, (-0.84, 0.31), 0.0022, E.TINTA_TENUE))
+    cl.diagrama.append(E.pequena(f"FLUJO DE DECISIONES · DÍA 0{dia}",
+                                 (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
+    cl.diagrama.append(E.titular(cl.partida.publicacion["id"],
+                                 (-0.84, 0.405), 2.0, E.TEXTO))
+    cl.diagrama.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
 
     for nodo in nodos:
         x = (nodo.x / max(ancho - 1, 1) - 0.5) * 1.35
         y = 0.18 - (nodo.profundidad / hondo) * 0.50
         visitado = nodo.visitado or nodo is arbol.raiz
-        col = E.AZUL if visitado else E.GRIS_NODO
+        # Gris para lo no recorrido y blanco de interfaz para lo que si:
+        # las tintas de campana quedan para los JUGADORES, que son los
+        # que se distinguen entre si unas lineas mas abajo.
+        col = E.UI if visitado else E.luz(42)
         if visitado and nodo.jugador_origen is not None:
             col = color.rgb32(*cl.partida.jugadores[nodo.jugador_origen].color)
 
@@ -632,17 +880,18 @@ def dibujar_diagrama():
         etiqueta = nodo.corto if visitado else "[...]"
         cl.diagrama.append(Text(text=etiqueta[:16], parent=camera.ui,
                                 origin=(0, 0), position=(x, y), scale=0.5,
-                                color=color.white if visitado
-                                else E.TINTA_TENUE))
+                                color=E.NOCHE if visitado
+                                else E.TEXTO_TENUE))
 
     recorridos = len(arbol.camino)
     finales = arbol.contar_finales()
-    cl.diagrama.append(E.etiqueta(
-        f"recorriste {recorridos} de {len(nodos)} nodos   -   "
+    cl.diagrama.append(E.pequena(
+        f"Recorriste {recorridos} de {len(nodos)} nodos  ·  "
         f"esta escena tenía {finales} desenlaces",
-        (-0.84, -0.40), 0.66, E.TINTA_TENUE))
-    cl.diagrama.append(E.etiqueta("enter para continuar", (0.86, -0.46), 0.6,
-                                  E.TINTA_TENUE, origen=(0.5, 0.5)))
+        (-0.84, -0.372), E.TEXTO_TENUE, escala=0.58))
+    cl.diagrama.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
+                               z=E.Z_ADORNO))
+    cl.diagrama += E.leyenda((("enter", "continuar"),), -0.458)
 
 
 def siguiente_dia():
@@ -662,17 +911,17 @@ def pantalla_final():
     resultados = p.resultado_eleccion()
     ganador, lema, pct = resultados[0]
 
-    cl.diagrama.append(E.lienzo(E.PAPEL))
-    cl.diagrama.append(E.pequena("CIUDAD NOVA", (-0.84, 0.47), E.TINTA,
-                                 escala=0.62))
-    cl.diagrama.append(E.pequena("Escrutinio final · 100 % de las mesas",
-                                 (-0.10, 0.47), E.TINTA_TENUE, escala=0.52))
-    cl.diagrama.append(E.pequena("ELECCIÓN CERRADA", (0.84, 0.47), E.GAITAN,
-                                 escala=0.62, origen=(0.5, 0.5)))
-    cl.diagrama += E.filete(1.68, (-0.84, 0.425))
+    cl.diagrama.append(E.banda(2.4, 1.20, (0, 0), E.tinta(244), z=E.Z_FONDO))
+    cl.diagrama.append(E.pequena("ESCRUTINIO FINAL · 100 % DE LAS MESAS",
+                                 (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
+    cl.diagrama.append(E.banda(0.020, 0.020, (0.645, 0.459), E.UI,
+                               z=E.Z_ADORNO))
+    cl.diagrama.append(E.pequena("ELECCIÓN CERRADA", (0.675, 0.470), E.TEXTO,
+                                 escala=0.60))
+    cl.diagrama.append(E.regla(1.70, (-0.85, 0.412), 0.0030, E.luz(70)))
 
-    cl.diagrama.append(E.titular(ganador, (-0.84, 0.335), 3.2, E.TINTA))
-    cl.diagrama.append(E.entradilla(lema, (-0.84, 0.215), 0.86, E.TINTA_TENUE,
+    cl.diagrama.append(E.titular(ganador, (-0.84, 0.372), 3.0, E.TEXTO))
+    cl.diagrama.append(E.entradilla(lema, (-0.84, 0.272), 0.84, E.TEXTO_TENUE,
                                     ancho=46))
 
     # escrutinio: una barra por candidato, con su tinta
@@ -680,23 +929,25 @@ def pantalla_final():
         tinta = E.CANDIDATOS[i % len(E.CANDIDATOS)]
         y = 0.10 - i * 0.105
         cl.diagrama.append(E.banda(0.030, 0.030, (-0.835, y), tinta))
-        cl.diagrama.append(E.pequena(nombre, (-0.79, y + 0.014), E.TINTA,
+        cl.diagrama.append(E.pequena(nombre, (-0.79, y + 0.014), E.TEXTO,
                                      escala=0.60))
         cl.diagrama += E.barra_voto(1.30, porcentaje / 100.0,
-                                    (-0.79, y - 0.018), tinta, grosor=0.018)
+                                    (-0.79, y - 0.018), tinta, grosor=0.018,
+                                    col_riel=E.luz(22))
         cl.diagrama.append(E.titular(f"{porcentaje} %", (0.84, y + 0.016), 1.3,
                                      tinta, origen=(0.5, 0.5)))
 
-    cl.diagrama += E.filete(1.68, (-0.84, -0.245))
-    cl.diagrama.append(E.entradilla(texto_veredicto, (-0.84, -0.275), 0.92,
-                                    E.TINTA, ancho=62))
+    cl.diagrama.append(E.regla(1.70, (-0.85, -0.248), 0.0022, E.luz(50)))
+    cl.diagrama.append(E.entradilla(texto_veredicto, (-0.84, -0.282), 0.88,
+                                    E.TEXTO, ancho=62))
 
     orden = p.tabla_jugadores()
     resumen = "   ·   ".join(f"{j.nombre} {j.puntuacion()}" for j in orden)
     cl.diagrama.append(E.pequena("Puntuación por jugador: " + resumen,
-                                 (-0.84, -0.40), E.TINTA_TENUE, escala=0.5))
-    cl.diagrama.append(E.pequena("Enter para volver al menú", (0.84, -0.465),
-                                 E.TINTA_TENUE, escala=0.48, origen=(0.5, 0.5)))
+                                 (-0.84, -0.372), E.TEXTO_TENUE, escala=0.56))
+    cl.diagrama.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
+                               z=E.Z_ADORNO))
+    cl.diagrama += E.leyenda((("enter", "volver al menú"),), -0.458)
 
 
 # ===================================================================
@@ -704,6 +955,23 @@ def pantalla_final():
 # ===================================================================
 
 def update():
+    if cl.estado == "menu" and cl.menu is not None:
+        cl.menu.actualizar(time.dt)
+        return
+    if cl.estado == "seleccion" and cl.seleccion is not None:
+        cl.seleccion.actualizar(time.dt)
+        return
+
+    if cl.estado == "rotulo" and cl.rotulo is not None:
+        if cl.rotulo.actualizar(time.dt):
+            cerrar_rotulo()
+        return
+    if cl.estado == "libre" and cl.jugador is not None:
+        if not cl.confirmando:
+            cl.jugador.paso(time.dt)
+        cl.jugador.seguir(time.dt)
+        return
+
     refrescar_zonas()
     if cl.confirmando:
         return
@@ -756,6 +1024,12 @@ def update():
 
 
 def volver_al_menu():
+    cerrar_libre()
+    # Si el jugador se fue andando y vuelve al menu, el protagonista se
+    # queda donde lo dejo y la portada se queda sin nadie delante.
+    if cl.actor is not None:
+        cl.actor.setPos(Vec3(0, 0, 0))
+        cl.actor.setH(0)
     retirar_invitado()
     cl.nodo_pendiente = None
     limpiar(cl.diagrama)
@@ -776,13 +1050,96 @@ def cerrar_pantalla(jugar = False):
 
 def input(tecla):
     if cl.confirmando:
-        if tecla in ("y", "s"):
+        if tecla in ("left arrow", "a", "right arrow", "d"):
+            audio.efecto("mover")
+            mover_confirmacion(1)
+        elif tecla in ("enter", "space"):
+            acepta = OPCIONES_CONFIRMACION[cl.confirmacion_sel][1]
+            audio.efecto("salir" if acepta and cl.confirmando == "salir"
+                         else "confirmar" if acepta else "volver")
+            cerrar_confirmacion(acepta)
+        elif tecla in ("s", "y"):
             cerrar_confirmacion(True)
-        elif tecla in ("escape", "n", "enter"):
+        elif tecla in ("escape", "n"):
             cerrar_confirmacion(False)
         return
 
+    elif cl.estado == "rotulo":
+        if tecla in ("enter", "space", "escape"):
+            audio.efecto("confirmar")
+            cerrar_rotulo()
+        return
+
+    elif cl.estado == "contexto":
+        if tecla in ("enter", "space"):
+            audio.efecto("confirmar")
+            cerrar_contexto()
+        return
+
+    elif cl.estado == "libre":
+        if tecla in ("enter", "space"):
+            empezar_decision()
+        elif tecla == "escape":
+            cerrar_libre()
+            abrir_confirmacion("menu")
+        return
+
+    elif cl.estado == "comojugar":
+        if tecla in ("escape", "enter", "space"):
+            audio.efecto("volver")
+            cerrar_como_jugar()
+        return
+
+    elif cl.estado == "seleccion" and cl.seleccion is not None:
+        if tecla in ("left arrow", "a", "right arrow", "d"):
+            audio.efecto("mover")
+        elif tecla == "enter":
+            audio.efecto("confirmar")
+        elif tecla in ("space", "escape"):
+            audio.efecto("volver" if tecla == "escape" else "confirmar")
+        if tecla == "escape":
+            cerrar_seleccion()
+            abrir_menu()
+        elif tecla in ("right arrow", "d"):
+            cl.seleccion.mover(1)
+        elif tecla in ("left arrow", "a"):
+            cl.seleccion.mover(-1)
+        elif tecla == "tab":
+            cl.seleccion.alternar_ficha()
+        elif tecla == "enter":
+            cl.seleccion.activar()
+        elif tecla == "space":
+            cl.seleccion.continuar()
+        elif tecla == "backspace":
+            cl.seleccion.deshacer()
+        return
+
+    elif cl.estado == "ajustes" and cl.ajustes is not None:
+        if tecla in ("down arrow", "s", "up arrow", "w",
+                     "right arrow", "d", "left arrow", "a"):
+            audio.efecto("mover")
+        elif tecla in ("enter", "space"):
+            audio.efecto("confirmar")
+        elif tecla == "escape":
+            audio.efecto("volver")
+        if tecla == "escape":
+            cl.ajustes.cerrar()
+            cl.ajustes = None
+            abrir_menu()
+        elif tecla in ("down arrow", "s"):
+            cl.ajustes.mover(1)
+        elif tecla in ("up arrow", "w"):
+            cl.ajustes.mover(-1)
+        elif tecla in ("right arrow", "d"):
+            cl.ajustes.graduar(1)
+        elif tecla in ("left arrow", "a"):
+            cl.ajustes.graduar(-1)
+        elif tecla in ("enter", "space"):
+            cl.ajustes.activar()
+        return
+
     elif cl.estado in ("capitulos", "creditos"):
+        audio.efecto("volver" if tecla == "escape" else "confirmar")
         if tecla == "escape":
             cerrar_pantalla()
         elif tecla in ("enter", "space"):
@@ -800,20 +1157,30 @@ def input(tecla):
         volver_al_menu()
     elif cl.estado == "menu" and cl.menu is not None:
         if tecla in ("down arrow", "s"):
+            audio.efecto("mover")
             cl.menu.mover(1)
         elif tecla in ("up arrow", "w"):
+            audio.efecto("mover")
             cl.menu.mover(-1)
         elif tecla in ("enter", "space"):
+            audio.efecto("confirmar")
             cl.menu.activar()
     elif cl.dia_cerrado and tecla in ("enter", "space"):
         siguiente_dia()
 
 
 def main():
-    app = Ursina(title="Alcalde Digital", borderless=False, vsync=True)
+    # Se lee la preferencia ANTES de abrir la ventana: arrancar en
+    # ventana y saltar a pantalla completa un segundo despues se ve como
+    # un fallo de arranque.
+    A.cargar()
+    app = Ursina(title="Alcalde Digital", borderless=False, vsync=True,
+                 fullscreen=A.VALORES["pantalla_completa"])
     window.color = color.Color(*mundo.CIELO)
+    E.cargar_fuentes()           # antes de crear cualquier texto
     E.ocultar_depuracion()
 
+    A.aplicar()                  # antes de crear UI: la paleta se lee al nacer
     cl.mundo, cl.actor = mundo.crear()
     animar("idle")
     abrir_menu()

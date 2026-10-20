@@ -25,6 +25,9 @@ VELOCIDAD_GIRO = 10.0        # suavizado del giro del personaje
 SENSIBILIDAD = 42.0
 
 DISTANCIA = 4.3
+ALTURA_TECHO = 2.45          # el techo de la cafeteria, menos un dedo
+MARGEN_PARED = 0.45          # cuanto se queda la camara dentro del cuarto
+PITCH_MIN, PITCH_MAX = -8.0, 46.0
 ALTURA_OBJETIVO = 1.30       # a la altura del pecho, no de los pies
 HOMBRO = 0.62                # descentra al personaje y deja aire a la derecha
 SUAVIDAD = 7.0               # retardo de la camara; 0 seria rigido
@@ -39,6 +42,19 @@ def _acercar(actual, objetivo, factor):
 def _angulo_corto(desde, hasta):
     """Diferencia de angulos por el camino corto, en grados."""
     return (hasta - desde + 180.0) % 360.0 - 180.0
+
+
+def _raton(bloqueado):
+    """Captura el raton, si hay una ventana de verdad donde capturarlo.
+
+    Sin ventana (banco de pruebas, captura sin pantalla) Panda3D no
+    tiene a quien pedirle las propiedades y revienta. Que una captura
+    no pueda tomarse no puede tumbar el juego.
+    """
+    try:
+        mouse.locked = bloqueado
+    except Exception:
+        pass
 
 
 class Jugador:
@@ -80,12 +96,12 @@ class Jugador:
     def activar(self):
         """Modo exploracion: el raton gira la camara."""
         self.explorando = True
-        mouse.locked = True
+        _raton(True)
 
     def desactivar(self):
         """Modo decision: el raton vuelve a ser cursor."""
         self.explorando = False
-        mouse.locked = False
+        _raton(False)
         self._animar(False)
 
     # ----------------------------------------------------------------
@@ -173,6 +189,18 @@ class Jugador:
             mira.y + DISTANCIA * math.sin(rad_p),
             mira.z - math.cos(rad) * plano - math.sin(rad) * HOMBRO,
         )
+
+        # La camara se queda DENTRO del cuarto. Sin esto se mete en las
+        # sillas y atraviesa el techo en cuanto giras, y el plano se
+        # llena de geometria por dentro, que es lo que mas delata que
+        # algo esta mal montado.
+        deseada.y = min(deseada.y, ALTURA_TECHO)
+        if self.limites is not None:
+            x0, x1, z0, z1 = self.limites
+            deseada.x = max(x0 + MARGEN_PARED, min(x1 - MARGEN_PARED,
+                                                   deseada.x))
+            deseada.z = max(z0 + MARGEN_PARED, min(z1 - MARGEN_PARED,
+                                                   deseada.z))
 
         factor = 1.0 if inmediato else SUAVIDAD * dt
         self.camara_pos = Vec3(

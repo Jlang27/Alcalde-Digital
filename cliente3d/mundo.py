@@ -462,9 +462,137 @@ def crear(escenario="cafeteria", rol=None):
     actor.reparentTo(mundo)
     _luz_de_personaje(mundo, actor)
 
-    simplepbr.init(render_node=mundo, msaa_samples=4, max_lights=8,
-                   enable_shadows=False)
+    _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=4,
+                                        max_lights=8, enable_shadows=False)
+    brillo(0.0)
     return mundo, actor
+
+
+# ===================================================================
+#  ELENCO (pantalla de seleccion)
+# ===================================================================
+
+# El orden del tarjeton: de menos a mas alcance. Es la lectura del
+# guion, y de paso ordena la pantalla de izquierda a derecha por cuanto
+# pesa lo que publicas.
+ROLES_JUGABLES = ("ciudadano", "periodista", "influencer", "candidato")
+
+# Separacion en fila. Mas juntos se les solapan los brazos en cuanto la
+# camara se mueve de su sitio.
+PASO_ELENCO = 1.15
+
+_ELENCO = {"clave": None, "contra": None}
+
+
+def elenco(mundo, roles=ROLES_JUGABLES):
+    """Carga los personajes jugables en fila y devuelve la lista.
+
+    Una SOLA pareja de luces viaja hasta el elegido, en vez de darle dos
+    a cada uno. Dos razones: simplepbr admite ocho luces en total y el
+    escenario ya gasta varias; y es mejor cine, porque el que eliges se
+    enciende y los demas caen en penumbra sin tener que apagar nada.
+    """
+    actores = []
+    centro = (len(roles) - 1) / 2.0
+    for i, rol in enumerate(roles):
+        ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
+        actor = Actor(ruta)
+        actor.reparentTo(mundo)
+        actor.setPos(Vec3((i - centro) * PASO_ELENCO, 0.0, 0.0))
+        _quitar_mapa_de_brillo(actor)
+        actores.append(actor)
+
+    clave = mundo.attachNewNode(DirectionalLight("clave_elenco"))
+    clave.setHpr(24, -26, 0)
+    contra = mundo.attachNewNode(DirectionalLight("contra_elenco"))
+    contra.setHpr(168, -14, 0)
+    _ELENCO["clave"], _ELENCO["contra"] = clave, contra
+    return actores
+
+
+def iluminar_elenco(actores, elegido, tinta):
+    """Enciende al elegido con la tinta de su rol y apaga a los demas.
+
+    clearLight() solo quita lo puesto EN el nodo: los no elegidos siguen
+    recibiendo el ambiente y el relleno del escenario, asi que no
+    desaparecen, se quedan en penumbra. Que es lo que se busca.
+
+    tinta: (r, g, b) de 0 a 1. Se suma a una base calida en vez de
+    sustituirla, porque una clave de color puro le quita la piel a la
+    cara y el personaje deja de parecer una persona.
+    """
+    clave, contra = _ELENCO["clave"], _ELENCO["contra"]
+    if clave is None:
+        return
+    r, g, b = tinta
+    clave.node().setColor((1.20 + r * 0.70, 1.06 + g * 0.62,
+                           0.88 + b * 0.62, 1))
+    contra.node().setColor((0.85 + r * 0.9, 1.00 + g * 0.9,
+                            1.60 + b * 0.9, 1))
+    for i, actor in enumerate(actores):
+        actor.clearLight()
+        if i == elegido:
+            actor.setLight(clave)
+            actor.setLight(contra)
+            actor.setColorScale(1, 1, 1, 1)
+        else:
+            # Quitarles la clave no basta: el ambiente del local los
+            # deja casi igual de brillantes y los cuatro compiten por
+            # la mirada. Se les baja el color a una penumbra fria para
+            # que el elegido sea el unico que esta de verdad en escena.
+            actor.setColorScale(0.34, 0.37, 0.47, 1)
+
+
+def consagrar(actores, elegido):
+    """Se queda con el elegido en el centro y descarta a los demas.
+
+    Reaprovechar el Actor que ya esta cargado evita volver a leer un
+    .glb de nueve megas justo cuando empieza la partida, que es el peor
+    momento para un tiron.
+    """
+    ganador = actores[elegido]
+    for i, actor in enumerate(actores):
+        if i != elegido:
+            actor.cleanup()
+            actor.removeNode()
+    ganador.setPos(Vec3(0, 0, 0))
+    ganador.setColorScale(1, 1, 1, 1)
+    # La clave vuelve al color de cine: dentro del juego el personaje no
+    # se lee por la tinta de su rol, se lee por la luz del escenario.
+    if _ELENCO["clave"] is not None:
+        _ELENCO["clave"].node().setColor((1.55, 1.34, 1.08, 1))
+        _ELENCO["contra"].node().setColor((1.15, 1.35, 1.95, 1))
+    return ganador
+
+
+def quitar_elenco(actores):
+    for actor in actores:
+        actor.cleanup()
+        actor.removeNode()
+    for nombre in ("clave", "contra"):
+        if _ELENCO[nombre] is not None:
+            _ELENCO[nombre].removeNode()
+            _ELENCO[nombre] = None
+
+
+_RENDER = {"tuberia": None}
+
+
+def brillo(pasos):
+    """Brillo de la escena, en pasos de diafragma.
+
+    No es un velo blanco por encima: toca la EXPOSICION del render, que
+    es lo que hace una camara de verdad. Subirlo levanta las sombras
+    sin lavar los colores, y por eso se puede ajustar mirando la escena
+    en vez de a ciegas.
+    """
+    tuberia = _RENDER["tuberia"]
+    if tuberia is None:
+        return
+    try:
+        tuberia.exposure = float(pasos)
+    except Exception:
+        pass
 
 
 POSICION_INVITADO = Vec3(1.05, 0.0, 0.30)

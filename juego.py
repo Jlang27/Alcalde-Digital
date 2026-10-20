@@ -143,11 +143,18 @@ class Carta:
 class Partida:
 
     def __init__(self, roles, semilla=None):
-        """roles: lista de 2 a 4 ids de rol, en orden de turno."""
+        """roles: lista de 1 a 4 ids de rol, en orden de turno.
+
+        Uno es valido: la partida de un solo jugador funciona sola con
+        las reglas que ya hay. protagonista_de() hace dia % len(), asi
+        que eres protagonista todos los dias, y _repartir_cartas() ya
+        se va de vacio cuando no hay secundarios, que es exactamente lo
+        que toca: si no hay nadie mas, nadie te interrumpe.
+        """
         if semilla is not None:
             random.seed(semilla)
-        if not 2 <= len(roles) <= 4:
-            raise ValueError("La partida es de 2 a 4 jugadores.")
+        if not 1 <= len(roles) <= 4:
+            raise ValueError("La partida es de 1 a 4 jugadores.")
 
         self.jugadores = [Jugador(i, r) for i, r in enumerate(roles)]
 
