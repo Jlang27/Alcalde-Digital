@@ -22,6 +22,7 @@ from ursina import (Ursina, Entity, Text, Button, Func, application, camera,
 import ajustes as A
 import audio
 import estilo as E
+import intro
 import mundo
 import pantallas
 from jugador import Jugador
@@ -54,6 +55,7 @@ class Cliente:
         self.contexto = None
         self.aviso = None
         self.carga = None
+        self.intro = None
         self.reloj_carga = 0.0
         self.hud = []
         self.opciones = []
@@ -282,10 +284,31 @@ def abrir_carga():
                                random.choice(pantallas.PISTAS))
 
 
-def empezar_partida():
-    audio.musica(False)        # a partir de aqui manda la escena
+def abrir_intro():
+    """La cinematica «7 días», entre la carga y el primer dia.
+
+    La ciudad se monta justo al llenarse la barra: el tiron de construir
+    el decorado cae donde el jugador ya espera una carga, y no a mitad
+    de la cinematica.
+    """
     cl.carga.cerrar()
     cl.carga = None
+    cl.estado = "intro"
+    cl.actor.hide()
+    mundo.cambiar_escenario(cl.mundo, "ciudad")
+    cl.intro = intro.Intro()
+
+
+def terminar_intro():
+    cl.intro.cerrar()
+    cl.intro = None
+    mundo.cambiar_escenario(cl.mundo, "cafeteria")
+    cl.actor.show()
+    empezar_partida()
+
+
+def empezar_partida():
+    audio.musica(False)        # a partir de aqui manda la escena
     cl.estado = "juego"
     # El reparto sale de la pantalla de seleccion, tal cual: si solo
     # ficharon a uno, la partida es de uno. Rellenarla por detras
@@ -962,6 +985,11 @@ def update():
         cl.seleccion.actualizar(time.dt)
         return
 
+    if cl.estado == "intro" and cl.intro is not None:
+        if cl.intro.actualizar(time.dt):
+            terminar_intro()
+        return
+
     if cl.estado == "rotulo" and cl.rotulo is not None:
         if cl.rotulo.actualizar(time.dt):
             cerrar_rotulo()
@@ -979,7 +1007,7 @@ def update():
         cl.reloj_carga += time.dt
         cl.carga.avance(cl.reloj_carga / DURACION_CARGA)
         if cl.reloj_carga >= DURACION_CARGA:
-            empezar_partida()
+            abrir_intro()
         return
 
     if cl.estado != "juego" or cl.dia_cerrado or cl.partida is None:
@@ -1062,6 +1090,13 @@ def input(tecla):
             cerrar_confirmacion(True)
         elif tecla in ("escape", "n"):
             cerrar_confirmacion(False)
+        return
+
+    elif cl.estado == "intro":
+        # Se puede saltar, pero no se puede salir al menu desde aqui:
+        # Esc a mitad de cinematica es casi siempre «ya la vi».
+        if tecla in ("enter", "space", "escape") and cl.intro is not None:
+            cl.intro.saltar()
         return
 
     elif cl.estado == "rotulo":
