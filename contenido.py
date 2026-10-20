@@ -6,9 +6,9 @@ Aqui vive TODO el contenido: los 4 roles con su arbol de habilidades, las
 publicaciones de Civitas y las reglas para construir el arbol de decision
 de cada publicacion.
 
-Separarlo de las estructuras (estructuras.py) y de la interfaz (main.py)
-permite agregar roles o publicaciones nuevas sin tocar ni una linea de los
-arboles.
+Separarlo de las estructuras (estructuras.py) y de la interfaz
+(cliente3d/juego3d.py) permite agregar roles o publicaciones nuevas sin
+tocar ni una linea de los arboles.
 """
 
 from estructuras import NodoHabilidad, ArbolHabilidades, NodoDecision, ArbolDecision

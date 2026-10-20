@@ -2,8 +2,9 @@
 ALCALDE DIGITAL - Estructuras de datos
 Universidad del Norte - Estructura de Datos II - Primera entrega
 
-Este modulo contiene UNICAMENTE las estructuras de datos. No importa pygame
-ni nada de la interfaz: se puede probar y sustentar de forma aislada.
+Este modulo contiene UNICAMENTE las estructuras de datos. No importa ningun
+framework grafico ni depende de la interfaz: se puede probar y sustentar de
+forma aislada.
 
 Se implementan DOS arboles generales (n-arios) distintos, porque resuelven
 dos problemas diferentes dentro del juego:

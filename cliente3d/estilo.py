@@ -12,9 +12,8 @@ Reglas, y por que:
   - CUATRO TINTAS. Ospina azul, Gaitan rojo, Lleras amarillo, Restrepo
     verde. El guion ya reparte esos colores, asi que la paleta sale de
     la ficcion en vez de imponerse sobre ella.
-  - ESPANOL DE VERDAD. Con tildes y signos de apertura. El prototipo en
-    pygame escribia «Verificacion» por limitaciones de fuente; aqui no
-    hace falta, y escribir bien es parte de la calidad percibida.
+  - ESPANOL DE VERDAD. Con tildes y signos de apertura. Escribir bien es
+    parte de la calidad percibida.
   - TITULARES APRETADOS, CUERPO EN CAJA BAJA. El titular grita como un
     afiche; el cuerpo se lee como una noticia. Nada de mayuscula
     sostenida en parrafos: cansa y aplana la jerarquia.

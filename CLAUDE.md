@@ -1,7 +1,7 @@
 # Proyecto: Alcalde Digital
 
 ## Qué es
-Videojuego educativo sobre el uso responsable de las redes sociales, con estructura de **Detroit: Become Human** (cada día un protagonista, decisiones con consecuencias, diagrama de flujo al cerrar el día). Proyecto de **Estructura de Datos II, Universidad del Norte**; se presenta en la **Feria Gamer**. Motor: **Ursina + Panda3D (simplepbr)**; la versión inicial en pygame sigue en `main.py`.
+Videojuego educativo sobre el uso responsable de las redes sociales, con estructura de **Detroit: Become Human** (cada día un protagonista, decisiones con consecuencias, diagrama de flujo al cerrar el día). Proyecto de **Estructura de Datos II, Universidad del Norte**; se presenta en la **Feria Gamer**. Cliente 3D: **Ursina + Panda3D (simplepbr)**.
 
 ## Pilares (desempatan decisiones)
 1. **Lo visual y la presentación**: la profesora lo valora más que nada. Ante la duda, gana lo que se vea mejor y más coherente.
@@ -19,9 +19,8 @@ Videojuego educativo sobre el uso responsable de las redes sociales, con estruct
 
 ## Cómo ejecutar
 - Cliente 3D: `venv-win\Scripts\python.exe cliente3d/juego3d.py`
-- Versión pygame: `python main.py`
+- Linux: `.venv/bin/python cliente3d/juego3d.py`
 - Visor de modelos: `python previsualizar.py assets/personajes/<rol>.glb`
-- Qué assets faltan: `import recursos; print(recursos.faltantes())`
 - **Verificación visual: solo en la PC con GPU.** El render por software no muestra simplepbr; no declares "se ve bien" sin captura real del usuario.
 
 ## Skills a usar (en `.claude/skills/`)
@@ -29,7 +28,7 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 **No usar** `ursina-lighting-shaders-vfx` para código: aplica a Ursina puro, no a este render.
 
 ## Reglas de código
-- `estructuras.py` (y `grafo.py`) **solo estructuras de datos**: sin pygame ni Ursina, probables aislados.
+- `estructuras.py` (y `grafo.py`) **solo estructuras de datos**: sin frameworks gráficos, probables aislados.
 - La lógica vive en `juego.Partida`; el cliente 3D **solo dibuja** (no duplicar reglas). Pensar siempre que `Partida` correrá en un servidor.
 - Colores de UI siempre vía `estilo.py` (`E.*`); luces/materiales siempre vía `mundo.py`. Primitivas de Ursina dentro del mundo PBR llevan `clearShader()`.
 - Máx. 6 luces de mundo + 2 por personaje (límite 8 de simplepbr).
@@ -43,8 +42,8 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 - [ ] `herramientas/aplicar_capitulos.py` está vacío
 - [ ] Modo alto contraste en el cliente 3D (rúbrica §15)
 - [ ] Fuentes con tildes (`assets/fuentes/`) y su entrada en `CREDITOS.md`
-- [ ] `requirements.txt` (ursina, simplepbr, panda3d-gltf, pygame, trimesh, numpy)
-- [ ] README: documentar el cliente 3D (hoy solo describe pygame; TIEMPO_ESCENA es 25 s en código y 20 s en README)
+- [x] `requirements.txt` con dependencias del cliente 3D
+- [x] README con instrucciones para iniciar el cliente 3D
 - [ ] Modelos `.glb` de ~9 MB c/u en git: valorar Git LFS
 - [ ] Servidor y cliente de red (entrega final)
 
