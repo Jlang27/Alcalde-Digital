@@ -1499,6 +1499,58 @@ def brillo(pasos):
         pass
 
 
+# ===================================================================
+#  NPC (gente de fondo)
+# ===================================================================
+
+# OJO con de donde salen estos archivos. Los .glb tal cual salen de
+# Blender se cargan TUMBADOS (el alto les queda en Z). Los de
+# assets/npc/ pasaron por herramientas/aligerar_glb.py, que ademas de
+# bajarles las texturas de 4096 a 1024 los deja de pie. Comprobado
+# midiendo la caja del mismo personaje antes y despues:
+#     original   X1.78  Y0.32  Z1.80   <- tumbado
+#     aligerado  X1.78  Y1.80  Z0.32   <- de pie
+# Asi que aqui no hay que girar nada; lo que hay que hacer es NO meter
+# al repositorio un .glb que no haya pasado por esa herramienta.
+CARPETA_NPC = os.path.join(RAIZ, "assets", "npc")
+
+
+def ruta_npc(nombre):
+    return os.path.join(CARPETA_NPC, f"{nombre}.glb")
+
+
+def npc(mundo, nombre, posicion=(0.0, 0.0, 0.0), mirando=0.0,
+        animacion="idle"):
+    """Pone a alguien de fondo en la escena y devuelve su Actor.
+
+    nombre:    npc1..npc4 o cashier (los archivos de assets/npc/)
+    posicion:  (x, y, z) en metros. y=0 es el suelo.
+    mirando:   grados; 0 mira hacia la camara de los planos frontales.
+    animacion: «idle» o «sentado» en los npc, «idle» o «hablar» en el
+               cashier. Si no existe, se queda en reposo sin fallar.
+
+    Se encarga del enderezado y del mapa de brillo mal exportado, que
+    son las dos cosas que hay que recordar y nadie recuerda.
+    """
+    ruta = ruta_npc(nombre)
+    if not os.path.exists(ruta):
+        return None
+    actor = Actor(Filename.from_os_specific(ruta).getFullpath())
+    actor.reparentTo(mundo)
+    actor.setPos(Vec3(*posicion))
+    actor.setH(mirando)
+    _quitar_mapa_de_brillo(actor)
+    if animacion in actor.getAnimNames():
+        actor.loop(animacion)
+    return actor
+
+
+def quitar_npc(actores):
+    for actor in actores:
+        actor.cleanup()
+        actor.removeNode()
+
+
 POSICION_INVITADO = Vec3(1.05, 0.0, 0.30)
 # Entre los dos: es a donde mira la camara en el plano de dos.
 PUNTO_MEDIO = Vec3(0.52, 0.0, 0.15)
