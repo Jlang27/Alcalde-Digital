@@ -322,6 +322,7 @@ class AvisoLibre:
         self.piezas += E.leyenda((("wasd", "moverse"),
                                   ("ratón", "mirar"),
                                   ("enter", "sacar el teléfono"),
+                                  ("tab", "libreta"),
                                   ("esc", "menú")), -0.458)
 
     def cerrar(self):
@@ -406,36 +407,248 @@ class Dialogo:
         _limpiar(self.piezas)
 
 
-class AvisoCiudadano:
-    """La primera vez que vas a hablar con alguien: lo que cuesta.
+def _boton_papel(texto, posicion, ancho=0.46, z=E.Z_ADORNO_MODAL):
+    """La tecla que manda, impresa: tinta llena con letra de papel.
 
-    Modo papel a proposito: es una regla del juego, no algo que pasa en
-    la escena, y las reglas en este juego van impresas.
+    Sobre papel, la tecla de E.leyenda (fondo de luz y letra blanca) se
+    queda sin fondo y no se lee. Aqui la tecla es un bloque de tinta,
+    como el sello de una papeleta.
+    """
+    x, y = posicion
+    return [E.banda(ancho, 0.052, (x, y), E.TINTA, z=z),
+            E.banda(ancho, 0.006, (x, y - 0.026), E.LLERAS, z=z - 0.005),
+            E.pequena(texto, (x, y + 0.010), E.PAPEL, escala=0.56,
+                      origen=(0, 0.5))]
+
+
+class AvisoPapel:
+    """Una regla del juego, impresa en una tarjeta de papel.
+
+    Modo papel a proposito: no es algo que pasa en la escena, es una regla,
+    y las reglas en este juego van impresas. La usan el aviso de la
+    jornada y el de la primera charla.
     """
 
-    def __init__(self):
+    def __init__(self, rotulo, titulo, cuerpo):
         self.piezas = []
         a = self.piezas.append
-        a(E.velo(z=E.Z_VELO))
-        a(E.banda(0.92, 0.40, (0, 0.02), E.PAPEL, z=E.Z_TARJETA))
-        a(E.banda(0.92, 0.010, (0, 0.215), E.LLERAS, z=E.Z_ADORNO_MODAL))
-        a(E.pequena("INFORMACIÓN CIUDADANA", (-0.42, 0.185), E.TINTA_TENUE,
-                    escala=0.56))
-        a(E.titular("Hablar cuesta tiempo", (-0.42, 0.155), 1.6, E.TINTA))
-        cuerpo = E.entradilla(
-            "Hablar con la gente da pistas, pero cada conversación son "
-            "10 minutos. Mientras hablas, el rumor sigue llegando a más "
-            "teléfonos, y lo que hagas después rinde menos. A las 8:30 "
-            "empieza la reunión de padres. Piensa bien a quién le preguntas.",
-            (-0.42, 0.075), 0.80, E.TINTA_TENUE, ancho=50)
-        a(cuerpo)
         # velo 0.07 < papel 0.05 < filete 0.03 < textos 0: cada uno por
         # delante del anterior, si no el papel se come las letras
-        self.piezas += E.leyenda((("enter", "entendido"),), -0.130, x0=-0.42,
-                                 z=E.Z_ADORNO_MODAL)
+        a(E.velo(z=E.Z_VELO))
+        a(E.banda(0.92, 0.50, (0, 0.0), E.PAPEL, z=E.Z_TARJETA))
+        a(E.banda(0.92, 0.010, (0, 0.245), E.LLERAS, z=E.Z_ADORNO_MODAL))
+        a(E.pequena(rotulo, (-0.42, 0.215), E.TINTA_TENUE, escala=0.56))
+        a(E.titular(titulo, (-0.42, 0.185), 1.6, E.TINTA))
+        a(E.entradilla(cuerpo, (-0.42, 0.105), 0.80, E.TINTA_TENUE, ancho=50))
+        self.piezas += _boton_papel("PULSA ENTER PARA CONTINUAR", (0, -0.190))
 
     def cerrar(self):
         _limpiar(self.piezas)
+
+
+class Libreta:
+    """La libreta de Mateo (Tab): todo lo que sabes, en papel y por tintas.
+
+    Tres columnas. Los candidatos con su tinta y su expediente. El arbol
+    de pistas dibujado con sangria (lo que sabes, lo que ya puedes
+    preguntar, lo que ni sabes que existe). Y la red y tu tarjeton.
+    Recibe los datos ya preparados: la pantalla no conoce la Partida.
+    """
+
+    ANCHO = 50          # caracteres por renglon en cada columna
+    RENGLON = 0.024
+    FONDO = -0.375      # de aqui para abajo ya no se escribe
+
+    def __init__(self, cabecera, candidatos, pistas, ocultas, red, tarjeton):
+        """candidatos: [{nombre, tinta, hechos: [hecho], faltan}]
+        pistas: [(profundidad, sabida, texto, tinta)] en DFS preorden
+        ocultas: cuantas pistas aun no sabes que existen
+        red: [texto]; tarjeton: (ganadas, total, [texto])"""
+        self.piezas = []
+        a = self.piezas.append
+        a(E.banda(2.4, 1.20, (0, 0), E.PAPEL, z=E.Z_FONDO))
+        a(E.pequena(cabecera, (-0.84, 0.462), E.TINTA_TENUE, escala=0.56))
+        a(E.titular("Lo que sé", (-0.84, 0.430), 2.0, E.TINTA))
+        self.piezas += E.filete(1.70, (-0.85, 0.352))
+
+        self._candidatos(candidatos, -0.84)
+        self._pistas(pistas, ocultas, -0.26)
+        self._red(red, tarjeton, 0.32)
+
+        self.piezas += _boton_papel("TAB  ·  CERRAR LA LIBRETA", (0, -0.440),
+                                    ancho=0.40, z=E.Z_ADORNO)
+
+    # --- utilidades de columna ---
+    def _titulo(self, texto, x, y=0.305):
+        self.piezas.append(E.pequena(texto, (x, y), E.TINTA, escala=0.54))
+        self.piezas.append(E.regla(0.52, (x, y - 0.030), 0.0018, E.TINTA_TENUE))
+        return y - 0.048
+
+    def _texto(self, texto, x, y, col=None, escala=0.42, ancho=None):
+        """Escribe con salto de linea y devuelve la y siguiente, o None si
+        ya no cabe en la pagina."""
+        if y < self.FONDO:
+            return None
+        ancho = ancho or self.ANCHO
+        t = E.pequena(texto, (x, y), col or E.TINTA_TENUE, escala=escala)
+        t.wordwrap = ancho
+        self.piezas.append(t)
+        renglones = sum(len(r) // ancho + 1 for r in texto.split("\n"))
+        return y - renglones * self.RENGLON
+
+    # --- columna 1: candidatos ---
+    def _candidatos(self, candidatos, x):
+        y = self._titulo("CANDIDATOS", x)
+        for c in candidatos:
+            if y is None or y < self.FONDO:
+                break
+            arriba = y
+            y = self._texto(c["nombre"], x + 0.022, y, E.TINTA, escala=0.56) - 0.004
+            for hecho in c["hechos"]:
+                linea = f"{hecho['tema']}: {hecho['texto']}"
+                if hecho["barrio"]:
+                    linea += f"  {hecho['barrio']}"
+                y = self._texto(linea, x + 0.022, y)
+                if y is None:
+                    break
+            if y is None:
+                break
+            y = self._texto("· · ·  " + (f"{c['faltan']} por descubrir"
+                                         if c["faltan"] else "nada más por ahora"),
+                            x + 0.022, y, E.TINTA_TENUE)
+            if y is None:
+                break
+            # la franja de tinta del candidato, tan alta como su bloque
+            alto = arriba - y
+            self.piezas.append(E.banda(0.008, alto, (x + 0.004, arriba - alto / 2 + 0.012),
+                                       c["tinta"]))
+            y -= 0.018
+
+    # --- columna 2: el arbol de pistas ---
+    def _pistas(self, pistas, ocultas, x):
+        y = self._titulo("PISTAS  ·  el árbol de lo que sabes", x)
+        for profundidad, sabida, texto, tinta in pistas:
+            if y is None:
+                break
+            sangria = x + profundidad * 0.026
+            self.piezas += E.casilla((sangria + 0.008, y - 0.010), tinta,
+                                     marcada=sabida, lado=0.016, fondo=E.PAPEL)
+            y = self._texto(texto, sangria + 0.026, y,
+                            E.TINTA if sabida else tinta,
+                            ancho=self.ANCHO - 2 * profundidad - 3)
+        if y is not None and ocultas:
+            self._texto(f"· · ·  y {ocultas} pista(s) que aún no sabes que existen",
+                        x, y - 0.006)
+
+    # --- columna 3: la red y el tarjeton ---
+    def _red(self, red, tarjeton, x):
+        y = self._titulo("LA RED", x)
+        for linea in red:
+            if y is None:
+                return
+            y = self._texto(linea, x, y)
+        ganadas, total, opciones = tarjeton
+        y = self._titulo(f"TU TARJETÓN  ·  {ganadas} de {total} decisiones",
+                         x, (y or self.FONDO) - 0.030)
+        for texto in opciones:
+            if y is None:
+                return
+            self.piezas += E.casilla((x + 0.008, y - 0.010), E.TINTA,
+                                     marcada=False, lado=0.016, fondo=E.PAPEL)
+            y = self._texto(texto, x + 0.026, y, E.TINTA)
+
+    def cerrar(self):
+        _limpiar(self.piezas)
+
+
+class Encuesta:
+    """Tercera pagina del cierre: quien va ganando, y por que.
+
+    A la izquierda, una barra por candidato con su tinta y, debajo, lo que
+    sabes de el: su expediente, con los huecos de lo que falta. A la
+    derecha, por que se movio la encuesta hoy y lo que la ciudad recordara
+    manana. Asi se ve que lo de hoy tiene consecuencia, y que hay mas que
+    descubrir.
+    """
+
+    FILA = 0.150
+
+    def __init__(self, dia, candidatos, motivos, memoria):
+        """candidatos: [{nombre, lema, tinta, pct, ayer, hechos, faltan}],
+        con hechos = [(hecho, es_de_hoy)];
+        motivos: [(candidato, delta, motivo)]; memoria: [texto]."""
+        self.piezas = []
+        a = self.piezas.append
+        a(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
+        a(E.pequena(f"ENCUESTA DEL BARRIO · DÍA 0{dia}", (-0.84, 0.462),
+                    E.TEXTO_TENUE, escala=0.56))
+        a(E.titular("¿Quién va ganando?", (-0.84, 0.405), 2.0, E.TEXTO))
+        a(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
+
+        for i, c in enumerate(candidatos):
+            self._candidato(c, 0.300 - i * self.FILA)
+
+        x = 0.30
+        a(E.pequena("POR QUÉ SE MOVIÓ HOY", (x, 0.300), E.TEXTO_TENUE, escala=0.50))
+        y = 0.265
+        for candidato, delta, motivo in motivos[:6]:
+            signo = "+" if delta > 0 else "−"
+            t = E.pequena(f"{candidato.split()[-1]} {signo}{abs(delta):.0f}  ·  {motivo}",
+                          (x, y), E.RESTREPO if delta > 0 else E.GAITAN,
+                          escala=0.46)
+            t.wordwrap = 40
+            a(t)
+            y -= 0.040
+        if not motivos:
+            a(E.pequena("Nada movió la encuesta hoy.", (x, y), E.TEXTO_TENUE,
+                        escala=0.46))
+            y -= 0.040
+
+        y = min(y - 0.030, -0.040)
+        a(E.pequena("LO QUE LA CIUDAD RECORDARÁ MAÑANA", (x, y), E.TEXTO_TENUE,
+                    escala=0.50))
+        y -= 0.035
+        for texto in memoria or ["Nada en particular. Mañana será otro rumor."]:
+            t = E.pequena(texto, (x, y), E.TEXTO, escala=0.46)
+            t.wordwrap = 40
+            a(t)
+            y -= 0.035
+
+        a(E.banda(2.4, 0.003, (0, -0.418), E.luz(46), z=E.Z_ADORNO))
+        self.piezas += E.leyenda((("enter", "continuar"),), -0.458)
+
+    def _candidato(self, c, y):
+        a = self.piezas.append
+        a(E.banda(0.022, 0.022, (-0.832, y), c["tinta"]))
+        a(E.pequena(c["nombre"], (-0.810, y + 0.014), E.TEXTO, escala=0.60))
+        a(E.titular(f"{c['pct']} %", (0.20, y + 0.020), 1.25, c["tinta"],
+                    origen=(0.5, 0.5)))
+        cambio = c["pct"] - c["ayer"]
+        if cambio:
+            # el cambio con signo y en palabras, no solo con color
+            a(E.pequena(f"{'+' if cambio > 0 else '−'}{abs(cambio)} desde ayer",
+                        (0.20, y - 0.020), E.RESTREPO if cambio > 0 else E.GAITAN,
+                        escala=0.44, origen=(0.5, 0.5)))
+        self.piezas += E.barra_voto(0.80, c["pct"] / 100.0, (-0.810, y - 0.018),
+                                    c["tinta"], grosor=0.014, col_riel=E.luz(22))
+        yh = y - 0.040
+        for hecho, nuevo in c["hechos"][:2]:
+            linea = f"{hecho['tema']}: {hecho['texto']}"
+            if hecho["barrio"]:
+                linea += f"  {hecho['barrio']}"
+            if nuevo:
+                linea = "NUEVO · " + linea
+            t = E.pequena(linea, (-0.810, yh), E.TEXTO if nuevo else E.TEXTO_TENUE,
+                          escala=0.42)
+            t.wordwrap = 70
+            a(t)
+            yh -= 0.022 if len(linea) < 70 else 0.040
+        if c["faltan"]:
+            a(E.pequena(f"· · ·  {c['faltan']} cosa(s) más por descubrir",
+                        (-0.810, yh), E.luz(80), escala=0.42))
+        elif not c["hechos"]:
+            a(E.pequena("Todavía no sabes nada de su campaña.", (-0.810, yh),
+                        E.luz(80), escala=0.42))
 
 
 class UltimaHora:

@@ -29,9 +29,10 @@ import pantallas
 from jugador import Jugador
 from contenido import INDICADORES_META
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
-                       OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR)
-from juego import (CANDIDATOS, Partida, TIEMPO_ESCENA,
-                   TIEMPO_INTERVENCION, MINUTOS_POR_RONDA)
+                       OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
+                       HECHOS, TEXTO_BANDERA)
+from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
+                   TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
 
 DURACION_CARGA = 2.8
 
@@ -79,8 +80,12 @@ class Cliente:
         self.npcs = {}                # id -> Actor de la cafeteria
         self.bloqueos_npc = []
         self.vio_aviso = False        # el aviso de «hablar cuesta», una vez
-        self.aviso_ciudadano = None
-        self.pendiente_npc = None
+        self.dia_avisado = None       # el aviso de la jornada, una vez por dia
+        self.aviso_papel = None
+        self.al_cerrar_aviso = None   # lo que sigue al cerrar la tarjeta
+        self.libreta = None
+        self.antes_de_libreta = None  # "libre" o "juego"
+        self.tapados = []             # lo que la libreta apago por debajo
         self.preguntas_menu = []
         self.cola_avisos = []         # (texto, rotulo, titulo, tinta)
         self.reloj_manana = []
@@ -89,7 +94,7 @@ class Cliente:
         self.marca_hablar = []        # el «E  hablar» de abajo
         self.dialogo = None
         self.con_quien = None
-        self.viendo_red = False       # segunda pagina del cierre del dia
+        self.pagina_cierre = None     # "arbol", "red" o "encuesta"
 
 
 cl = Cliente()
@@ -343,6 +348,8 @@ def empezar_partida():
 
 TEXTOS_CONFIRMACION = {
     "menu": ("¿Volver al menú?", "Se pierde la partida en curso."),
+    "telefono": ("¿Sacar el teléfono?",
+                 "Se acaba la investigación: ya no podrás hablar con nadie."),
     "salir": ("¿Salir del juego?", ""),
 }
 
@@ -416,8 +423,14 @@ def cerrar_confirmacion(acepta):
     cl.confirmando = None
 
     if not acepta:
+        # Esc en la cafeteria apago al personaje antes de preguntar: si
+        # al final no se va al menu, hay que devolvérselo.
+        if accion == "menu" and cl.estado == "libre":
+            abrir_libre()
         return
-    if accion == "salir":
+    if accion == "telefono":
+        empezar_decision()
+    elif accion == "salir":
         application.quit()
     elif accion == "menu":
         volver_al_menu()
@@ -619,7 +632,8 @@ def inspeccionar(id_zona):
 def zonas_activas():
     p = cl.partida
     if (p is None or cl.dia_cerrado or cl.nodo_pendiente is not None
-        or cl.confirmando or p.interrupcion is not None):
+        or cl.confirmando or p.interrupcion is not None
+        or cl.libreta is not None):
         return False
     arbol = p.arbol_decision
     if arbol is None:
@@ -799,8 +813,23 @@ def cerrar_contexto():
     abrir_libre()
 
 
+TEXTO_JORNADA = (
+    "Son las 7:30 y la reunión de padres es a las 8:30. Habla con la gente "
+    "y mira bien la publicación. Cuando saques el teléfono se acaba la "
+    "investigación: ya no podrás preguntar nada más, solo decidir. "
+    "Con Tab abres tu libreta.")
+
+
 def abrir_libre():
     """Le devuelve el personaje al jugador, en tercera persona."""
+    p = cl.partida
+    # El dia con pistas empieza diciendo que hacer, una vez y sin tutorial:
+    # lo que importa es que el telefono cierra la investigacion.
+    if p is not None and p.pistas is not None and cl.dia_avisado != p.dia_actual:
+        cl.dia_avisado = p.dia_actual
+        abrir_aviso_papel("TU JORNADA", "Analiza los hechos", TEXTO_JORNADA,
+                          abrir_libre)
+        return
     cl.estado = "libre"
     animar("idle")
     bloqueos = list(mundo.bloqueos()) + cl.bloqueos_npc
@@ -899,14 +928,14 @@ def pintar_reloj_manana():
     p = cl.partida
     if p is None or p.pistas is None:
         return
-    ya, total = p.alcance_rumor()
+    ya, total = len(p.creyentes()), len(p.vecinos())
     r = cl.reloj_manana
     r.append(E.banda(0.64, 0.115, (0.555, 0.415), E.tinta(215), z=E.Z_ADORNO))
     r.append(E.pequena("LA MAÑANA · REUNIÓN DE PADRES A LAS 8:30",
                        (0.255, 0.462), E.TEXTO_TENUE, escala=0.44))
     hora = E.titular(p.hora(), (0.255, 0.440), 1.5, E.TEXTO)
     r.append(hora)
-    cifra = E.pequena(f"el rumor llegó a {ya} de {total} cuentas",
+    cifra = E.pequena(f"ya lo creen {ya} de {total} vecinos",
                       (0.420, 0.430), E.TEXTO, escala=0.50)
     r.append(cifra)
     r += E.barra_voto(0.43, ya / max(total, 1), (0.420, 0.392), E.GAITAN,
@@ -923,10 +952,13 @@ def abrir_dialogo(id_npc):
     # La primera vez, antes de hablar, la regla: hablar cuesta tiempo.
     if not cl.vio_aviso:
         cl.vio_aviso = True
-        cerrar_libre()
-        cl.estado = "aviso_ciudadano"
-        cl.pendiente_npc = id_npc
-        cl.aviso_ciudadano = pantallas.AvisoCiudadano()
+        abrir_aviso_papel(
+            "INFORMACIÓN CIUDADANA", "Hablar cuesta tiempo",
+            "Hablar con la gente da pistas, pero cada conversación son 10 "
+            "minutos. Mientras hablas, el rumor sigue llegando a más "
+            "teléfonos, y lo que hagas después rinde menos. A las 8:30 "
+            "empieza la reunión de padres. Piensa bien a quién le preguntas.",
+            lambda: abrir_dialogo(id_npc))
         return
     nombre, quien = NPCS_CAPITULO_1[id_npc]
     cerrar_libre()
@@ -940,14 +972,115 @@ def abrir_dialogo(id_npc):
     mostrar_preguntas()
 
 
-def cerrar_aviso_ciudadano(seguir):
-    cl.aviso_ciudadano.cerrar()
-    cl.aviso_ciudadano = None
-    id_npc, cl.pendiente_npc = cl.pendiente_npc, None
-    if seguir:
-        abrir_dialogo(id_npc)
-    else:
+def abrir_aviso_papel(rotulo, titulo, cuerpo, despues):
+    """Una regla en una tarjeta de papel; al cerrarla se llama a despues."""
+    cerrar_libre()
+    limpiar(cl.reloj_manana)
+    cl.estado = "aviso_papel"
+    cl.aviso_papel = pantallas.AvisoPapel(rotulo, titulo, cuerpo)
+    cl.al_cerrar_aviso = despues
+
+
+def cerrar_aviso_papel():
+    cl.aviso_papel.cerrar()
+    cl.aviso_papel = None
+    despues, cl.al_cerrar_aviso = cl.al_cerrar_aviso, None
+    despues()
+
+
+# ===================================================================
+#  LIBRETA (Tab): todo lo que sabes, en papel
+# ===================================================================
+
+def datos_libreta(p):
+    """Lo que la libreta necesita, leido de la Partida (aqui no se decide
+    nada: solo se ordena para dibujar)."""
+    cabecera = f"LIBRETA · DÍA 0{p.dia_actual + 1}"
+    if p.pistas is not None:
+        cabecera += f" · {p.hora()}"
+
+    candidatos = []
+    for i, (nombre, _lema, _pesos) in enumerate(CANDIDATOS):
+        sabidos, faltan = p.expediente_de(nombre)
+        candidatos.append({"nombre": nombre,
+                           "tinta": E.CANDIDATOS[i % len(E.CANDIDATOS)],
+                           "hechos": [HECHOS[h] for h in sabidos],
+                           "faltan": faltan})
+
+    # el arbol de pistas en preorden: la sangria es la profundidad
+    pistas, ocultas = [], 0
+    if p.pistas is not None:
+        p.pistas.calcular_posiciones()
+        frontera = {n.id for n in p.pistas.frontera()}
+        for n in p.pistas.recorrido_dfs()[1:]:
+            spec = p.datos_pista[n.id]
+            tinta = E.LLERAS if spec["npc"] else E.OSPINA
+            if n.desbloqueada:
+                pistas.append((n.profundidad - 1, True, spec["texto"], tinta))
+            elif n.id in frontera:
+                if spec["npc"]:
+                    quien = NPCS_CAPITULO_1[spec["npc"]][0]
+                    texto = f"Preguntar a {quien}: «{spec['pregunta']}»"
+                else:
+                    texto = f"En el teléfono: {spec['accion']}"
+                pistas.append((n.profundidad - 1, False, texto, tinta))
+            else:
+                ocultas += 1
+
+    red = []
+    if p.red is not None:
+        nombre = {v: d["nombre"] for v, d in p.red.datos.items()}
+        conocidas = p.red_conocida.aristas()
+        red.append(f"Sabes {len(conocidas)} de {len(p.red.aristas())} conexiones "
+                   "(quién le pasó el rumor a quién):")
+        # a <- b: «b le paso el rumor a a»
+        red += [f"{nombre[b]} → {nombre[a]}" for a, b in conocidas[:7]]
+        cadena = p.red_conocida.camino(ORIGEN_JUGADOR, ORIGEN_RUMOR)
+        red.append("Cadena hasta @NovaAlerta: completa." if cadena
+                   else "Cadena hasta @NovaAlerta: te faltan eslabones.")
+        creen = p.creyentes()
+        red.append(f"Ya lo creen {len(creen)} de {len(p.vecinos())} vecinos: "
+                   f"{en_lista(p.nombres(creen))}.")
+
+    cuenta = p.decisiones_descubiertas()
+    opciones = [n.texto for n in p.arbol_decision.raiz.hijos]
+    ganadas, total = cuenta if cuenta else (len(opciones), len(opciones))
+    return cabecera, candidatos, pistas, ocultas, red, (ganadas, total, opciones)
+
+
+def abrir_libreta():
+    p = cl.partida
+    if p is None or p.arbol_decision is None or cl.libreta is not None:
+        return
+    cl.antes_de_libreta = cl.estado
+    if cl.estado == "libre":
+        cerrar_libre()
+        limpiar(cl.reloj_manana)
+    # lo de debajo se apaga: el HUD esta por delante del papel en z, y
+    # sus botones seguirian recibiendo clics
+    cl.tapados = [e for e in cl.hud + cl.opciones + cl.zonas + cl.marcas + cl.modal
+                  if e.enabled]
+    if cl.alerta is not None:
+        cl.tapados += [e for e in cl.alerta.piezas if e.enabled]
+    for e in cl.tapados:
+        e.enabled = False
+    # en el celular, el reloj no corre: update() solo lo avanza en "juego"
+    cl.estado = "libreta"
+    audio.efecto("confirmar")
+    cl.libreta = pantallas.Libreta(*datos_libreta(p))
+
+
+def cerrar_libreta():
+    cl.libreta.cerrar()
+    cl.libreta = None
+    for e in cl.tapados:
+        e.enabled = True
+    cl.tapados = []
+    audio.efecto("volver")
+    if cl.antes_de_libreta == "libre":
         abrir_libre()
+    else:
+        cl.estado = cl.antes_de_libreta
 
 
 def mostrar_preguntas():
@@ -997,10 +1130,9 @@ def cerrar_dialogo():
 
 def agotar_manana():
     """8:30: empieza la reunion y el telefono se saca solo."""
-    ya, _ = cl.partida.alcance_rumor()
-    cl.cola_avisos.append((f"Empezó la reunión de padres. El rumor ya está "
-                           f"en {ya} cuentas.", "8:30", "Se acabó la mañana",
-                           E.GAITAN))
+    ya = len(cl.partida.creyentes())
+    cl.cola_avisos.append((f"Empezó la reunión de padres. Ya lo creen {ya} "
+                           f"vecinos.", "8:30", "Se acabó la mañana", E.GAITAN))
     empezar_decision()
 
 
@@ -1079,6 +1211,7 @@ def cerrar_dia():
     for e in cl.hud:
         e.enabled = False
     dibujar_diagrama()
+    cl.pagina_cierre = "arbol"
 
 
 def dibujar_diagrama():
@@ -1190,16 +1323,17 @@ def dibujar_red():
     ti nivel a nivel.
     """
     limpiar(cl.diagrama)
-    cl.viendo_red = True
+    cl.pagina_cierre = "red"
     p = cl.partida
     red, conocida = p.red, p.red_conocida
     pos, _ = posiciones_red(red)
     camino = conocida.camino(ORIGEN_JUGADOR, ORIGEN_RUMOR) or []
     tramos = set(zip(camino, camino[1:]))
     compartio = any(n.id == "compartir" for n in p.arbol_decision.camino)
-    # hasta donde habia llegado el rumor cuando decidiste: el tiempo que
-    # gastaste hablando, dibujado sobre la red
-    _, alcanzados = red.invertido().bfs(ORIGEN_RUMOR, max_prof=p.nivel_rumor())
+    # El desenlace sobre la red: a quien le llego y a quien protegiste. Es
+    # lo que cuesta hablar de mas: cada charla deja bajar al rumor.
+    creyentes = set(p.desenlace_red["creyentes"])
+    protegidos = set(p.desenlace_red["protegidos"])
     _, ola = red.invertido().bfs(ORIGEN_JUGADOR) if compartio else (None, {})
 
     cl.diagrama.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
@@ -1235,9 +1369,12 @@ def dibujar_red():
                        scale=0.030 if v != ORIGEN_JUGADOR else 0.040,
                        position=(x, y, E.Z_ADORNO - 0.02))
         cl.diagrama.append(punto)
-        if v in alcanzados:
+        if v in creyentes or v in protegidos:
+            # el anillo dice como acabo cada vecino; el texto lo repite abajo
+            # con nombres, para no contarlo solo con color
             cl.diagrama.append(Entity(parent=camera.ui, model="circle",
-                                      color=E.LLERAS, scale=0.048,
+                                      color=E.GAITAN if v in creyentes
+                                      else E.RESTREPO, scale=0.050,
                                       position=(x, y, E.Z_ADORNO - 0.01)))
         if v in ola and v != ORIGEN_JUGADOR:
             punto.animate_color(E.GAITAN, duration=0.25,
@@ -1251,10 +1388,16 @@ def dibujar_red():
 
     sabidas = len(conocida.aristas())
     lineas = [f"Conocías {sabidas} de {len(red.aristas())} conexiones"]
+    if creyentes:
+        cl.diagrama.append(E.pequena(
+            f"Anillo rojo, se lo creyeron: {en_lista(p.nombres(creyentes))}.",
+            (-0.84, -0.262), E.GAITAN, escala=0.54))
     cl.diagrama.append(E.pequena(
-        f"Anillo amarillo: cuando actuaste ({p.hora()}), el rumor iba por el "
-        f"nivel {p.nivel_rumor()} y ya estaba en {len(alcanzados)} cuentas.",
-        (-0.84, -0.300), E.LLERAS, escala=0.54))
+        f"Anillo verde, los protegiste a tiempo: {en_lista(p.nombres(protegidos))}."
+        if protegidos else
+        "No protegiste a nadie: el rumor siguió su camino.",
+        (-0.84, -0.297), E.RESTREPO if protegidos else E.TEXTO_TENUE,
+        escala=0.54))
     if camino:
         nombres = " → ".join(red.datos[v]["nombre"] for v in camino)
         lineas.append(f"Rastreo (BFS, {len(camino) - 1} saltos): {nombres}")
@@ -1273,8 +1416,30 @@ def dibujar_red():
     cl.diagrama += E.leyenda((("enter", "continuar"),), -0.458)
 
 
+def dibujar_encuesta():
+    """La tercera pagina del cierre: quien va ganando, y por que."""
+    limpiar(cl.diagrama)
+    cl.pagina_cierre = "encuesta"
+    p = cl.partida
+    candidatos = []
+    for i, (nombre, lema, _pesos) in enumerate(CANDIDATOS):
+        sabidos, faltan = p.expediente_de(nombre)
+        candidatos.append({
+            "nombre": nombre, "lema": lema,
+            "tinta": E.CANDIDATOS[i % len(E.CANDIDATOS)],
+            "pct": p.porcentajes()[nombre],
+            "ayer": p.porcentajes(p.encuesta_ayer)[nombre],
+            "hechos": [(HECHOS[h], h in p.hechos_del_dia) for h in sabidos],
+            "faltan": faltan,
+        })
+    motivos = [(c, d, m) for c, d, m in p.motivos_encuesta if abs(d) >= 1]
+    memoria = [TEXTO_BANDERA[b] for b in p.banderas_del_dia if b in TEXTO_BANDERA]
+    cl.diagrama += pantallas.Encuesta(p.dia_actual + 1, candidatos,
+                                      motivos, memoria).piezas
+
+
 def siguiente_dia():
-    cl.viendo_red = False
+    cl.pagina_cierre = None
     limpiar(cl.diagrama)
     if cl.partida.partida_terminada():
         pantalla_final()
@@ -1306,7 +1471,7 @@ def pantalla_final():
 
     # escrutinio: una barra por candidato, con su tinta
     for i, (nombre, _lema, porcentaje) in enumerate(resultados):
-        tinta = E.CANDIDATOS[i % len(E.CANDIDATOS)]
+        tinta = E.CANDIDATOS[NOMBRES_CANDIDATOS.index(nombre) % len(E.CANDIDATOS)]
         y = 0.10 - i * 0.105
         cl.diagrama.append(E.banda(0.030, 0.030, (-0.835, y), tinta))
         cl.diagrama.append(E.pequena(nombre, (-0.79, y + 0.014), E.TEXTO,
@@ -1345,6 +1510,13 @@ def atender_alertas(dt):
     if cl.partida.novedades:
         cl.alerta = pantallas.UltimaHora(cl.partida.novedades.pop(0), x, y)
         audio.efecto("confirmar")
+    elif cl.partida.hechos_nuevos:
+        # lo que aprendiste de un candidato, con su tinta
+        hecho = HECHOS[cl.partida.hechos_nuevos.pop(0)]
+        i = NOMBRES_CANDIDATOS.index(hecho["candidato"])
+        cl.alerta = pantallas.UltimaHora(hecho["texto"], x, y, "EXPEDIENTE",
+                                         hecho["candidato"],
+                                         E.CANDIDATOS[i % len(E.CANDIDATOS)])
     elif cl.cola_avisos:
         texto, rotulo, titulo, tinta = cl.cola_avisos.pop(0)
         cl.alerta = pantallas.UltimaHora(texto, x, y, rotulo, titulo, tinta)
@@ -1415,7 +1587,8 @@ def update():
         return
 
     habia_modal = p.interrupcion is not None
-    p.actualizar(time.dt)
+    # leer no cuesta: con una alerta en pantalla el reloj no corre
+    p.actualizar(0 if cl.alerta is not None else time.dt)
 
     if p.interrupcion is not None and not habia_modal:
         abrir_modal()
@@ -1429,7 +1602,7 @@ def update():
         if modal_reloj is not None:
             modal_reloj.text = f"{p.tiempo_interrupcion:.0f} s"
     else:
-        resto = p.tiempo_restante / TIEMPO_ESCENA
+        resto = p.tiempo_restante / p.tiempo_total
         reloj_cifra.text = f"{p.tiempo_restante:.0f} s"
 
     reloj_barra.scale_x = max(0.0001, 0.70 * resto)
@@ -1451,9 +1624,14 @@ def volver_al_menu():
     if cl.dialogo is not None:
         cl.dialogo.cerrar()
         cl.dialogo = None
-    if cl.aviso_ciudadano is not None:
-        cl.aviso_ciudadano.cerrar()
-        cl.aviso_ciudadano = None
+    if cl.aviso_papel is not None:
+        cl.aviso_papel.cerrar()
+        cl.aviso_papel = None
+    if cl.libreta is not None:
+        cl.libreta.cerrar()
+        cl.libreta = None
+        cl.tapados = []
+    cl.dia_avisado = None
     cl.cola_avisos.clear()
     limpiar(cl.reloj_manana)
     quitar_npcs()
@@ -1465,7 +1643,7 @@ def volver_al_menu():
     limpiar(cl.marcas)
     cl.partida = None
     cl.dia_cerrado = False
-    cl.viendo_red = False
+    cl.pagina_cierre = None
     abrir_menu()
 
 def cerrar_pantalla(jugar = False):
@@ -1510,13 +1688,20 @@ def input(tecla):
             cerrar_contexto()
         return
 
-    elif cl.estado == "aviso_ciudadano":
-        if tecla in ("enter", "space", "e"):
+    elif cl.estado == "aviso_papel":
+        if tecla in ("enter", "space", "e", "escape"):
             audio.efecto("confirmar")
-            cerrar_aviso_ciudadano(True)
-        elif tecla == "escape":
-            audio.efecto("volver")
-            cerrar_aviso_ciudadano(False)
+            cerrar_aviso_papel()
+        return
+
+    elif cl.estado == "libreta":
+        if tecla in ("tab", "escape", "enter", "space"):
+            cerrar_libreta()
+        return
+
+    elif (cl.estado == "juego" and tecla == "tab" and not cl.dia_cerrado
+          and cl.nodo_pendiente is None and cl.partida.interrupcion is None):
+        abrir_libreta()
         return
 
     elif cl.estado == "dialogo" and cl.dialogo is not None:
@@ -1537,7 +1722,15 @@ def input(tecla):
             audio.efecto("confirmar")
             abrir_dialogo(cl.cerca)
         elif tecla in ("enter", "space"):
-            empezar_decision()
+            p = cl.partida
+            # el dia que se investiga, sacar el telefono es irreversible:
+            # se pregunta. (A las 8:30 ya no hay nada que preguntar.)
+            if p.pistas is not None and not p.manana_agotada():
+                abrir_confirmacion("telefono")
+            else:
+                empezar_decision()
+        elif tecla == "tab":
+            abrir_libreta()
         elif tecla == "escape":
             cerrar_libre()
             abrir_confirmacion("menu")
@@ -1625,9 +1818,11 @@ def input(tecla):
             audio.efecto("confirmar")
             cl.menu.activar()
     elif cl.dia_cerrado and tecla in ("enter", "space"):
-        # el dia con red tiene dos paginas: el arbol y luego el grafo
-        if cl.partida.red is not None and not cl.viendo_red:
+        # arbol -> red (solo el dia que la tiene) -> encuesta -> otro dia
+        if cl.pagina_cierre == "arbol" and cl.partida.red is not None:
             dibujar_red()
+        elif cl.pagina_cierre in ("arbol", "red"):
+            dibujar_encuesta()
         else:
             siguiente_dia()
 

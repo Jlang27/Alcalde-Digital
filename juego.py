@@ -35,8 +35,10 @@ from contenido import (
     EVENTOS_ALEATORIOS, RAMAS_DINAMICAS, INYECCIONES, INYECCIONES_DINAMICAS,
     CARTAS_BASE, UMBRAL_CASCADA, CAPITULO_1, EVENTO_CAPITULO_1,
     OPCIONES_CAPITULO_1, OCULTAS_CAPITULO_1, PISTAS_CAPITULO_1,
-    VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1,
+    VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1, NIVEL_INICIAL, RONDAS_POR_NIVEL,
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
+    HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
+    OPCIONES_QUE_PROTEGEN,
     construir_arbol_habilidades, construir_arbol_decision,
     aplicar_habilidades, aplicar_banderas,
 )
@@ -53,32 +55,45 @@ DURACION_FLASH = 3.6
 MARGEN_MINIMO = 2.0
 
 # La manana del dia 1: cada charla en la cafeteria es una RONDA de 10
-# minutos, y en cada ronda el rumor avanza un nivel por el grafo (BFS
+# minutos, y cada dos rondas el rumor baja un nivel por el grafo (BFS
 # desde el origen). A las 8:30 empieza la reunion de padres y se acabo.
 HORA_INICIO = 7 * 60 + 30
 MINUTOS_POR_RONDA = 10
 MAX_RONDAS = 6
 EFECTO_RONDA = {"desinformacion": 2}
 COMPARTIDOS_POR_RONDA = 150
-# Las dos primeras charlas salen gratis; desde la tercera, lo bueno que
-# hagas al decidir rinde un 12 % menos por ronda, hasta quedarse en el 40 %.
-RONDAS_GRATIS = 2
-CASTIGO_RONDA = 0.12
+# Lo bueno que hagas al decidir rinde segun a cuantos vecinos aun puedes
+# proteger: con todos, el 100 %; si ya lo creen todos, el 40 %.
 FACTOR_MINIMO = 0.4
+# Cuanto pesa en la encuesta el cambio de los indicadores durante el dia.
+PESO_INDICADORES = 0.05
 
 DIAS_PARTIDA = 5
 
+# El orden es el de las tintas (estilo.CANDIDATOS): Ospina azul, Bravo rojo,
+# Medina amarillo, Ruiz verde. Cada uno conserva su color en toda pantalla.
 CANDIDATOS = [
-    ("Elena Ruiz", "Campaña basada en datos verificables",
-     {"info_verificada": 1.2, "confianza": 1.0, "desinformacion": -0.8}),
-    ("Juan Medina", "Campaña centrada en la convivencia del barrio",
-     {"convivencia": 1.2, "bienestar": 1.0, "conflictos": -1.0}),
+    ("Daniel Ospina", "Campaña de obras para el barrio",
+     {"bienestar": 1.0, "convivencia": 0.8, "info_verificada": 0.6}),
     ("Hugo Bravo", "Campaña que vive del escándalo y el rumor",
      {"desinformacion": 1.3, "conflictos": 1.1, "confianza": -0.9}),
+    ("Juan Medina", "Campaña centrada en la convivencia del barrio",
+     {"convivencia": 1.2, "bienestar": 1.0, "conflictos": -1.0}),
+    ("Elena Ruiz", "Campaña basada en datos verificables",
+     {"info_verificada": 1.2, "confianza": 1.0, "desinformacion": -0.8}),
 ]
+NOMBRES_CANDIDATOS = [c[0] for c in CANDIDATOS]
 
 # Color de cada jugador, para distinguirlos en pantalla
 COLORES_JUGADOR = [(79, 179, 169), (216, 138, 74), (150, 124, 206), (198, 96, 120)]
+
+
+def en_lista(nombres):
+    """«Ana, Luis y Caro»."""
+    nombres = list(nombres)
+    if len(nombres) <= 1:
+        return "".join(nombres)
+    return ", ".join(nombres[:-1]) + " y " + nombres[-1]
 
 
 # ===================================================================
@@ -224,6 +239,19 @@ class Partida:
         self.novedades = []           # opciones recien ganadas, para la alerta
         self.compartidos = 0
         self.rondas = 0               # charlas de la manana (10 min cada una)
+        self.tiempo_total = TIEMPO_ESCENA
+        self.desenlace_red = None     # {"creyentes": [...], "protegidos": [...]}
+
+        # --- lo que el jugador sabe de los candidatos (dura toda la partida) ---
+        self.expediente = set()
+        self.hechos_del_dia = []
+        self.hechos_nuevos = []       # para el aviso del cliente
+
+        # --- la encuesta: quien va ganando ---
+        self.encuesta = dict(ENCUESTA_INICIAL)
+        self.encuesta_ayer = dict(ENCUESTA_INICIAL)
+        self.motivos_encuesta = []    # (candidato, delta, motivo) del dia
+        self._indicadores_al_empezar = dict(self.indicadores)
 
         self.avisos = []
 
@@ -304,8 +332,15 @@ class Partida:
         self.evento_dia = nombre
         self._aplicar_efectos(efectos)
 
-        self.tiempo_restante = TIEMPO_ESCENA
+        self.tiempo_total = self.publicacion.get("tiempo", TIEMPO_ESCENA)
+        self.tiempo_restante = self.tiempo_total
         self.ultimo_detalle = ""
+        self.hechos_del_dia = []
+        self.hechos_nuevos = []
+        self.desenlace_red = None
+        self.encuesta_ayer = dict(self.encuesta)
+        self.motivos_encuesta = []
+        self._indicadores_al_empezar = dict(self.indicadores)
         self.ultimos_efectos = {}
         self.banderas_del_dia = []
         self.interrupcion = None
@@ -335,6 +370,9 @@ class Partida:
         if self.pistas is not None and self.manana_agotada():
             self.banderas_del_dia.append("llegaste_tarde")
             self.banderas.add("llegaste_tarde")
+
+        self._cerrar_red()
+        self._mover_encuesta()
 
         # Lo que no se gano vuelve al arbol, marcado, para que el diagrama
         # ensene tambien lo que habia por descubrir. El dia ya cerro: el
@@ -399,14 +437,15 @@ class Partida:
         for spec in PISTAS_CAPITULO_1:
             padre = self.pistas.buscar(spec["padre"]) if spec["padre"] else raiz
             padre.agregar_hijo(NodoHabilidad(
-                spec["id"], spec.get("pregunta") or spec["id"], spec["texto"],
+                spec["id"], spec.get("pregunta") or spec["accion"], spec["texto"],
                 spec["costo"]))
             self.datos_pista[spec["id"]] = spec
 
         self.red, self.red_conocida = Grafo(), Grafo()
-        for v, (nombre, tipo) in VERTICES_CAPITULO_1.items():
-            self.red.agregar_vertice(v, nombre=nombre, tipo=tipo)
-            self.red_conocida.agregar_vertice(v, nombre=nombre, tipo=tipo)
+        for v, (nombre, tipo, voto, peso) in VERTICES_CAPITULO_1.items():
+            for g in (self.red, self.red_conocida):
+                g.agregar_vertice(v, nombre=nombre, tipo=tipo, voto=voto,
+                                  peso=peso)
         for a, b in ARISTAS_CAPITULO_1:
             self.red.agregar_arista(a, b)
 
@@ -442,6 +481,7 @@ class Partida:
             self.compartidos += COMPARTIDOS_POR_RONDA
         for a, b in spec["aristas"]:
             self.red_conocida.agregar_arista(a, b)
+        self._saber(spec.get("revela", ()))
 
         texto = spec["texto"]
         nuevas = list(spec["abre"])
@@ -489,26 +529,47 @@ class Partida:
 
     def nivel_rumor(self):
         """Hasta que nivel del BFS desde el origen va el rumor."""
-        return 1 + self.rondas
+        return NIVEL_INICIAL + self.rondas // RONDAS_POR_NIVEL
 
-    def alcance_rumor(self):
-        """(cuentas a las que ya llego, cuentas a las que puede llegar).
-
-        Sale del grafo, no de una tabla: un BFS desde @NovaAlerta por las
-        flechas invertidas, cortado en el nivel que marca el reloj.
-        """
+    def vecinos(self):
+        """Los que votan: a quienes el rumor les puede cambiar el voto."""
         if self.red is None:
-            return 0, 0
-        invertida = self.red.invertido()
-        _, ya = invertida.bfs(ORIGEN_RUMOR, max_prof=self.nivel_rumor())
-        _, todas = invertida.bfs(ORIGEN_RUMOR)
-        return len(ya), len(todas)
+            return []
+        return [v for v, d in self.red.datos.items() if d["tipo"] == "vecino"]
+
+    def _sin_ti(self):
+        """El grafo invertido (quien se lo pasa a quien) SIN tu vertice.
+
+        Mientras no compartas, el rumor no pasa por ti: por eso se elimina
+        el vertice (y con el todas sus aristas) de una copia. Es la
+        eliminacion del grafo con un uso real.
+        """
+        g = self.red.invertido()
+        g.eliminar_vertice(ORIGEN_JUGADOR)
+        return g
+
+    def creyentes(self, nivel=None):
+        """Vecinos a los que ya les llego el rumor, por BFS desde el origen."""
+        if self.red is None:
+            return []
+        _, prof = self._sin_ti().bfs(ORIGEN_RUMOR, max_prof=nivel or self.nivel_rumor())
+        return [v for v in self.vecinos() if v in prof]
+
+    def nombres(self, vertices):
+        return [self.red.datos[v]["nombre"] for v in vertices]
 
     def factor_tardanza(self):
+        """Cuanto rinde lo bueno: la parte de los protegibles que queda.
+
+        Sale del grafo: a las 7:30 ya lo creen dos; cada vecino que se lo
+        cree mientras tu hablas es uno al que ya no llegas a tiempo.
+        """
         if self.pistas is None:
             return 1.0
-        extra = max(0, self.rondas - RONDAS_GRATIS)
-        return max(FACTOR_MINIMO, 1.0 - CASTIGO_RONDA * extra)
+        total = len(self.vecinos())
+        al_empezar = total - len(self.creyentes(NIVEL_INICIAL))
+        ahora = total - len(self.creyentes())
+        return FACTOR_MINIMO + (1 - FACTOR_MINIMO) * ahora / max(al_empezar, 1)
 
     def _con_tardanza(self, efectos):
         """Recorta solo lo BUENO: llegar tarde no hace menos dano lo malo."""
@@ -526,6 +587,84 @@ class Partida:
             else:
                 resultado[clave] = delta
         return resultado, recorto
+
+    # =============================================================
+    #  EXPEDIENTE Y ENCUESTA
+    # =============================================================
+
+    def _saber(self, ids_hechos):
+        """Anota hechos de los candidatos. Cada uno deja la bandera
+        sabe_<id>, que abre ramas en los dias siguientes."""
+        for h in ids_hechos:
+            if h in self.expediente or h not in HECHOS:
+                continue
+            self.expediente.add(h)
+            self.hechos_del_dia.append(h)
+            self.hechos_nuevos.append(h)
+            self.banderas.add(f"sabe_{h}")
+
+    def expediente_de(self, candidato):
+        """(hechos que sabes, cuantos quedan por descubrir) de un candidato."""
+        suyos = [h for h, d in HECHOS.items() if d["candidato"] == candidato]
+        sabidos = [h for h in suyos if h in self.expediente]
+        return sabidos, len(suyos) - len(sabidos)
+
+    def _cerrar_red(self):
+        """A quien le llego el rumor y a quien protegiste, con nombres."""
+        if self.red is None:
+            return
+        ids = {n.id for n in self.arbol_decision.camino}
+        if ids & OPCIONES_QUE_PROTEGEN:
+            # frenaste el rumor: quien aun no lo tenia, ya no lo tendra
+            creyentes = self.creyentes()
+            protegidos = [v for v in self.vecinos() if v not in creyentes]
+        else:
+            # no lo frenaste: sigue hasta el final del grafo
+            creyentes = self.creyentes(nivel=len(self.red.adyacencia))
+            protegidos = []
+        if "compartir" in ids:
+            # y si lo compartiste, ademas sale de ti: tus contactos tambien
+            _, ola = self.red.invertido().bfs(ORIGEN_JUGADOR)
+            creyentes = [v for v in self.vecinos() if v in creyentes or v in ola]
+        self.desenlace_red = {"creyentes": creyentes, "protegidos": protegidos}
+
+    def _mover_encuesta(self):
+        """Lo que hiciste hoy, convertido en intencion de voto."""
+        def mover(candidato, delta, motivo):
+            if delta:
+                self.encuesta[candidato] = max(1.0, self.encuesta[candidato] + delta)
+                self.motivos_encuesta.append((candidato, delta, motivo))
+
+        # 1. cada vecino que se lo creyo deja de votar al atacado
+        if self.desenlace_red is not None:
+            perdidos = {}
+            for v in self.desenlace_red["creyentes"]:
+                d = self.red.datos[v]
+                if d["voto"] == "Daniel Ospina":
+                    perdidos[v] = d["peso"]
+            if perdidos:
+                total = sum(perdidos.values())
+                quien = en_lista(self.nombres(perdidos))
+                mover("Daniel Ospina", -total, f"{quien} se creyeron el rumor")
+                mover("Hugo Bravo", total / 2, "El escándalo le sirve")
+        # 2. lo que movieron los nodos que recorriste
+        for nodo in self.arbol_decision.camino:
+            for candidato, delta in VOTOS_POR_NODO.get(nodo.id, {}).items():
+                mover(candidato, delta, nodo.corto)
+        # 3. como quedo la ciudad: cada campana vive de ciertos indicadores
+        for nombre, _lema, pesos in CANDIDATOS:
+            cambio = sum((self.indicadores[k] - self._indicadores_al_empezar[k]) * p
+                         for k, p in pesos.items())
+            mover(nombre, round(cambio * PESO_INDICADORES, 1), "Cómo quedó la ciudad")
+
+    def porcentajes(self, encuesta=None):
+        """La encuesta normalizada a 100, en enteros que suman 100."""
+        encuesta = encuesta or self.encuesta
+        total = sum(encuesta.values()) or 1
+        pct = {c: int(100 * encuesta[c] / total) for c in NOMBRES_CANDIDATOS}
+        lider = max(pct, key=lambda c: encuesta[c])
+        pct[lider] += 100 - sum(pct.values())
+        return pct
 
     def decisiones_descubiertas(self):
         """(ganadas, total) o None si hoy no se investiga."""
@@ -710,9 +849,11 @@ class Partida:
         self.ultimos_efectos = efectos
         self.ultimo_detalle = nodo.detalle
         if recorto:
-            ya, _ = self.alcance_rumor()
-            self.ultimo_detalle += (f"\nLlegaste a las {self.hora()}: ya lo habían "
-                                    f"visto {ya} cuentas. Rinde menos.")
+            tarde = self.nombres(v for v in self.creyentes()
+                                 if v not in self.creyentes(NIVEL_INICIAL))
+            self.ultimo_detalle += (f"\nLlegaste a las {self.hora()}: "
+                                    f"{en_lista(tarde)} ya lo creían.")
+        self._saber(REVELA_POR_NODO.get(nodo.id, ()))
 
         if nodo.rasgo in prota.perfil:
             prota.perfil[nodo.rasgo] += 1
@@ -797,18 +938,12 @@ class Partida:
     # =============================================================
 
     def resultado_eleccion(self):
-        puntajes = []
-        for nombre, lema, pesos in CANDIDATOS:
-            total = sum(self.indicadores[k] * p for k, p in pesos.items())
-            puntajes.append((total, nombre, lema))
-        puntajes.sort(reverse=True)
-        minimo = min(p for p, _, _ in puntajes)
-        ajustados = [p - minimo + 12 for p, _, _ in puntajes]
-        total = sum(ajustados) or 1
-        porcentajes = [int(100 * a / total) for a in ajustados]
-        porcentajes[0] += 100 - sum(porcentajes)
-        return [(nombre, lema, pct)
-                for (_, nombre, lema), pct in zip(puntajes, porcentajes)]
+        """El escrutinio es la encuesta del ultimo dia: el final es la suma
+        de lo que pasó cada dia, no una cuenta aparte."""
+        pct = self.porcentajes()
+        lemas = {n: l for n, l, _ in CANDIDATOS}
+        orden = sorted(NOMBRES_CANDIDATOS, key=lambda c: pct[c], reverse=True)
+        return [(c, lemas[c], pct[c]) for c in orden]
 
     def tabla_jugadores(self):
         """Los jugadores ordenados por puntuacion individual (seccion 11)."""

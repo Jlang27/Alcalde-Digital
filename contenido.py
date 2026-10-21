@@ -324,6 +324,7 @@ OCULTAS_CAPITULO_1 = {
 # cuenta lo del video hasta que Don Rafa te dice que ella lo vio).
 #
 #   npc:      a quien se le pregunta, o None si es una zona del celular
+#   pregunta / accion: como se nombra en el dialogo o en la libreta
 #   costo:    segundos del reloj del celular (las charlas cuestan rondas,
 #             ver juego.MINUTOS_POR_RONDA, no segundos)
 #   abre:     opciones del arbol de decision que vuelven al ganarla
@@ -342,31 +343,38 @@ PISTAS_CAPITULO_1 = [
      "pregunta": "¿Y qué fue ese alboroto del fondo?",
      "respuesta": ("Sofía, la del colegio, estaba con unas mamás discutiendo.",
                    "Ella decía que ese video está cortado, que no es así.",
+                   "Mostraba un acta que publicó la gente de Ruiz. Datos tiene esa",
+                   "señora, no le digo que no... pero aquí en el barrio nadie la conoce.",
                    "Las mamás no le creyeron. Pregúntele usted."),
      "texto": "Sofía dice que el video está cortado. Hay que preguntarle.",
-     "abre": (), "aristas": []},
+     "abre": (), "aristas": [], "revela": ("ruiz_acta",)},
     # ---- Sofia: sin lo de Rafa, esquiva el tema ----
     {"id": "sofia_saludo", "npc": "sofia", "padre": None, "costo": 0,
      "pregunta": "Hola, Sofía. ¿Qué opinas de lo de Ospina?",
-     "respuesta": ("Estoy esperando la reunión de padres de las 8:30.",
-                   "Y no, no quiero hablar de ese video. Ya discutí bastante hoy."),
-     "texto": "Sofía no quiere hablar del video... por ahora.",
-     "abre": (), "aristas": []},
+     "respuesta": ("Estoy esperando la reunión de padres de las 8:30. La organiza Medina.",
+                   "Y fíjate: Medina no ha dicho ni una palabra del video. A ella le",
+                   "conviene que Ospina caiga. No, no quiero hablar más del video hoy."),
+     "texto": "Sofía no quiere hablar del video, pero se queja de que Medina calla.",
+     "abre": (), "aristas": [], "revela": ("medina_calla",)},
     {"id": "sofia_video", "npc": "sofia", "padre": "rafa_alboroto", "costo": 0,
      "pregunta": "Don Rafa dice que tú sabes que el video está cortado.",
      "respuesta": ("Sí. Vi el video entero anoche, en el canal del concejo.",
                    "Dura dos minutos y medio. Ospina habla de REMODELAR el colegio.",
                    "El que circula lo cortaron justo antes de esa parte."),
      "texto": "Sofía vio el video completo: Ospina habla de remodelar, no de cerrar.",
-     "abre": ("verificar",), "aristas": [("sofia", "concejo")]},
+     "abre": ("verificar",), "aristas": [("sofia", "concejo")],
+     "revela": ("ospina_remodelar",)},
     # ---- Don Hernan: lo cree, y justo por eso sabe de donde vino ----
     {"id": "hernan_saludo", "npc": "hernan", "padre": None, "costo": 0,
      "pregunta": "Buenos días. ¿Usted ya vio lo del colegio?",
      "respuesta": ("¡Es que lo dijo todo el grupo! Cuarenta personas no se equivocan.",
                    "Me llegó por el grupo de mamás y ya se lo reenvié a mi familia.",
-                   "Si cierran el colegio, ¿a dónde mando yo a mis dos hijos?"),
+                   "Si cierran el colegio, ¿a dónde mando yo a mis dos hijos?",
+                   "Y si fuera remodelar, igual: promesas de obra hay en cada elección",
+                   "y la plata nunca aparece. ¿Ospina dijo de dónde la va a sacar?"),
      "texto": "Don Hernán lo cree: le llegó por el grupo de mamás.",
-     "abre": (), "aristas": [("tu", "hernan"), ("hernan", "grupo")]},
+     "abre": (), "aristas": [("tu", "hernan"), ("hernan", "grupo")],
+     "revela": ("ospina_plata",)},
     {"id": "hernan_quien", "npc": "hernan", "padre": "hernan_saludo", "costo": 0,
      "pregunta": "¿Y usted conoce a esas cuarenta personas?",
      "respuesta": ("Pues... la verdad, no. Se unieron al grupo esta semana.",
@@ -375,21 +383,106 @@ PISTAS_CAPITULO_1 = [
      "abre": (), "aristas": [("grupo", "bot1"), ("grupo", "bot2"), ("grupo", "bot3")]},
     # ---- en el celular (zonas de la publicacion) ----
     {"id": "perfil", "npc": None, "padre": None, "costo": 3,
+     "accion": "Mirar el perfil de @NovaAlerta",
      "texto": "@NovaAlerta: cuenta creada hace 2 días.",
      "abre": ("reportar",), "aristas": []},
     {"id": "cuenta", "npc": None, "padre": "perfil", "costo": 3,
+     "accion": "Verificar la cuenta",
      "texto": "0 fotos, 12 seguidores... y los 12 son cuentas nuevas que le reenvían todo.",
      "abre": (), "aristas": [("bot1", "nova"), ("bot2", "nova"), ("bot3", "nova")]},
     {"id": "comentarios", "npc": None, "padre": None, "costo": 3,
+     "accion": "Leer los comentarios",
      "texto": "40 cuentas casi idénticas lo reenvían al grupo de mamás del colegio.",
      "abre": (), "aristas": [("grupo", "bot1"), ("grupo", "bot2"), ("grupo", "bot3")]},
     {"id": "fecha", "npc": None, "padre": "comentarios", "costo": 3,
+     "accion": "Ver la hora de publicación",
      "texto": "Publicado a las 6:02 a. m.: las 40 cuentas lo compartieron en ese mismo minuto.",
      "abre": ("d_bots",), "aristas": []},
     {"id": "foto", "npc": None, "padre": None, "costo": 3,
+     "accion": "Mirar el video",
      "texto": "El clip dura 0:14. El video original del concejo dura 2:30: alguien lo recortó.",
-     "abre": ("v_desmentir",), "aristas": []},
+     "abre": ("v_desmentir",), "aristas": [], "revela": ("ospina_remodelar",)},
 ]
+
+# ===================================================================
+#  EXPEDIENTE DE CANDIDATOS: lo que de verdad proponen
+# ===================================================================
+# Cada hecho se descubre con una pista (campo "revela") o al pasar por un
+# nodo del arbol de decision (REVELA_POR_NODO). El expediente dura toda la
+# partida, y saber un hecho pone la bandera "sabe_<id>", que abre ramas en
+# los dias siguientes (RAMAS_POR_BANDERA). Las preguntas y los desenlaces
+# se excluyen entre si, asi que una partida nunca ve el expediente entero.
+#
+# Para los dias 2 a 5: agregar aqui sus hechos con el mismo formato y
+# apuntarlos desde las pistas o nodos de ese dia. Nada mas que tocar.
+#   barrio: lo que opina un vecino; dice si al barrio le importa o no
+HECHOS = {
+    "ospina_remodelar": {
+        "candidato": "Daniel Ospina", "tema": "Educación",
+        "texto": "Propone remodelar el colegio del barrio, no cerrarlo.",
+        "barrio": ""},
+    "ospina_plata": {
+        "candidato": "Daniel Ospina", "tema": "Educación",
+        "texto": "Su plan de obras no dice de dónde sale la plata.",
+        "barrio": "Don Hernán: «Promesas de obra hay en cada elección»."},
+    "bravo_nova": {
+        "candidato": "Hugo Bravo", "tema": "Juego limpio",
+        "texto": "@NovaAlerta reenvía material de su campaña.",
+        "barrio": ""},
+    "bravo_anuncios": {
+        "candidato": "Hugo Bravo", "tema": "Juego limpio",
+        "texto": "Su campaña pagó anuncios en el grupo de mamás esa misma mañana.",
+        "barrio": ""},
+    "medina_calla": {
+        "candidato": "Juan Medina", "tema": "Convivencia",
+        "texto": "Organiza la reunión de padres y no ha dicho nada del rumor.",
+        "barrio": "Sofía: «A ella le conviene que Ospina caiga»."},
+    "ruiz_acta": {
+        "candidato": "Elena Ruiz", "tema": "Transparencia",
+        "texto": "Su campaña publicó el acta del concejo con la propuesta completa.",
+        "barrio": "Don Rafa: «Datos tiene, pero aquí nadie la conoce»."},
+}
+
+# Nodos del arbol de decision que, al recorrerlos, revelan un hecho.
+REVELA_POR_NODO = {
+    "d_resultado": ("ospina_remodelar",),      # verificar te da el contexto
+    "d_rastreo": ("bravo_nova",),
+    "d_bots": ("bravo_anuncios",),
+}
+
+# ===================================================================
+#  ENCUESTA: como se mueve la intencion de voto
+# ===================================================================
+ENCUESTA_INICIAL = {"Daniel Ospina": 25, "Hugo Bravo": 22,
+                    "Juan Medina": 26, "Elena Ruiz": 27}
+
+# Puntos de encuesta que mueve pasar por un nodo, cualquier dia.
+VOTOS_POR_NODO = {
+    "c_result": {"Daniel Ospina": -4, "Hugo Bravo": 3},
+    "i_result": {"Daniel Ospina": -1},
+    "v_desmentir": {"Daniel Ospina": 3},
+    "v_reportar": {"Daniel Ospina": 1},
+    "d_rastreo": {"Hugo Bravo": -5, "Daniel Ospina": 1},
+    "d_bots": {"Hugo Bravo": -3},
+    "b_nova": {"Hugo Bravo": -3},
+    "b_cuentas": {"Daniel Ospina": -1, "Elena Ruiz": 1},
+}
+
+# Las hojas que frenan el rumor: protegen a los vecinos a los que aun no
+# habia llegado cuando decidiste.
+OPCIONES_QUE_PROTEGEN = {"v_reportar", "v_desmentir", "d_bots", "d_rastreo",
+                         "r_result"}
+
+# Lo que la ciudad recordara manana, en palabras: se lee al cerrar el dia.
+TEXTO_BANDERA = {
+    "difundiste_una_falsa": "Que compartiste el rumor del colegio.",
+    "desmentiste_una_falsa": "Que desmentiste el rumor con pruebas.",
+    "reportaste_con_prueba": "Que reportaste la cuenta con pruebas.",
+    "dejaste_correr_una_falsa": "Que dejaste correr el rumor.",
+    "expusiste_bots": "Que expusiste las cuentas bot.",
+    "rastreaste_el_origen": "Que llegaste hasta @NovaAlerta.",
+    "llegaste_tarde": "Que el rumor te ganó la carrera.",
+}
 
 # Nombre y oficio de los que hablan en la cafeteria.
 NPCS_CAPITULO_1 = {
@@ -415,28 +508,46 @@ OPCION_POR_CAMINO = "d_rastreo"
 
 # Red COMPLETA de quien le paso el rumor a quien. A -> B = "A lo recibio de B".
 # El jugador nunca la ve entera: va descubriendo aristas con las pistas.
+#
+# Los VECINOS son a quienes el rumor les cambia el voto: cada uno tiene su
+# candidato y un peso (cuanta gente arrastra: su familia, su clientela).
+# El rumor NO pasa por ti salvo que compartas: Ana y Luis son tus
+# contactos, y si llegas tarde les llega igual, por Caro y por Jorge.
+#   id: (nombre, tipo, voto, peso)
 VERTICES_CAPITULO_1 = {
-    "nova": ("@NovaAlerta", "origen"),
-    "bot1": ("@vecino_2291", "bot"), "bot2": ("@nova_real", "bot"),
-    "bot3": ("@mama_preocupada7", "bot"),
-    "grupo": ("Grupo Mamás del Colegio", "grupo"),
-    "cajero": ("Don Rafa", "ciudadano"), "hernan": ("Don Hernán", "ciudadano"),
-    "sofia": ("Sofía", "ciudadano"), "concejo": ("Canal del Concejo", "medio"),
-    "tu": ("Mateo", "jugador"),
-    # a quienes les llegaria si Mateo lo comparte
-    "ana": ("Ana", "ciudadano"), "luis": ("Luis", "ciudadano"),
-    "caro": ("Caro", "ciudadano"), "pedro": ("Pedro", "ciudadano"),
-    "lina": ("Lina", "ciudadano"), "jorge": ("Jorge", "ciudadano"),
+    "nova": ("@NovaAlerta", "origen", None, 0),
+    "bot1": ("@vecino_2291", "bot", None, 0),
+    "bot2": ("@nova_real", "bot", None, 0),
+    "bot3": ("@mama_preocupada7", "bot", None, 0),
+    "grupo": ("Grupo Mamás del Colegio", "grupo", None, 0),
+    "hernan": ("Don Hernán", "vecino", "Daniel Ospina", 3),
+    "cajero": ("Don Rafa", "vecino", "Juan Medina", 2),
+    "lina": ("Lina", "vecino", "Daniel Ospina", 2),
+    "pedro": ("Pedro", "vecino", "Daniel Ospina", 2),
+    "jorge": ("Jorge", "vecino", "Elena Ruiz", 2),
+    "caro": ("Caro", "vecino", "Daniel Ospina", 2),
+    "ana": ("Ana", "vecino", "Daniel Ospina", 2),
+    "luis": ("Luis", "vecino", "Juan Medina", 2),
+    "sofia": ("Sofía", "testigo", None, 0),
+    "concejo": ("Canal del Concejo", "medio", None, 0),
+    "tu": ("Mateo", "jugador", None, 0),
 }
 ARISTAS_CAPITULO_1 = [
-    ("bot1", "nova"), ("bot2", "nova"), ("bot3", "nova"), ("hernan", "nova"),
+    ("bot1", "nova"), ("bot2", "nova"), ("bot3", "nova"),
     ("grupo", "bot1"), ("grupo", "bot2"), ("grupo", "bot3"),
-    ("grupo", "hernan"), ("hernan", "grupo"),           # ciclo: se lo reenvian
-    ("cajero", "grupo"), ("tu", "cajero"), ("tu", "hernan"),
+    ("hernan", "grupo"), ("grupo", "hernan"),           # ciclo: se lo reenvian
+    ("cajero", "grupo"),
+    ("lina", "hernan"), ("pedro", "cajero"),             # su hermana, un cliente
+    ("jorge", "lina"), ("caro", "lina"),
+    ("ana", "caro"), ("luis", "jorge"),
+    ("tu", "cajero"), ("tu", "hernan"),                  # a ti te lo mostraron
+    ("ana", "tu"), ("luis", "tu"),                       # solo si compartes
     ("sofia", "concejo"),
-    ("ana", "tu"), ("luis", "tu"), ("caro", "ana"), ("pedro", "ana"),
-    ("lina", "luis"), ("jorge", "caro"), ("hernan", "lina"),
 ]
+# A las 7:30 el rumor ya va por el nivel 3 (Hernan y Don Rafa lo tienen) y
+# baja un nivel cada RONDAS_POR_NIVEL charlas.
+NIVEL_INICIAL = 3
+RONDAS_POR_NIVEL = 2
 
 
 # ===================================================================
@@ -453,6 +564,8 @@ PUBLICACIONES = [
         "veracidad": "falsa",
         "contexto": "Daniel Ospina propuso REMODELAR el colegio. Alguien recortó el video.",
         "compartidos": 1240,
+        # mas que los 25 s de serie: el dia 1 tiene cinco zonas que mirar
+        "tiempo": 40.0,
     },
     {
         "id": "alcalde",
@@ -704,6 +817,32 @@ RAMAS_POR_BANDERA = {
         {"confianza": 8, "info_verificada": 6}, "rigor", 1,
         "Lo que publicaste ayer resultó cierto. Hoy la gente te lee distinto.",
         "Tu palabra pesa"),
+    # ---- lo que sabes de los candidatos (expediente, ver HECHOS) ----
+    "sabe_bravo_nova": (
+        "raiz", "b_nova", "Recordar quién está detrás de @NovaAlerta",
+        {"desinformacion": -8, "confianza": 4}, "rigor", 1,
+        "Sabes que esa cuenta trabaja para Bravo. Lo dices, con la captura.",
+        "Detrás de Nova"),
+    "sabe_bravo_anuncios": (
+        "raiz", "b_anuncios", "Preguntar quién paga los anuncios",
+        {"info_verificada": 6, "desinformacion": -4}, "rigor", 1,
+        "Ayer viste a quién le pagaron. Hoy preguntas antes de creer.",
+        "¿Quién paga?"),
+    "sabe_ospina_plata": (
+        "raiz", "b_cuentas", "Exigir cuentas claras a los candidatos",
+        {"info_verificada": 6, "confianza": 3}, "rigor", 1,
+        "Ni el rumor ni la promesa: pides los números. Ospina tampoco los tiene.",
+        "Exigir cuentas"),
+    "sabe_ruiz_acta": (
+        "raiz", "b_acta", "Buscar el acta oficial antes de opinar",
+        {"info_verificada": 7, "conflictos": -2}, "rigor", 1,
+        "La gente de Ruiz publica las actas. Vas directo a la fuente.",
+        "Ir al acta"),
+    "sabe_medina_calla": (
+        "raiz", "b_silencio", "Preguntar por qué callan los que saben",
+        {"convivencia": 4, "confianza": 4}, "empatia", 1,
+        "El silencio también es una jugada. Lo dices en voz alta.",
+        "Romper el silencio"),
     "llegaste_tarde": (
         "raiz", "b_a_tiempo", "Esta vez, actuar a tiempo",
         {"desinformacion": -7, "confianza": 4}, "rigor", 1,
