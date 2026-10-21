@@ -283,6 +283,9 @@ class NodoDecision:
         self.hijos = []
         self.padre = None
         self.visitado = False
+        # False si la rama estuvo escondida todo el dia: el diagrama la
+        # dibuja como lo que pudo ser y no fue, no como lo no elegido.
+        self.descubierto = True
 
         self.x = 0.0
         self.profundidad = 0
@@ -413,6 +416,21 @@ class ArbolDecision:
         for hijo in nodo.hijos:
             eliminados += self.podar_por_habilidad(ids_habilidades, hijo)
         return eliminados
+
+    def desprender(self, id_nodo):
+        """ELIMINACION de un subarbol que se conserva para reinsertarlo.
+
+        Es como el Dia 1 esconde las opciones que el jugador todavia no se
+        gano: se sueltan aqui y vuelven con insertar_opcion cuando aparece
+        la pista. Devuelve (id_padre, nodo) o None. La raiz no se suelta.
+        """
+        nodo = self.buscar(id_nodo)
+        if nodo is None or nodo.padre is None:
+            return None
+        padre = nodo.padre
+        padre.hijos.remove(nodo)
+        nodo.padre = None
+        return padre.id, nodo
 
     # ---------------- APOYO A LA INTERFAZ ----------------
 

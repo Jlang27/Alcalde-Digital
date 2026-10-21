@@ -1551,6 +1551,38 @@ def quitar_npc(actores):
         actor.removeNode()
 
 
+# Los que tienen algo que contar en la cafeteria (capitulo 1). Las sillas
+# salen de generar_cafeteria.py. El rumbo usa el mismo convenio que
+# jugador.py (H = 180 - atan2(dx, dz)): 0 mira a la sala, 90 hacia +x.
+#   id: (modelo, (x, y, z), rumbo, animacion)
+NPCS_CAFETERIA = {
+    "sofia":  ("npc1", (-2.08, 0.0, 1.60), -90.0, "sentado"),   # mesa de la pared
+    "hernan": ("npc2", (2.28, 0.0, -1.10), 90.0, "sentado"),    # mesa de la derecha
+    "cajero": ("cashier", (-0.05, 0.0, 3.95), 0.0, "idle"),     # punta de la barra
+}
+# Medio lado del rectangulo que no se deja pisar alrededor de cada uno.
+RADIO_NPC = 0.28
+
+
+def poner_npcs(mundo, specs=NPCS_CAFETERIA):
+    """Planta a los NPCs. Devuelve ({id: actor}, rectangulos de bloqueo).
+
+    Sin luces propias: con las 6 del mundo y las 2 del protagonista ya
+    esta el tope de 8 de simplepbr. Los ilumina la sala, como a la gente
+    de fondo de cualquier plano.
+    """
+    actores, rectangulos = {}, []
+    for id_npc, (modelo, pos, rumbo, animacion) in specs.items():
+        actor = npc(mundo, modelo, pos, rumbo, animacion)
+        if actor is None:
+            continue
+        actores[id_npc] = actor
+        x, _, z = pos
+        rectangulos.append((x - RADIO_NPC, x + RADIO_NPC,
+                            z - RADIO_NPC, z + RADIO_NPC))
+    return actores, rectangulos
+
+
 POSICION_INVITADO = Vec3(1.05, 0.0, 0.30)
 # Entre los dos: es a donde mira la camara en el plano de dos.
 PUNTO_MEDIO = Vec3(0.52, 0.0, 0.15)

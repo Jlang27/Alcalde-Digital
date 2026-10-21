@@ -28,11 +28,15 @@ insercion que ya usa el arbol de habilidades.
 
 import random
 
-from estructuras import NodoHabilidad, NodoDecision
+from estructuras import NodoHabilidad, NodoDecision, ArbolHabilidades
+from grafo import Grafo
 from contenido import (
     INDICADORES_INICIALES, INDICADORES_META, ROLES, PUBLICACIONES,
     EVENTOS_ALEATORIOS, RAMAS_DINAMICAS, INYECCIONES, INYECCIONES_DINAMICAS,
     CARTAS_BASE, UMBRAL_CASCADA, CAPITULO_1, EVENTO_CAPITULO_1,
+    OPCIONES_CAPITULO_1, OCULTAS_CAPITULO_1, PISTAS_CAPITULO_1,
+    VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1,
+    ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
     construir_arbol_habilidades, construir_arbol_decision,
     aplicar_habilidades, aplicar_banderas,
 )
@@ -43,7 +47,24 @@ RASGOS = ["rigor", "empatia", "alcance", "impulso"]
 # interviene cuando le salta la interrupcion en mitad de la escena.
 TIEMPO_ESCENA = 25.0
 TIEMPO_INTERVENCION = 8.0
-DURACION_FLASH = 2.6
+DURACION_FLASH = 3.6
+# Lo que siempre le debe quedar al protagonista para decidir: mirar una
+# pista no puede comerse el reloj entero.
+MARGEN_MINIMO = 2.0
+
+# La manana del dia 1: cada charla en la cafeteria es una RONDA de 10
+# minutos, y en cada ronda el rumor avanza un nivel por el grafo (BFS
+# desde el origen). A las 8:30 empieza la reunion de padres y se acabo.
+HORA_INICIO = 7 * 60 + 30
+MINUTOS_POR_RONDA = 10
+MAX_RONDAS = 6
+EFECTO_RONDA = {"desinformacion": 2}
+COMPARTIDOS_POR_RONDA = 150
+# Las dos primeras charlas salen gratis; desde la tercera, lo bueno que
+# hagas al decidir rinde un 12 % menos por ronda, hasta quedarse en el 40 %.
+RONDAS_GRATIS = 2
+CASTIGO_RONDA = 0.12
+FACTOR_MINIMO = 0.4
 
 DIAS_PARTIDA = 5
 
@@ -192,6 +213,18 @@ class Partida:
         self.flash_tiempo = 0.0
         self.opcion_nueva = None      # id de la opcion recien insertada
 
+        # --- investigacion del dia 1 (ver _preparar_investigacion) ---
+        self.pistas = None            # ArbolHabilidades de pistas
+        self.datos_pista = {}
+        self.red = None               # Grafo completo de quien paso el rumor
+        self.red_conocida = None      # solo las aristas que ya descubriste
+        self.ramas_ocultas = {}       # id -> (id_padre, nodo desprendido)
+        self.por_abrir = set()        # ganadas pero sin padre todavia
+        self.total_decisiones = 0
+        self.novedades = []           # opciones recien ganadas, para la alerta
+        self.compartidos = 0
+        self.rondas = 0               # charlas de la manana (10 min cada una)
+
         self.avisos = []
 
     # =============================================================
@@ -256,6 +289,10 @@ class Partida:
                                       prota.habilidades_activas())
         # 3. lo que paso en dias anteriores inserta las suyas
         memoria = aplicar_banderas(self.arbol_decision, self.banderas)
+        # 3b. el dia 1 esconde lo que hay que ganarse (despues de 2 y 3,
+        #     para que las ramas de habilidades viajen con su subarbol)
+        self.compartidos = self.publicacion["compartidos"]
+        self._preparar_investigacion()
         # 4. se reparten las cartas de intervencion a los demas jugadores
         self._repartir_cartas()
 
@@ -295,6 +332,25 @@ class Partida:
                     self.banderas_del_dia.append(nodo.bandera)
                 self.banderas.add(nodo.bandera)
 
+        if self.pistas is not None and self.manana_agotada():
+            self.banderas_del_dia.append("llegaste_tarde")
+            self.banderas.add("llegaste_tarde")
+
+        # Lo que no se gano vuelve al arbol, marcado, para que el diagrama
+        # ensene tambien lo que habia por descubrir. El dia ya cerro: el
+        # cursor esta en una hoja y esto no abre ninguna opcion jugable.
+        for _id_padre, nodo in self.ramas_ocultas.values():
+            for n in self.arbol_decision.recorrido_dfs(nodo):
+                n.descubierto = False
+        pendientes = dict(self.ramas_ocultas)
+        while pendientes:
+            puestas = [i for i, (padre, nodo) in pendientes.items()
+                       if self.arbol_decision.insertar_opcion(padre, nodo)]
+            if not puestas:
+                break
+            for i in puestas:
+                del pendientes[i]
+
         if self.dia_actual >= self.dias_completados:
             self.dias_completados = self.dia_actual + 1
             prota.puntos += 1
@@ -305,6 +361,181 @@ class Partida:
 
     def partida_terminada(self):
         return self.dias_completados >= self.total_dias
+
+    # =============================================================
+    #  INVESTIGACION: las decisiones del dia 1 se ganan
+    # =============================================================
+
+    def _preparar_investigacion(self):
+        self.pistas = None
+        self.datos_pista = {}
+        self.red = self.red_conocida = None
+        self.ramas_ocultas = {}
+        self.por_abrir = set()
+        self.total_decisiones = 0
+        self.novedades = []
+        self.rondas = 0
+        if self.publicacion["id"] != CAPITULO_1:
+            return
+
+        arbol = self.arbol_decision
+        for (id_padre, id_nuevo, texto, efectos, rasgo, puntos, detalle,
+             corto, bandera) in OPCIONES_CAPITULO_1:
+            arbol.insertar_opcion(id_padre, NodoDecision(
+                id_nuevo, texto, efectos=efectos, rasgo=rasgo, detalle=detalle,
+                puntos=puntos, corto=corto, bandera=bandera))
+        for id_nodo in OCULTAS_CAPITULO_1:
+            nodo = arbol.buscar(id_nodo)
+            # lo que trae una habilidad ya comprada no se esconde: ya se gano
+            if nodo is None or nodo.habilidad_origen:
+                continue
+            self.ramas_ocultas[id_nodo] = arbol.desprender(id_nodo)
+        self.total_decisiones = len(arbol.raiz.hijos) + len(self.ramas_ocultas)
+
+        # Mismo armado que construir_arbol_habilidades: es la misma
+        # estructura (prerrequisitos), con pistas en vez de habilidades.
+        raiz = NodoHabilidad("raiz_pistas", "Pistas", "", 0)
+        self.pistas = ArbolHabilidades(raiz)
+        for spec in PISTAS_CAPITULO_1:
+            padre = self.pistas.buscar(spec["padre"]) if spec["padre"] else raiz
+            padre.agregar_hijo(NodoHabilidad(
+                spec["id"], spec.get("pregunta") or spec["id"], spec["texto"],
+                spec["costo"]))
+            self.datos_pista[spec["id"]] = spec
+
+        self.red, self.red_conocida = Grafo(), Grafo()
+        for v, (nombre, tipo) in VERTICES_CAPITULO_1.items():
+            self.red.agregar_vertice(v, nombre=nombre, tipo=tipo)
+            self.red_conocida.agregar_vertice(v, nombre=nombre, tipo=tipo)
+        for a, b in ARISTAS_CAPITULO_1:
+            self.red.agregar_arista(a, b)
+
+    def descubrir(self, id_pista):
+        """El jugador encontro una pista. Devuelve (exito, texto).
+
+        Tres estructuras se tocan aqui: el arbol de pistas valida el
+        prerrequisito, el grafo suma aristas y, si ya conecta al jugador
+        con el origen, el arbol de decision recibe la rama de rastrear.
+        """
+        if (self.pistas is None or self.arbol_decision is None
+                or self.arbol_decision.termino()):
+            return False, ""
+        nodo = self.pistas.buscar(id_pista)
+        if nodo is None or id_pista not in self.datos_pista:
+            return False, ""
+        spec = self.datos_pista[id_pista]
+        if spec["npc"] and self.manana_agotada():
+            return False, "Ya son las 8:30: empezó la reunión de padres."
+        if nodo.costo and self.tiempo_restante < nodo.costo + MARGEN_MINIMO:
+            return False, "No queda tiempo para mirar esto."
+        # los segundos hacen de "puntos": el reloj paga la pista
+        ok, self.tiempo_restante, mensaje = self.pistas.desbloquear(
+            id_pista, self.tiempo_restante)
+        if not ok:
+            return False, mensaje
+
+        # Hablar cuesta una ronda: mientras charlas, el rumor no se queda
+        # quieto. (Las zonas del celular ya cobraron sus segundos arriba.)
+        if spec["npc"]:
+            self.rondas += 1
+            self._aplicar_efectos(EFECTO_RONDA)
+            self.compartidos += COMPARTIDOS_POR_RONDA
+        for a, b in spec["aristas"]:
+            self.red_conocida.agregar_arista(a, b)
+
+        texto = spec["texto"]
+        nuevas = list(spec["abre"])
+        if self.red_conocida.camino(ORIGEN_JUGADOR, ORIGEN_RUMOR):
+            nuevas.append(OPCION_POR_CAMINO)
+        self._abrir(nuevas)
+        return True, texto
+
+    def _abrir(self, ids):
+        """Reinserta las ramas ganadas. Si el padre sigue escondido (el
+        video recortado antes de poder verificar), espera en por_abrir y
+        entra en cuanto el padre vuelva."""
+        self.por_abrir.update(i for i in ids if i in self.ramas_ocultas)
+        avanzo = True
+        while avanzo:
+            avanzo = False
+            for id_nodo in list(self.por_abrir):
+                id_padre, nodo = self.ramas_ocultas[id_nodo]
+                if self.arbol_decision.insertar_opcion(id_padre, nodo):
+                    del self.ramas_ocultas[id_nodo]
+                    self.por_abrir.discard(id_nodo)
+                    self.novedades.append(nodo.texto)
+                    self.avisar(f"Nueva decisión: {nodo.texto}.", "bien",
+                                self.protagonista)
+                    avanzo = True
+
+    def preguntas_de(self, id_npc):
+        """Lo que se le puede preguntar AHORA a ese NPC.
+
+        Es la frontera del arbol de pistas (lo bloqueado cuyo padre ya se
+        sabe) filtrada por quien responde. Saber algo nuevo mueve la
+        frontera, y por eso a otro NPC le aparece una pregunta nueva.
+        """
+        if self.pistas is None or self.manana_agotada():
+            return []
+        return [n for n in self.pistas.frontera()
+                if self.datos_pista[n.id]["npc"] == id_npc]
+
+    def manana_agotada(self):
+        return self.rondas >= MAX_RONDAS
+
+    def hora(self):
+        minutos = HORA_INICIO + self.rondas * MINUTOS_POR_RONDA
+        return f"{minutos // 60}:{minutos % 60:02d}"
+
+    def nivel_rumor(self):
+        """Hasta que nivel del BFS desde el origen va el rumor."""
+        return 1 + self.rondas
+
+    def alcance_rumor(self):
+        """(cuentas a las que ya llego, cuentas a las que puede llegar).
+
+        Sale del grafo, no de una tabla: un BFS desde @NovaAlerta por las
+        flechas invertidas, cortado en el nivel que marca el reloj.
+        """
+        if self.red is None:
+            return 0, 0
+        invertida = self.red.invertido()
+        _, ya = invertida.bfs(ORIGEN_RUMOR, max_prof=self.nivel_rumor())
+        _, todas = invertida.bfs(ORIGEN_RUMOR)
+        return len(ya), len(todas)
+
+    def factor_tardanza(self):
+        if self.pistas is None:
+            return 1.0
+        extra = max(0, self.rondas - RONDAS_GRATIS)
+        return max(FACTOR_MINIMO, 1.0 - CASTIGO_RONDA * extra)
+
+    def _con_tardanza(self, efectos):
+        """Recorta solo lo BUENO: llegar tarde no hace menos dano lo malo."""
+        factor = self.factor_tardanza()
+        if factor >= 1.0:
+            return dict(efectos), False
+        sube_bien = {k for k, _, bueno in INDICADORES_META if bueno}
+        resultado, recorto = {}, False
+        for clave, delta in efectos.items():
+            bueno = (delta > 0) == (clave in sube_bien)
+            if bueno:
+                nuevo = round(delta * factor)
+                recorto = recorto or nuevo != delta
+                resultado[clave] = nuevo
+            else:
+                resultado[clave] = delta
+        return resultado, recorto
+
+    def decisiones_descubiertas(self):
+        """(ganadas, total) o None si hoy no se investiga."""
+        if self.pistas is None:
+            return None
+        return self.total_decisiones - len(self.ramas_ocultas), self.total_decisiones
+
+    def ocultas_bajo(self, id_padre):
+        """Ramas escondidas que colgarian de ese nodo (casillas vacias)."""
+        return [n for p, n in self.ramas_ocultas.values() if p == id_padre]
 
     # =============================================================
     #  CARTAS DE INTERVENCION
@@ -474,9 +705,14 @@ class Partida:
             return None
 
         prota = self.protagonista
-        self._aplicar_efectos(nodo.efectos)
-        self.ultimos_efectos = dict(nodo.efectos)
+        efectos, recorto = self._con_tardanza(nodo.efectos)
+        self._aplicar_efectos(efectos)
+        self.ultimos_efectos = efectos
         self.ultimo_detalle = nodo.detalle
+        if recorto:
+            ya, _ = self.alcance_rumor()
+            self.ultimo_detalle += (f"\nLlegaste a las {self.hora()}: ya lo habían "
+                                    f"visto {ya} cuentas. Rinde menos.")
 
         if nodo.rasgo in prota.perfil:
             prota.perfil[nodo.rasgo] += 1

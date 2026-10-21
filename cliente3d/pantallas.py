@@ -7,7 +7,7 @@ hacia la eleccion, que es la espina dorsal del guion.
 
 import math
 
-from ursina import Entity, Vec3, camera, color, curve, destroy, invoke
+from ursina import Button, Entity, Func, Vec3, camera, color, curve, destroy, invoke
 
 import ajustes as A
 import estilo as E
@@ -323,6 +323,172 @@ class AvisoLibre:
                                   ("ratón", "mirar"),
                                   ("enter", "sacar el teléfono"),
                                   ("esc", "menú")), -0.458)
+
+    def cerrar(self):
+        _limpiar(self.piezas)
+
+
+class Dialogo:
+    """La charla con un vecino de la cafeteria.
+
+    Abajo y en modo noche, como un subtitulo de cine: la escena sigue a
+    la vista, porque lo que importa es a QUIEN se lo oyes. Alterna dos
+    modos: las lineas de una respuesta, y el tarjeton de preguntas que
+    se pueden hacer con lo que ya sabes.
+    """
+
+    def __init__(self, nombre, quien, al_elegir):
+        self.piezas = []
+        self.cuerpo = []              # lo que cambia entre modos
+        self.al_elegir = al_elegir
+        self.lineas = []
+        self.indice = 0
+        self.modo = None
+        a = self.piezas.append
+        self.piezas += E.degradado_vertical(-0.52, -0.18, alfa=230)
+        a(E.banda(0.055, 0.0045, (-0.8325, -0.205), E.LLERAS))
+        a(E.pequena(f"{nombre.upper()}  ·  {quien}", (-0.86, -0.222),
+                    E.LLERAS, escala=0.58))
+        a(E.banda(2.4, 0.003, (0, -0.418), E.luz(46), z=E.Z_ADORNO))
+
+    def decir(self, lineas):
+        _limpiar(self.cuerpo)
+        self.modo = "lineas"
+        self.lineas = list(lineas)
+        self.indice = 0
+        self.texto = E.entradilla("", (-0.86, -0.262), 0.92, E.TEXTO, ancho=70)
+        self.cuenta = E.pequena("", (0.86, -0.222), E.TEXTO_TENUE,
+                                escala=0.50, origen=(0.5, 0.5))
+        self.cuerpo += [self.texto, self.cuenta]
+        self.cuerpo += E.leyenda((("enter", "seguir"),), -0.458)
+        self._pintar()
+
+    def _pintar(self):
+        self.texto.text = self.lineas[self.indice]
+        self.texto.wordwrap = 70
+        self.cuenta.text = f"{self.indice + 1} / {len(self.lineas)}"
+
+    def avanzar(self):
+        """Pasa a la siguiente linea. Devuelve True si ya no quedan."""
+        if self.indice + 1 >= len(self.lineas):
+            return True
+        self.indice += 1
+        self._pintar()
+        return False
+
+    def preguntar(self, opciones):
+        """opciones: [(texto, nota)]. La nota es lo que cuesta («10 min»).
+
+        Casillas sin marcar, como el tarjeton: elegir una pregunta es
+        decidir en que gastas la manana.
+        """
+        _limpiar(self.cuerpo)
+        self.modo = "preguntas"
+        for i, (texto, nota) in enumerate(opciones):
+            y = -0.258 - i * 0.042
+            self.cuerpo += E.casilla((-0.848, y - 0.011), E.luz(90),
+                                     fondo=E.NOCHE, lado=0.020)
+            self.cuerpo.append(E.etiqueta(f"{i + 1}   {texto}", (-0.82, y), 0.88,
+                                          E.TEXTO if nota else E.TEXTO_TENUE))
+            if nota:
+                self.cuerpo.append(E.pequena(nota, (0.86, y - 0.002), E.GAITAN,
+                                             escala=0.52, origen=(0.5, 0.5)))
+            self.cuerpo.append(Button(
+                parent=camera.ui, color=color.rgba(255, 255, 255, 0),
+                highlight_color=color.rgba(255, 255, 255, 26),
+                scale=(1.74, 0.038), position=(0, y - 0.011),
+                on_click=Func(self.al_elegir, i)))
+        self.cuerpo += E.leyenda(((f"1-{len(opciones)}", "preguntar"),
+                                  ("esc", "despedirse")), -0.458)
+
+    def cerrar(self):
+        _limpiar(self.cuerpo)
+        _limpiar(self.piezas)
+
+
+class AvisoCiudadano:
+    """La primera vez que vas a hablar con alguien: lo que cuesta.
+
+    Modo papel a proposito: es una regla del juego, no algo que pasa en
+    la escena, y las reglas en este juego van impresas.
+    """
+
+    def __init__(self):
+        self.piezas = []
+        a = self.piezas.append
+        a(E.velo(z=E.Z_VELO))
+        a(E.banda(0.92, 0.40, (0, 0.02), E.PAPEL, z=E.Z_TARJETA))
+        a(E.banda(0.92, 0.010, (0, 0.215), E.LLERAS, z=E.Z_ADORNO_MODAL))
+        a(E.pequena("INFORMACIÓN CIUDADANA", (-0.42, 0.185), E.TINTA_TENUE,
+                    escala=0.56))
+        a(E.titular("Hablar cuesta tiempo", (-0.42, 0.155), 1.6, E.TINTA))
+        cuerpo = E.entradilla(
+            "Hablar con la gente da pistas, pero cada conversación son "
+            "10 minutos. Mientras hablas, el rumor sigue llegando a más "
+            "teléfonos, y lo que hagas después rinde menos. A las 8:30 "
+            "empieza la reunión de padres. Piensa bien a quién le preguntas.",
+            (-0.42, 0.075), 0.80, E.TINTA_TENUE, ancho=50)
+        a(cuerpo)
+        # velo 0.07 < papel 0.05 < filete 0.03 < textos 0: cada uno por
+        # delante del anterior, si no el papel se come las letras
+        self.piezas += E.leyenda((("enter", "entendido"),), -0.130, x0=-0.42,
+                                 z=E.Z_ADORNO_MODAL)
+
+    def cerrar(self):
+        _limpiar(self.piezas)
+
+
+class UltimaHora:
+    """«ÚLTIMA HORA · Nueva decisión»: se ganó una opción investigando.
+
+    Es un cintillo de noticiero y no un «logro desbloqueado»: en Ciudad
+    Nova lo que te llega es información, y se anuncia como se anuncia
+    una noticia. La casilla tachada dice que ya está en tu tarjetón.
+    """
+
+    ANCHO = 0.80
+
+    def __init__(self, texto, x=0.0, y=0.30, rotulo="ÚLTIMA HORA",
+                 titulo="Nueva decisión", tinta=None):
+        """(x, y) es el centro: arriba en la cafeteria, y con el celular
+        abajo a la izquierda, para no tapar la publicacion que se mira.
+        Con otro rotulo y otra tinta sirve para la pista que solo anota
+        algo en la red, sin abrir decision."""
+        tinta = tinta or E.GAITAN
+        self.piezas = []
+        self.reloj = 0.0
+        # Lo que tarda en leerse, no un numero fijo: a 2,6 s no daba para
+        # leer una pista entera.
+        self.duracion = max(4.5, 2.5 + len(texto) * 0.05)
+        a = self.piezas.append
+        x0 = x - self.ANCHO / 2
+
+        # alto para dos renglones de letra pequena: las pistas los traen
+        fondo = E.banda(0.001, 0.150, (x, y - 0.015), E.tinta(238))
+        fondo.animate_scale_x(self.ANCHO, duration=0.35, curve=curve.out_cubic)
+        a(fondo)
+        filo = E.banda(0.001, 0.008, (x, y + 0.064), tinta)
+        filo.animate_scale_x(self.ANCHO, duration=0.35, curve=curve.out_cubic)
+        a(filo)
+
+        self.piezas += E.casilla((x0 + 0.050, y), tinta, marcada=True,
+                                 lado=0.040, fondo=E.NOCHE, z=E.Z_ADORNO - 0.02)
+        tx = x0 + 0.090
+        textos = (
+            E.pequena(rotulo, (tx, y + 0.046), tinta, escala=0.60),
+            E.titular(titulo, (tx, y + 0.022), 1.30, E.TEXTO),
+            E.pequena(texto, (tx, y - 0.026), E.TEXTO_TENUE, escala=0.62),
+        )
+        textos[2].wordwrap = 52
+        for i, t in enumerate(textos):
+            t.alpha = 0
+            t.fade_in(duration=0.3, delay=0.15 + i * 0.08)
+            a(t)
+
+    def actualizar(self, dt):
+        """Devuelve True cuando ya ha durado lo suyo."""
+        self.reloj += dt
+        return self.reloj >= self.duracion
 
     def cerrar(self):
         _limpiar(self.piezas)

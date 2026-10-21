@@ -33,6 +33,7 @@ HOMBRO = 0.62                # descentra al personaje y deja aire a la derecha
 SUAVIDAD = 7.0               # retardo de la camara; 0 seria rigido
 
 PITCH_MIN, PITCH_MAX = -6.0, 32.0
+FOV_EXPLORACION = 40         # igual que mundo.FOV_BASE: horizontal, cerrada
 
 
 def _acercar(actual, objetivo, factor):
@@ -73,7 +74,8 @@ class Jugador:
         self.explorando = False
         self.caminando = False
 
-        self.camara_pos = Vec3(0, ALTURA_OBJETIVO, -DISTANCIA)
+        self.pivote = None              # lo que sigue la camara, con retardo
+        self.distancia = DISTANCIA
 
     def _bloqueado(self, x, z):
         """True si el personaje no cabe ahi.
@@ -114,7 +116,8 @@ class Jugador:
             avance = held_keys["w"] - held_keys["s"]
             lado = held_keys["d"] - held_keys["a"]
             self._caminar(avance, lado, dt)
-        self.seguir(dt)
+        # La camara la mueve quien llama a seguir() una vez por fotograma.
+        # Antes tambien se llamaba aqui y el retardo corria al doble.
 
     def _mirar(self, dx, dy):
         self.yaw += dx * SENSIBILIDAD
@@ -152,8 +155,11 @@ class Jugador:
             z = max(z_min, min(z_max, z))
         self.actor.setPos(x, self.altura_suelo, z)
 
-        # El personaje gira hacia donde anda, pero no de golpe.
-        objetivo = math.degrees(math.atan2(d.x, d.z)) + 180.0
+        # El personaje gira hacia donde anda, pero no de golpe. El H de
+        # Panda gira al reves que atan2(x, z): con el signo directo, W/S
+        # salian bien (0 y 180 son simetricos) pero con A/D miraba al lado
+        # contrario y caminaba de espaldas hacia donde iba.
+        objetivo = 180.0 - math.degrees(math.atan2(d.x, d.z))
         self.rumbo += _angulo_corto(self.rumbo, objetivo) * min(
             1.0, VELOCIDAD_GIRO * dt)
         self.actor.setH(self.rumbo)
@@ -209,43 +215,63 @@ class Jugador:
         return max(DISTANCIA_MINIMA, min(DISTANCIA, util))
 
     def seguir(self, dt, inmediato=False):
+        # El retardo va en el PIVOTE, nunca en la orientacion. Antes se
+        # retrasaba la posicion y se apuntaba con look_at al instante: al
+        # girar, la camara orbitaba tarde mientras ya miraba al sitio
+        # nuevo y el encuadre se balanceaba. Ademas look_at parte del
+        # "arriba" anterior y acumulaba alabeo fotograma a fotograma. Ahora
+        # el giro es exactamente el del raton y el horizonte no se mueve.
         mira = self.objetivo()
+        factor = 1.0 if inmediato or self.pivote is None else min(
+            1.0, SUAVIDAD * dt)
+        if self.pivote is None:
+            self.pivote = mira
+        self.pivote = Vec3(_acercar(self.pivote.x, mira.x, factor),
+                           _acercar(self.pivote.y, mira.y, factor),
+                           _acercar(self.pivote.z, mira.z, factor))
+
         rad = math.radians(self.yaw)
         rad_p = math.radians(self.pitch)
+
+        # Contra la pared se acerca de golpe (si no, se mete en el muro) y
+        # al despejarse se aleja suave, para que no de saltos de zoom.
+        util = self._distancia_util(self.pivote, rad, rad_p)
+        if inmediato or util < self.distancia:
+            self.distancia = util
+        else:
+            self.distancia = _acercar(self.distancia, util, factor)
+        distancia = self.distancia
 
         # El desvio de hombro encoge con la distancia. Si se deja fijo,
         # al acercarse en un rincon ese corrimiento lateral saca la
         # camara de la pared y hay que recortarla a la fuerza, con lo
         # que acaba metida dentro del personaje.
-        distancia = self._distancia_util(mira, rad, rad_p)
         hombro = HOMBRO * distancia / DISTANCIA
-        origen = Vec3(mira.x + math.cos(rad) * hombro, mira.y,
-                      mira.z - math.sin(rad) * hombro)
+        origen = Vec3(self.pivote.x + math.cos(rad) * hombro, self.pivote.y,
+                      self.pivote.z - math.sin(rad) * hombro)
         plano = distancia * math.cos(rad_p)
-        deseada = Vec3(
+        pos = Vec3(
             origen.x - math.sin(rad) * plano,
             origen.y + distancia * math.sin(rad_p),
             origen.z - math.cos(rad) * plano,
         )
         # Ultimo recurso: en un rincon muy cerrado ni la distancia
-        # minima cabe. A esa distancia el recorte apenas mueve el
-        # encuadre, asi que es preferible a ver el local por dentro.
-        deseada.y = min(deseada.y, ALTURA_TECHO)
+        # minima cabe. Se traslada sin girar, asi el encuadre no bascula.
+        pos.y = min(pos.y, ALTURA_TECHO)
         if self.limites is not None:
             x0, x1, z0, z1 = self.limites
-            deseada.x = max(x0, min(x1, deseada.x))
-            deseada.z = max(z0, min(z1, deseada.z))
+            pos.x = max(x0, min(x1, pos.x))
+            pos.z = max(z0, min(z1, pos.z))
 
-        factor = 1.0 if inmediato else SUAVIDAD * dt
-        self.camara_pos = Vec3(
-            _acercar(self.camara_pos.x, deseada.x, factor),
-            _acercar(self.camara_pos.y, deseada.y, factor),
-            _acercar(self.camara_pos.z, deseada.z, factor),
-        )
-        camera.position = self.camara_pos
-        camera.look_at(Vec3(mira.x + math.cos(rad) * HOMBRO, mira.y,
-                            mira.z - math.sin(rad) * HOMBRO))
+        camera.position = pos
+        camera.rotation = Vec3(self.pitch, self.yaw, 0)
 
     def encuadrar(self):
-        """Coloca la camara sin retardo. Para entrar a una escena."""
+        """Coloca la camara sin retardo. Para entrar a una escena.
+
+        Tambien devuelve la lente a la de exploracion: un corte o la intro
+        pueden dejarla abierta (el plano general usa 66 grados) y con esa
+        lente el local se estira por los bordes como un ojo de pez.
+        """
+        camera.fov = FOV_EXPLORACION
         self.seguir(0.0, inmediato=True)

@@ -286,6 +286,160 @@ EVENTO_CAPITULO_1 = ("Día tranquilo en Civitas", {})
 
 
 # ===================================================================
+#  DIA 1: LAS DECISIONES SE GANAN INVESTIGANDO
+# ===================================================================
+# El dia 1 arranca solo con Compartir e Ignorar, las dos salidas faciles.
+# Lo demas esta en el arbol pero DESPRENDIDO (ArbolDecision.desprender) y
+# vuelve con insertar_opcion cuando el jugador encuentra la pista que lo
+# justifica. Asi la tesis del juego se juega: sin investigar solo puedes
+# amplificar o mirar a otro lado.
+
+# Opciones que no existen en el arbol base y que se ganan con pistas.
+#   (id_padre, id_nuevo, texto, efectos, rasgo, puntos, detalle, corto, bandera)
+OPCIONES_CAPITULO_1 = [
+    ("raiz", "d_bots", "Exponer las cuentas bot",
+     {"desinformacion": -9, "confianza": 4}, "rigor", 1,
+     "Publicas la captura: 40 cuentas nuevas compartiendo en el mismo minuto.",
+     "Exponer bots", "expusiste_bots"),
+    ("raiz", "d_rastreo", "Rastrear el origen del rumor",
+     {"desinformacion": -12, "confianza": 6}, "rigor", 2,
+     "Sigues la cadena salto a salto hasta @NovaAlerta. Queda expuesta.",
+     "Rastrear origen", "rastreaste_el_origen"),
+]
+
+# Lo que arranca escondido. Incluye las dos de arriba y tres del arbol base.
+# El texto es la pista que el diagrama deja bajo su «?» al cerrar el dia:
+# dice donde buscar la proxima vez sin decir que habia.
+OCULTAS_CAPITULO_1 = {
+    "v_desmentir": "La duración del video dice algo.",
+    "verificar": "Alguien en la cafetería vio el video original.",
+    "reportar": "¿Quién es @NovaAlerta?",
+    "d_bots": "Mira a qué hora lo compartieron.",
+    "d_rastreo": "Sigue la cadena hasta el primero.",
+}
+
+# Arbol de PISTAS: es un ArbolHabilidades (prerrequisitos) con otro
+# contenido. Lo que puedes preguntar o mirar AHORA es su frontera(): una
+# pregunta solo aparece cuando ya sabes lo que la justifica (Sofia no te
+# cuenta lo del video hasta que Don Rafa te dice que ella lo vio).
+#
+#   npc:      a quien se le pregunta, o None si es una zona del celular
+#   costo:    segundos del reloj del celular (las charlas cuestan rondas,
+#             ver juego.MINUTOS_POR_RONDA, no segundos)
+#   abre:     opciones del arbol de decision que vuelven al ganarla
+#   aristas:  lo que aprendes de la red: (a, b) = "a lo recibio de b"
+#   texto:    el resumen que se anota cuando la ganas
+PISTAS_CAPITULO_1 = [
+    # ---- Don Rafa, el de la caja: la puerta de entrada ----
+    {"id": "rafa_saludo", "npc": "cajero", "padre": None, "costo": 0,
+     "pregunta": "Buenos días, don Rafa. ¿Usted vio lo del colegio?",
+     "respuesta": ("¡Claro! Me lo mandaron por el grupo de mamás del colegio.",
+                   "Yo se lo mostré a usted porque me pareció grave, ¿vio?",
+                   "Y allá al fondo hubo alboroto por eso mismo hace un rato."),
+     "texto": "A don Rafa le llegó por el grupo de mamás del colegio.",
+     "abre": (), "aristas": [("tu", "cajero"), ("cajero", "grupo")]},
+    {"id": "rafa_alboroto", "npc": "cajero", "padre": "rafa_saludo", "costo": 0,
+     "pregunta": "¿Y qué fue ese alboroto del fondo?",
+     "respuesta": ("Sofía, la del colegio, estaba con unas mamás discutiendo.",
+                   "Ella decía que ese video está cortado, que no es así.",
+                   "Las mamás no le creyeron. Pregúntele usted."),
+     "texto": "Sofía dice que el video está cortado. Hay que preguntarle.",
+     "abre": (), "aristas": []},
+    # ---- Sofia: sin lo de Rafa, esquiva el tema ----
+    {"id": "sofia_saludo", "npc": "sofia", "padre": None, "costo": 0,
+     "pregunta": "Hola, Sofía. ¿Qué opinas de lo de Ospina?",
+     "respuesta": ("Estoy esperando la reunión de padres de las 8:30.",
+                   "Y no, no quiero hablar de ese video. Ya discutí bastante hoy."),
+     "texto": "Sofía no quiere hablar del video... por ahora.",
+     "abre": (), "aristas": []},
+    {"id": "sofia_video", "npc": "sofia", "padre": "rafa_alboroto", "costo": 0,
+     "pregunta": "Don Rafa dice que tú sabes que el video está cortado.",
+     "respuesta": ("Sí. Vi el video entero anoche, en el canal del concejo.",
+                   "Dura dos minutos y medio. Ospina habla de REMODELAR el colegio.",
+                   "El que circula lo cortaron justo antes de esa parte."),
+     "texto": "Sofía vio el video completo: Ospina habla de remodelar, no de cerrar.",
+     "abre": ("verificar",), "aristas": [("sofia", "concejo")]},
+    # ---- Don Hernan: lo cree, y justo por eso sabe de donde vino ----
+    {"id": "hernan_saludo", "npc": "hernan", "padre": None, "costo": 0,
+     "pregunta": "Buenos días. ¿Usted ya vio lo del colegio?",
+     "respuesta": ("¡Es que lo dijo todo el grupo! Cuarenta personas no se equivocan.",
+                   "Me llegó por el grupo de mamás y ya se lo reenvié a mi familia.",
+                   "Si cierran el colegio, ¿a dónde mando yo a mis dos hijos?"),
+     "texto": "Don Hernán lo cree: le llegó por el grupo de mamás.",
+     "abre": (), "aristas": [("tu", "hernan"), ("hernan", "grupo")]},
+    {"id": "hernan_quien", "npc": "hernan", "padre": "hernan_saludo", "costo": 0,
+     "pregunta": "¿Y usted conoce a esas cuarenta personas?",
+     "respuesta": ("Pues... la verdad, no. Se unieron al grupo esta semana.",
+                   "Todas el mismo día, ahora que lo dice. Y ninguna tiene foto."),
+     "texto": "Las 40 cuentas entraron al grupo el mismo día, sin foto.",
+     "abre": (), "aristas": [("grupo", "bot1"), ("grupo", "bot2"), ("grupo", "bot3")]},
+    # ---- en el celular (zonas de la publicacion) ----
+    {"id": "perfil", "npc": None, "padre": None, "costo": 3,
+     "texto": "@NovaAlerta: cuenta creada hace 2 días.",
+     "abre": ("reportar",), "aristas": []},
+    {"id": "cuenta", "npc": None, "padre": "perfil", "costo": 3,
+     "texto": "0 fotos, 12 seguidores... y los 12 son cuentas nuevas que le reenvían todo.",
+     "abre": (), "aristas": [("bot1", "nova"), ("bot2", "nova"), ("bot3", "nova")]},
+    {"id": "comentarios", "npc": None, "padre": None, "costo": 3,
+     "texto": "40 cuentas casi idénticas lo reenvían al grupo de mamás del colegio.",
+     "abre": (), "aristas": [("grupo", "bot1"), ("grupo", "bot2"), ("grupo", "bot3")]},
+    {"id": "fecha", "npc": None, "padre": "comentarios", "costo": 3,
+     "texto": "Publicado a las 6:02 a. m.: las 40 cuentas lo compartieron en ese mismo minuto.",
+     "abre": ("d_bots",), "aristas": []},
+    {"id": "foto", "npc": None, "padre": None, "costo": 3,
+     "texto": "El clip dura 0:14. El video original del concejo dura 2:30: alguien lo recortó.",
+     "abre": ("v_desmentir",), "aristas": []},
+]
+
+# Nombre y oficio de los que hablan en la cafeteria.
+NPCS_CAPITULO_1 = {
+    "sofia": ("Sofía", "estudiante del colegio"),
+    "cajero": ("Don Rafa", "el de la caja"),
+    "hernan": ("Don Hernán", "papá de dos alumnos"),
+}
+
+# Que pista destapa cada zona del celular, en orden: la segunda solo se
+# puede tocar cuando ya salio la primera (su prerrequisito en el arbol).
+ZONAS_CAPITULO_1 = {
+    "perfil": ("perfil", "cuenta"),
+    "comentarios": ("comentarios",),
+    "fecha": ("fecha",),
+    "foto": ("foto",),
+}
+
+# Si el grafo de lo que sabes conecta ORIGEN_JUGADOR con ORIGEN_RUMOR,
+# se abre esta opcion.
+ORIGEN_JUGADOR = "tu"
+ORIGEN_RUMOR = "nova"
+OPCION_POR_CAMINO = "d_rastreo"
+
+# Red COMPLETA de quien le paso el rumor a quien. A -> B = "A lo recibio de B".
+# El jugador nunca la ve entera: va descubriendo aristas con las pistas.
+VERTICES_CAPITULO_1 = {
+    "nova": ("@NovaAlerta", "origen"),
+    "bot1": ("@vecino_2291", "bot"), "bot2": ("@nova_real", "bot"),
+    "bot3": ("@mama_preocupada7", "bot"),
+    "grupo": ("Grupo Mamás del Colegio", "grupo"),
+    "cajero": ("Don Rafa", "ciudadano"), "hernan": ("Don Hernán", "ciudadano"),
+    "sofia": ("Sofía", "ciudadano"), "concejo": ("Canal del Concejo", "medio"),
+    "tu": ("Mateo", "jugador"),
+    # a quienes les llegaria si Mateo lo comparte
+    "ana": ("Ana", "ciudadano"), "luis": ("Luis", "ciudadano"),
+    "caro": ("Caro", "ciudadano"), "pedro": ("Pedro", "ciudadano"),
+    "lina": ("Lina", "ciudadano"), "jorge": ("Jorge", "ciudadano"),
+}
+ARISTAS_CAPITULO_1 = [
+    ("bot1", "nova"), ("bot2", "nova"), ("bot3", "nova"), ("hernan", "nova"),
+    ("grupo", "bot1"), ("grupo", "bot2"), ("grupo", "bot3"),
+    ("grupo", "hernan"), ("hernan", "grupo"),           # ciclo: se lo reenvian
+    ("cajero", "grupo"), ("tu", "cajero"), ("tu", "hernan"),
+    ("sofia", "concejo"),
+    ("ana", "tu"), ("luis", "tu"), ("caro", "ana"), ("pedro", "ana"),
+    ("lina", "luis"), ("jorge", "caro"), ("hernan", "lina"),
+]
+
+
+# ===================================================================
 #  PUBLICACIONES DE CIVITAS  (seccion 3 del enunciado)
 # ===================================================================
 # veracidad: "falsa" | "verdadera" | "opinion"
@@ -550,6 +704,11 @@ RAMAS_POR_BANDERA = {
         {"confianza": 8, "info_verificada": 6}, "rigor", 1,
         "Lo que publicaste ayer resultó cierto. Hoy la gente te lee distinto.",
         "Tu palabra pesa"),
+    "llegaste_tarde": (
+        "raiz", "b_a_tiempo", "Esta vez, actuar a tiempo",
+        {"desinformacion": -7, "confianza": 4}, "rigor", 1,
+        "Ayer el rumor te ganó la carrera. Hoy no le das ventaja.",
+        "A tiempo"),
     "compartiste_sin_contexto": (
         "raiz", "b_contexto", "Poner el contexto que faltaba ayer",
         {"info_verificada": 8, "confianza": 5}, "rigor", 1,
