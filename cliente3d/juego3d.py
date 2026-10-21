@@ -107,7 +107,7 @@ def animar(nombre, bucle=True):
 
 def abrir_menu():
     cl.estado = "menu"
-    audio.musica(True)
+    audio.musica(audio.MUSICA_MENU)
     mundo.corte("PM")
     cl.menu = pantallas.Menu(
         ["Jugar", "Cómo se juega", "Capítulos", "Ajustes", "Créditos",
@@ -294,21 +294,26 @@ def abrir_intro():
     cl.carga.cerrar()
     cl.carga = None
     cl.estado = "intro"
+    audio.musica(audio.MUSICA_INTRO)
     cl.actor.hide()
     mundo.cambiar_escenario(cl.mundo, "ciudad")
     cl.intro = intro.Intro()
 
 
 def terminar_intro():
+    """De la cinematica al primer dia, sin que se vea la costura."""
+    fundido = pantallas.Fundido()
     cl.intro.cerrar()
     cl.intro = None
     mundo.cambiar_escenario(cl.mundo, "cafeteria")
     cl.actor.show()
     empezar_partida()
+    # Se va despues de que el rotulo del dia ya este montado.
+    fundido.desvanecer(0.9, retraso=0.25)
 
 
 def empezar_partida():
-    audio.musica(False)        # a partir de aqui manda la escena
+    audio.callar_todo()             # a partir de aqui manda la escena
     cl.estado = "juego"
     # El reparto sale de la pantalla de seleccion, tal cual: si solo
     # ficharon a uno, la partida es de uno. Rellenarla por detras
@@ -1056,7 +1061,7 @@ def volver_al_menu():
     # Si el jugador se fue andando y vuelve al menu, el protagonista se
     # queda donde lo dejo y la portada se queda sin nadie delante.
     if cl.actor is not None:
-        cl.actor.setPos(Vec3(0, 0, 0))
+        cl.actor.setPos(0, 0, 0)       # Panda3D acepta los tres sueltos
         cl.actor.setH(0)
     retirar_invitado()
     cl.nodo_pendiente = None

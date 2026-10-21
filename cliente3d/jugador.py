@@ -26,8 +26,8 @@ SENSIBILIDAD = 42.0
 
 DISTANCIA = 4.3
 ALTURA_TECHO = 2.45          # el techo de la cafeteria, menos un dedo
-MARGEN_PARED = 0.45          # cuanto se queda la camara dentro del cuarto
-PITCH_MIN, PITCH_MAX = -8.0, 46.0
+MARGEN_PARED = 0.15          # la camara puede rozar la pared, no atravesarla
+DISTANCIA_MINIMA = 1.25      # mas cerca que esto se le ve por dentro
 ALTURA_OBJETIVO = 1.30       # a la altura del pecho, no de los pies
 HOMBRO = 0.62                # descentra al personaje y deja aire a la derecha
 SUAVIDAD = 7.0               # retardo de la camara; 0 seria rigido
@@ -178,29 +178,63 @@ class Jugador:
         x, _, z = self.actor.getPos()
         return Vec3(x, self.altura_suelo + ALTURA_OBJETIVO, z)
 
+    def _distancia_util(self, origen, rad, rad_p):
+        """Cuanto puede alejarse la camara sin salirse del cuarto.
+
+        Recortar la POSICION de la camara contra las paredes parece lo
+        obvio y es justo lo que no hay que hacer: en un local de siete
+        metros, una camara a 4,3 m por detras queda fuera casi siempre,
+        se queda pegada al muro y el encuadre bascula solo mientras
+        andas. Se ve como si la camara no siguiera al personaje.
+
+        Lo que hace una camara de tercera persona de verdad es ACERCARSE
+        por su propio eje hasta caber. El personaje sigue centrado, el
+        plano no gira y lo unico que cambia es cuanto aire queda detras.
+        """
+        dx = -math.sin(rad) * math.cos(rad_p)
+        dy = math.sin(rad_p)
+        dz = -math.cos(rad) * math.cos(rad_p)
+
+        util = DISTANCIA
+        if dy > 1e-6:
+            util = min(util, (ALTURA_TECHO - origen.y) / dy)
+        if self.limites is not None:
+            x0, x1, z0, z1 = self.limites
+            for d, valor, menor, mayor in ((dx, origen.x, x0, x1),
+                                           (dz, origen.z, z0, z1)):
+                if d > 1e-6:
+                    util = min(util, (mayor - MARGEN_PARED - valor) / d)
+                elif d < -1e-6:
+                    util = min(util, (menor + MARGEN_PARED - valor) / d)
+        return max(DISTANCIA_MINIMA, min(DISTANCIA, util))
+
     def seguir(self, dt, inmediato=False):
         mira = self.objetivo()
         rad = math.radians(self.yaw)
         rad_p = math.radians(self.pitch)
 
-        plano = DISTANCIA * math.cos(rad_p)
+        # El desvio de hombro encoge con la distancia. Si se deja fijo,
+        # al acercarse en un rincon ese corrimiento lateral saca la
+        # camara de la pared y hay que recortarla a la fuerza, con lo
+        # que acaba metida dentro del personaje.
+        distancia = self._distancia_util(mira, rad, rad_p)
+        hombro = HOMBRO * distancia / DISTANCIA
+        origen = Vec3(mira.x + math.cos(rad) * hombro, mira.y,
+                      mira.z - math.sin(rad) * hombro)
+        plano = distancia * math.cos(rad_p)
         deseada = Vec3(
-            mira.x - math.sin(rad) * plano + math.cos(rad) * HOMBRO,
-            mira.y + DISTANCIA * math.sin(rad_p),
-            mira.z - math.cos(rad) * plano - math.sin(rad) * HOMBRO,
+            origen.x - math.sin(rad) * plano,
+            origen.y + distancia * math.sin(rad_p),
+            origen.z - math.cos(rad) * plano,
         )
-
-        # La camara se queda DENTRO del cuarto. Sin esto se mete en las
-        # sillas y atraviesa el techo en cuanto giras, y el plano se
-        # llena de geometria por dentro, que es lo que mas delata que
-        # algo esta mal montado.
+        # Ultimo recurso: en un rincon muy cerrado ni la distancia
+        # minima cabe. A esa distancia el recorte apenas mueve el
+        # encuadre, asi que es preferible a ver el local por dentro.
         deseada.y = min(deseada.y, ALTURA_TECHO)
         if self.limites is not None:
             x0, x1, z0, z1 = self.limites
-            deseada.x = max(x0 + MARGEN_PARED, min(x1 - MARGEN_PARED,
-                                                   deseada.x))
-            deseada.z = max(z0 + MARGEN_PARED, min(z1 - MARGEN_PARED,
-                                                   deseada.z))
+            deseada.x = max(x0, min(x1, deseada.x))
+            deseada.z = max(z0, min(z1, deseada.z))
 
         factor = 1.0 if inmediato else SUAVIDAD * dt
         self.camara_pos = Vec3(

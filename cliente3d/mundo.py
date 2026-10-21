@@ -127,6 +127,12 @@ def _pieza(mundo, modelo, mat, escala, posicion, giro=0):
     cada Entity, y ese shader ignora los materiales PBR.
     """
     e = Entity(model=modelo)
+    # El decorado no piensa: no tiene update() ni escucha teclas. Con
+    # ignore, Ursina lo salta en su bucle por entidad, que por cada una
+    # recorre la lista de marcadas para borrar y sube por toda la cadena
+    # de padres. Con una ciudad de trescientas piezas eso se nota, y no
+    # cambia nada de como se ve.
+    e.ignore = True
     _ENTIDADES.append(e)
     e.reparentTo(mundo)
     e.clearShader()

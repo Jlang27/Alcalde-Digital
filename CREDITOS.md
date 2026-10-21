@@ -13,6 +13,8 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 | Archivo | Qué es | Fuente | Licencia | Requiere crédito | Quién / Cuándo |
 |---|---|---|---|---|---|
 | `assets/audio/menu.ogg` | Música de los menús (de `UNITY.mp3`, convertida a OGG) | Aportada por A · origen por confirmar | **POR CONFIRMAR** | Sí, en cuanto se sepa | A · 2026-10-20 |
+| `assets/audio/ambiente.ogg` | Ambiente de calle de la cinemática (tráfico, murmullo, carros que pasan) | Generado por el proyecto (`herramientas/componer_intro.py`) | Propia | No | A · 2026-10-20 |
+| `assets/audio/intro.ogg` | Música de la cinemática, sintetizada contra sus tiempos | Generada por el proyecto (`herramientas/componer_intro.py`) | Propia | No | A · 2026-10-20 |
 | `assets/audio/ui_mover.wav` | Efecto «Scroll» del menú | Canal GamingSFX (YouTube), pack «Game Menu Sound Effects 01» | **POR CONFIRMAR** | Probablemente sí | A · 2026-10-20 |
 | `assets/audio/ui_confirmar.wav` | Efecto «Select Confirm» | Canal GamingSFX (YouTube), mismo pack | **POR CONFIRMAR** | Probablemente sí | A · 2026-10-20 |
 | `assets/audio/ui_volver.wav` | Efecto «Cancel» | Canal GamingSFX (YouTube), mismo pack | **POR CONFIRMAR** | Probablemente sí | A · 2026-10-20 |

@@ -154,7 +154,10 @@ class Intro:
         t.rotation_y = giro
         base = col or color.Color(1, 1, 1, 1)
         t.color = base
-        self.letreros.append((t, base))
+        # Se guarda la posicion al crearlo: los letreros no se mueven
+        # y preguntarsela al grafo de escena en cada fotograma, por
+        # cada letrero, era lo mas caro de la cinematica.
+        self.letreros.append((t, base, t.world_position))
         self.mundo.append(t)
         return t
 
@@ -296,8 +299,8 @@ class Intro:
     def _niebla_en_letreros(self):
         niebla = mundo.NIEBLA_CIUDAD
         ojo = camera.world_position
-        for t, base in self.letreros:
-            d = (t.world_position - ojo).length()
+        for t, base, donde in self.letreros:
+            d = (donde - ojo).length()
             f = math.exp(-d * mundo.DENSIDAD_CIUDAD)
             t.color = color.Color(niebla[0] + (base.r - niebla[0]) * f,
                                   niebla[1] + (base.g - niebla[1]) * f,
@@ -325,7 +328,7 @@ class Intro:
 
     def _sonar_telefonos(self):
         self.alerta = True
-        audio.musica(False)          # silencio: lo unico que suena es el aviso
+        audio.ambiente(False)        # la calle se para de golpe
         audio.efecto("confirmar")
         mundo.ciudad_alerta()
         self.destello.color = color.rgba(195, 59, 51, 120)
@@ -340,8 +343,8 @@ class Intro:
             en_pantalla |= {id(arriba), id(abajo), id(cifra)}
         # Blanco sobre rojo: la cuenta atras ambar ya no pinta nada.
         blanco = color.Color(1, 1, 1, 1)
-        self.letreros = [(t, blanco if id(t) in en_pantalla else base)
-                         for t, base in self.letreros]
+        self.letreros = [(t, blanco if id(t) in en_pantalla else base, donde)
+                         for t, base, donde in self.letreros]
         self._avisos_en_cadena()
 
     def _pintar_compartidos(self):
@@ -362,6 +365,12 @@ class Intro:
         mundo.seguir_cielo()
         mundo.mover_trafico(dt)
         self._niebla_en_letreros()
+
+        # La calle entra con la avenida, que es cuando aparecen los
+        # carros, y se corta en seco en la alerta: ese silencio es el
+        # efecto, no la ausencia de uno.
+        if antes < INICIOS[1] <= t:
+            audio.ambiente(True)
 
         if antes < 1.0 <= t:
             self._pie_de_ciudad()
@@ -395,6 +404,7 @@ class Intro:
         self.negro.animate_color(color.rgba(0, 0, 0, 255), duration=0.3)
 
     def cerrar(self):
+        audio.ambiente(False)
         for lista in (self.piezas, self.mundo):
             for p in lista:
                 for s in list(getattr(p, "animations", [])):

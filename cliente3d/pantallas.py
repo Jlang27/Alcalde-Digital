@@ -173,6 +173,25 @@ class Carga:
         _limpiar(self.piezas)
 
 
+class Fundido:
+    """Un negro por delante de todo que luego se va solo.
+
+    Sirve para tapar un cambio de escenario. Montar la cafeteria y
+    tirar la ciudad lleva su tiempo, y ese tiron se ve como un salto
+    feo justo al entrar al juego. Con el negro delante, el tiron pasa
+    a ser un corte de montaje.
+    """
+
+    def __init__(self, alfa=255):
+        # z negativa: por delante de los menus y de cualquier velo.
+        self.velo = E.banda(2.4, 1.20, (0, 0), E.tinta(alfa), z=-0.95)
+
+    def desvanecer(self, duracion=0.8, retraso=0.0):
+        self.velo.fade_out(duration=duracion, delay=retraso)
+        destroy(self.velo, delay=duracion + retraso + 0.1)
+        self.velo = None
+
+
 class Rotulo:
     """El cartel de la jornada: «DÍA 01» a pantalla completa.
 

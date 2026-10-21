@@ -25,6 +25,13 @@ CARPETA = os.path.join(
     "assets", "audio")
 
 MUSICA_MENU = "menu.ogg"
+# La cinematica lleva su propia pista, compuesta contra sus tiempos
+# (herramientas/componer_intro.py). La del menu es alegre y electronica:
+# encima de una ciudad al atardecer que se va poniendo roja, chirria.
+MUSICA_INTRO = "intro.ogg"
+# El ambiente va por un canal APARTE de la musica: durante la
+# cinematica los dos suenan a la vez, y en la alerta se corta uno solo.
+AMBIENTE_CALLE = "ambiente.ogg"
 
 # El nombre del efecto, no el del archivo: el cliente pide «mover» y no
 # tiene que saber como se llama el .wav ni de donde salio.
@@ -41,8 +48,13 @@ EFECTOS = {
 PESO_EFECTO = 0.55
 PESO_MUSICA = 0.42
 
+# El ambiente cuenta como efecto, no como musica: es la calle, no una
+# cancion, y se calla con el mismo mando que los avisos.
+PESO_AMBIENTE = 0.80
+
 _cache = {}
-_musica = {"sonido": None}
+_musica = {"sonido": None, "pista": None}
+_ambiente = {"sonido": None}
 
 
 def _ruta(archivo):
@@ -87,16 +99,36 @@ def efecto(nombre):
     sonido.play()
 
 
-def musica(encendida=True):
-    """Arranca o para la música de los menús."""
+def parar_musica():
+    """Calla la música. Existe aparte a proposito.
+
+    Antes esto era musica(encendida=False), con la pista en el primer
+    sitio. Una llamada vieja —musica(False)— colaba el booleano como
+    nombre de archivo y reventaba dentro de os.path.join, a tres
+    funciones de distancia de donde estaba el error. Separarlas hace
+    imposible ese fallo.
+    """
+    if _musica["sonido"] is not None:
+        _musica["sonido"].stop()
+
+
+def musica(pista=MUSICA_MENU):
+    """Pone una pista en bucle. Para callarla, parar_musica().
+
+    Cambiar de pista para la anterior: dos musicas a la vez es el fallo
+    clasico al encadenar menu y cinematica.
+    """
+    if not isinstance(pista, str):
+        raise TypeError(
+            f"musica() espera el nombre de un archivo, no {pista!r}. "
+            "Para callarla, parar_musica().")
+    if _musica["pista"] != pista:
+        if _musica["sonido"] is not None:
+            _musica["sonido"].stop()
+        _musica["sonido"] = _cargar(pista, bucle=True)
+        _musica["pista"] = pista
     sonido = _musica["sonido"]
     if sonido is None:
-        sonido = _cargar(MUSICA_MENU, bucle=True)
-        _musica["sonido"] = sonido
-    if sonido is None:
-        return
-    if not encendida:
-        sonido.stop()
         return
     nivel = _volumen(PESO_MUSICA, "musica")
     if nivel <= 0.001:
@@ -106,6 +138,34 @@ def musica(encendida=True):
     if not getattr(sonido, "playing", False):
         sonido.loop = True
         sonido.play()
+
+
+def ambiente(encendido=True, pista=AMBIENTE_CALLE):
+    """La calle de fondo. Suena a la vez que la musica, por su canal."""
+    sonido = _ambiente["sonido"]
+    if not encendido:
+        if sonido is not None:
+            sonido.stop()
+        return
+    if sonido is None:
+        sonido = _cargar(pista, bucle=True)
+        _ambiente["sonido"] = sonido
+    if sonido is None:
+        return
+    nivel = _volumen(PESO_AMBIENTE, "efectos")
+    if nivel <= 0.001:
+        sonido.stop()
+        return
+    sonido.volume = nivel
+    if not getattr(sonido, "playing", False):
+        sonido.loop = True
+        sonido.play()
+
+
+def callar_todo():
+    """Para musica y ambiente. Para salir de una escena sin cabos."""
+    parar_musica()
+    ambiente(False)
 
 
 def refrescar_volumen():
@@ -120,3 +180,6 @@ def refrescar_volumen():
     sonido.volume = nivel
     if not getattr(sonido, "playing", False):
         sonido.play()
+    amb = _ambiente["sonido"]
+    if amb is not None and getattr(amb, "playing", False):
+        amb.volume = _volumen(PESO_AMBIENTE, "efectos")
