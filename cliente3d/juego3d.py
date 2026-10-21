@@ -17,11 +17,13 @@ import sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 
-from ursina import (Ursina, Entity, Text, Button, Func, application, camera,
-                    color, destroy, time, window)
+from panda3d.core import loadPrcFileData
+from ursina import (Ursina, Entity, Text, Button, Func, Texture, application,
+                    camera, color, destroy, invoke, time, window)
 
 import ajustes as A
 import audio
+import cierre
 import estilo as E
 import intro
 import mundo
@@ -95,6 +97,10 @@ class Cliente:
         self.dialogo = None
         self.con_quien = None
         self.pagina_cierre = None     # "arbol", "red" o "encuesta"
+        self.pagina = None            # la cierre.Pagina en pantalla
+        self.foto_cierre = None       # la escena del dia, para la miniatura
+        self.agotado = False          # el reloj llego a cero y se esta contando
+        self.espera_cierre = 0.0      # lo que falta para pasar al diagrama
 
 
 cl = Cliente()
@@ -436,11 +442,15 @@ def cerrar_confirmacion(acepta):
         volver_al_menu()
 
 
+# Cada zona encima de lo que parece: el perfil es el avatar y el nombre,
+# el video es el recuadro grande y los comentarios son las lineas de
+# abajo. Antes el recuadro grande abria los comentarios y el «video» era
+# el cuadrito del avatar.
 ZONAS = {
-    "perfil": (-0.650, 0.365, 0.20, 0.050),
+    "perfil": (-0.690, 0.365, 0.28, 0.050),
     "fecha": (-0.300, 0.365, 0.180, 0.060),
-    "foto": (-0.800, 0.365, 0.055, 0.055),
-    "comentarios": (-0.640, 0.170, 0.34, 0.090),
+    "foto": (-0.640, 0.170, 0.34, 0.090),
+    "comentarios": (-0.515, 0.054, 0.60, 0.072),
 }
 
 
@@ -457,7 +467,6 @@ reloj_riel = None
 reloj_barra = None
 reloj_cifra = None
 detalle = None
-modal_reloj = None
 pistas_texto = None
 
 
@@ -561,13 +570,25 @@ def construir_zonas():
     cl.marcas += [
         E.banda(0.05, 0.05, (-0.795, 0.365), color.rgb32(70,76,90), z=z),
         E.banda(0.34, 0.09, (-0.640, 0.170), color.rgb32(52,58,70), z=z),
+        # sin rotulo el recuadro no se lee como video sino como hueco
+        E.pequena("VIDEO", (-0.640, 0.180), E.TEXTO_TENUE, escala=0.50,
+                  origen=(0, 0.5)),
         E.pequena(pub.get("fecha", "hace 2 h"), (-0.215, 0.382),
                   E.TEXTO_TENUE, escala=0.46, origen=(0.5,0.5)),
     ]
     for i, (usuario, texto) in enumerate(pub.get("comentarios", [])[:3]):
-        cl.marcas.append(E.pequena(f"{usuario}:{texto}",
+        cl.marcas.append(E.pequena(f"{usuario}: {texto}",
                                    (-0.82, 0.078 - i * 0.022), E.TEXTO_TENUE,
                                    escala=0.44))
+    # Investigar es con el raton y decidir con el teclado: sin esta fila
+    # nada decia que la publicacion se podia tocar.
+    cl.marcas += E.degradado_vertical(-0.52, -0.42, alfa=190)
+    cl.marcas.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
+                             z=E.Z_ADORNO))
+    cl.marcas += E.leyenda((("1-9", "decidir"),
+                            ("clic", "investigar la publicación"),
+                            ("tab", "libreta"),
+                            ("esc", "menú")), -0.458)
     for id_zona, (x,y,w,h) in ZONAS.items():
         cl.zonas.append(Button(parent=camera.ui,
                                color=color.rgb32(255,255,255,0),
@@ -678,23 +699,26 @@ def refrescar_opciones():
         mostrar_consecuencia(opciones[0])
         return
 
+    y0, paso, _hueco = rejilla_opciones(len(opciones) + len(ocultas))
     for i, nodo in enumerate(opciones):
-        y = 0.10 - i * 0.075
+        y = y0 - i * paso
         col = E.TEXTO
         if nodo.jugador_origen is not None:
             col = color.rgb32(*cl.partida.jugadores[nodo.jugador_origen].color)
 
-        texto = E.etiqueta(nodo.texto, (0.14, y), 1.05, col)
+        # El numero es la tecla: se decide con 1-9, como en las charlas.
+        texto = E.etiqueta(f"{i + 1}   {nodo.texto}", (0.14, y), 1.05, col)
         zona = Button(parent=camera.ui, color=color.rgba(255, 255, 255, 0),
                       highlight_color=color.rgba(255, 255, 255, 30),
-                      scale=(0.70, 0.060), position=(0.49, y - 0.018),
+                      scale=(0.70, min(0.060, paso - 0.004)),
+                      position=(0.49, y - 0.018),
                       on_click=Func(al_elegir, nodo.id))
         cl.opciones += [texto, zona]
 
     # Las que todavia no te ganaste: una casilla del tarjeton sin marcar.
     # Que se vean vacias dice "aqui habia algo mas" sin decir que.
     for j in range(len(ocultas)):
-        y = 0.10 - (len(opciones) + j) * 0.075
+        y = y0 - (len(opciones) + j) * paso
         cl.opciones += E.casilla((0.152, y - 0.016), E.luz(70), fondo=E.NOCHE,
                                  lado=0.022)
         cl.opciones.append(E.etiqueta("Por descubrir", (0.18, y), 1.05,
@@ -703,9 +727,23 @@ def refrescar_opciones():
     colocar_reloj(len(opciones) + len(ocultas))
 
 
+def rejilla_opciones(cuantas):
+    """(y de la primera, paso entre renglones, hueco hasta el reloj).
+
+    Hasta cinco renglones, la rejilla de siempre. Con mas (el dia 1 llega
+    a seis, y cada jugador que interviene suma uno) se arranca mas arriba
+    y se aprieta el paso: si no, el reloj y el detalle se metian debajo
+    de la leyenda y del borde de la pantalla.
+    """
+    if cuantas <= 5:
+        return 0.10, 0.075, 0.075
+    return 0.14, min(0.075, 0.40 / (cuantas - 1)), 0.06
+
+
 def colocar_reloj(cuantas):
-    ultima = 0.10 - max(cuantas - 1, 0) * 0.075
-    y = ultima - 0.075
+    y0, paso, hueco = rejilla_opciones(cuantas)
+    ultima = y0 - max(cuantas - 1, 0) * paso
+    y = ultima - hueco
     for widget in (reloj_riel, reloj_barra):
         widget.y = y
     reloj_cifra.y = y + 0.024
@@ -763,9 +801,14 @@ def iniciar_dia(indice):
     """
     cl.dia_cerrado = False
     cl.nodo_pendiente = None
+    cl.agotado = False
     retirar_invitado()
+    # El ritmo se le pasa a la Partida antes de empezar: estira el reloj
+    # entero (total, restante y el momento de las interrupciones). Antes
+    # se multiplicaba aqui solo el restante, y con «Pausado» la barra
+    # pasaba del 100 % y se salia de la pantalla.
+    cl.partida.factor_tiempo = A.factor_tiempo()
     cl.partida.iniciar_dia(indice)
-    cl.partida.tiempo_restante *= A.factor_tiempo()
     # Aqui y no al soltar al personaje: cargar los .glb da un tiron, y
     # detras del rotulo opaco no se ve.
     preparar_npcs()
@@ -860,6 +903,22 @@ def empezar_decision():
     """Saca el telefono: aqui si aparecen las opciones del dia."""
     cerrar_libre()
     limpiar(cl.reloj_manana)      # en el celular manda su propio reloj
+    # Lo que quedo en cola de la manana ya esta en la libreta y en las
+    # opciones. Soltarlo aqui tapaba la publicacion con alertas pensadas
+    # para la cafeteria y, como leer no cuesta, congelaba el reloj del
+    # celular casi un minuto.
+    cerrar_alerta()
+    cl.partida.novedades.clear()
+    cl.partida.hechos_nuevos.clear()
+    cl.cola_avisos.clear()
+    # Los planos fijos estan medidos desde la marca del protagonista. Si
+    # se quedaba donde lo dejo el jugador, el primer plano de la
+    # consecuencia encuadraba a quien estuviera en la marca (Don Rafa).
+    # Un corte a negro corto convierte el salto en montaje.
+    fundido = pantallas.Fundido()
+    cl.actor.setPos(0, 0, 0)
+    cl.actor.setH(0)
+    fundido.desvanecer(0.45, retraso=0.1)
     cl.estado = "juego"
     animar("idle")
     mundo.corte("PG")
@@ -1131,9 +1190,10 @@ def cerrar_dialogo():
 def agotar_manana():
     """8:30: empieza la reunion y el telefono se saca solo."""
     ya = len(cl.partida.creyentes())
+    # Despues de sacar el telefono, que vacia la cola: este aviso va primero.
+    empezar_decision()
     cl.cola_avisos.append((f"Empezó la reunión de padres. Ya lo creen {ya} "
                            f"vecinos.", "8:30", "Se acabó la mañana", E.GAITAN))
-    empezar_decision()
 
 
 # ===================================================================
@@ -1163,7 +1223,7 @@ def abrir_modal():
     for texto, i, acepta in (("Que intervenga", 0, True),
                              ("Seguir sin su ayuda", 1, False)):
         y = -0.02 - i * 0.075
-        cl.modal.append(E.etiqueta(texto, (0.14, y), 1.05,
+        cl.modal.append(E.etiqueta(f"{i + 1}   {texto}", (0.14, y), 1.05,
                                    col if acepta else E.TEXTO_TENUE))
         cl.modal.append(Button(parent=camera.ui,
                                color=color.rgba(255, 255, 255, 0),
@@ -1198,8 +1258,12 @@ def cerrar_modal(acepta):
 def cerrar_dia():
     cl.dia_cerrado = True
     cl.nodo_pendiente = None
+    cl.agotado = False
     cerrar_alerta()
+    # Las tres colas: si quedaba un hecho (los que revela la decision
+    # final) salia encima del diagrama, de la red y de la encuesta.
     cl.partida.novedades.clear()
+    cl.partida.hechos_nuevos.clear()
     cl.cola_avisos.clear()
     limpiar(cl.reloj_manana)
     retirar_invitado()
@@ -1207,220 +1271,242 @@ def cerrar_dia():
     limpiar(cl.zonas)
     limpiar(cl.marcas)
     animar("idle")
-    mundo.corte("PG")
     for e in cl.hud:
         e.enabled = False
+    # Plano medio limpio, sin interfaz: dentro de unos fotogramas se
+    # fotografia para la miniatura del «inicio» del diagrama.
+    mundo.corte("PM")
+    cl.pagina_cierre = None
+    invoke(revelar_diagrama, delay=0.12)
+
+
+def revelar_diagrama():
+    """La foto de la escena y, encima, la primera pagina del cierre."""
+    if not cl.dia_cerrado or cl.partida is None:
+        return              # se volvio al menu en esos fotogramas
+    cl.foto_cierre = foto_escena()
     dibujar_diagrama()
-    cl.pagina_cierre = "arbol"
 
 
-def dibujar_diagrama():
-    """Revela el arbol recorrido.
+def foto_escena():
+    """El ultimo fotograma de la escena como textura (para la miniatura).
 
-    Las posiciones las calcula la propia estructura: cada nodo trae su x
-    y su profundidad. Aqui solo se traducen a coordenadas de pantalla.
+    Si no se puede (sin ventana, banco de pruebas sin buffer), el
+    diagrama sale igual, con el marco de la miniatura vacio.
     """
+    try:
+        captura = application.base.win.getScreenshot()
+        return Texture(captura) if captura is not None else None
+    except Exception:
+        return None
+
+
+def nueva_pagina(pagina):
     limpiar(cl.diagrama)
-    arbol = cl.partida.arbol_decision
-    ancho = arbol.calcular_posiciones()
-    nodos = arbol.recorrido_bfs()
-    hondo = max(n.profundidad for n in nodos) or 1
+    cl.pagina = pagina
+    cl.diagrama += pagina.piezas
 
-    cl.diagrama.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
-    dia = cl.partida.dia_actual + 1
-    cl.diagrama.append(E.pequena(f"FLUJO DE DECISIONES · DÍA 0{dia}",
-                                 (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
-    cl.diagrama.append(E.titular(cl.partida.publicacion["id"],
-                                 (-0.84, 0.405), 2.0, E.TEXTO))
-    cl.diagrama.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
 
-    for nodo in nodos:
-        x = (nodo.x / max(ancho - 1, 1) - 0.5) * 1.35
-        y = 0.18 - (nodo.profundidad / hondo) * 0.50
-        visitado = nodo.visitado or nodo is arbol.raiz
-        # Gris para lo no recorrido y blanco de interfaz para lo que si:
-        # las tintas de campana quedan para los JUGADORES, que son los
-        # que se distinguen entre si unas lineas mas abajo.
-        col = E.UI if visitado else E.luz(42)
-        if visitado and nodo.jugador_origen is not None:
-            col = color.rgb32(*cl.partida.jugadores[nodo.jugador_origen].color)
+# ------------------------------------------------------------------
+#  Lo que cada pagina necesita, leido de la Partida. Aqui no se decide
+#  nada: se ordena para dibujar (como datos_libreta).
+# ------------------------------------------------------------------
 
-        # Lo que nunca descubriste va aun mas apagado y con «?»: no es un
-        # camino que rechazaste, es uno que ni supiste que existia.
-        if not nodo.descubierto:
-            col = E.luz(16)
-        cl.diagrama.append(E.paralelogramo(0.17, 0.040, (x, y), col,
-                                           z=E.Z_ADORNO))
-        etiqueta = (nodo.corto if visitado else
-                    "[...]" if nodo.descubierto else "?")
-        cl.diagrama.append(Text(text=etiqueta[:16], parent=camera.ui,
-                                origin=(0, 0), position=(x, y), scale=0.5,
-                                color=E.NOCHE if visitado
-                                else E.TEXTO_TENUE))
-        # Bajo el «?», donde buscar la proxima vez, sin decir que habia:
-        # es lo que da ganas de volver a jugar el dia.
-        pista = OCULTAS_CAPITULO_1.get(nodo.id) if not nodo.descubierto else None
-        if pista:
-            t = E.pequena(pista, (x, y - 0.030), E.TEXTO_TENUE, escala=0.38,
-                          origen=(0, 0.5))
-            t.wordwrap = 22
-            cl.diagrama.append(t)
+def _cifra(clave, p):
+    """«39 ▲11» con su tinta: rojo si empeoro, verde si mejoro."""
+    malos = {k for k, _, bueno in INDICADORES_META if not bueno}
+    valor = p.indicadores[clave]
+    delta = valor - p._indicadores_al_empezar.get(clave, valor)
+    if not delta:
+        return str(valor), E.TINTA
+    peor = (delta > 0) == (clave in malos)
+    # signo y no flecha: las fuentes del juego no traen ▲▼ (salian cajas)
+    signo = "+" if delta > 0 else "−"
+    return f"{valor}  ({signo}{abs(delta)})", (E.GAITAN if peor else E.RESTREPO)
 
-    recorridos = len(arbol.camino)
-    finales = arbol.contar_finales()
-    resumen = (f"Recorriste {recorridos} de {len(nodos)} nodos  ·  "
-               f"esta escena tenía {finales} desenlaces")
-    cuenta = cl.partida.decisiones_descubiertas()
+
+def _arriba(p):
+    titulo, _dias, lugar = capitulo_de(p.dia_actual)
+    return (f"ALCALDE DIGITAL   ·   DÍA 0{p.dia_actual + 1}   ·   "
+            f"{p.protagonista.nombre.upper()}")
+
+
+def datos_flujo(p):
+    arbol = p.arbol_decision
+    ganadas = set(OCULTAS_CAPITULO_1) if p.pistas is not None else set()
+
+    def grupo(n):
+        # el orden de las filas: lo de siempre arriba, lo ganado
+        # investigando junto (para encerrarlo entre corchetes) y lo que
+        # insertaron otros jugadores al final
+        if n.jugador_origen is not None:
+            return 2
+        return 1 if n.id in ganadas else 0
+
+    def estado(n):
+        if n is arbol.raiz or n.visitado:
+            return "elegido"
+        if not n.descubierto:
+            return "oculto"
+        if n.padre is arbol.raiz or n.padre.visitado:
+            return "visto"           # estuvo en pantalla y no se eligio
+        return "bloqueado"           # nunca llegaste a verlo
+
+    def icono(n):
+        # lo que inserto otro jugador se marca como suyo antes que como
+        # desenlace: es lo que distingue el multijugador en el diagrama
+        if n.jugador_origen is not None:
+            return "jugador"
+        if n.es_hoja():
+            return "final"
+        return {"rigor": "lupa", "impulso": "flecha"}.get(n.rasgo, "accion")
+
+    nodos, filas = [], [0]
+
+    def visitar(n, prof, padre, ganada):
+        # DFS en preorden: cada hoja estrena fila y un padre va a la
+        # altura media de sus hijos (el mismo criterio que
+        # ArbolDecision.calcular_posiciones, con los hijos agrupados)
+        ganada = ganada or (prof == 1 and n.id in ganadas)
+        col = (p.jugadores[n.jugador_origen].color
+               if n.jugador_origen is not None else p.protagonista.color)
+        d = {"id": n.id, "padre": padre, "prof": prof,
+             "texto": n.corto or n.texto, "estado": estado(n),
+             "icono": icono(n), "col": color.rgb32(*col),
+             "ganada": ganada,
+             "pista": OCULTAS_CAPITULO_1.get(n.id) if not n.descubierto
+             else None}
+        nodos.append(d)
+        hijos = sorted(n.hijos, key=grupo)
+        if not hijos:
+            d["fila"] = filas[0]
+            filas[0] += 1
+        else:
+            vistos = [visitar(h, prof + 1, n.id, ganada) for h in hijos]
+            d["fila"] = (vistos[0]["fila"] + vistos[-1]["fila"]) / 2
+        return d
+
+    visitar(arbol.raiz, 0, None, False)
+    total = len(nodos) - 1
+    conocidos = sum(1 for d in nodos[1:] if d["estado"] in ("elegido", "visto"))
+    cuenta = p.decisiones_descubiertas()
+    chips = [("DESINFORMACIÓN", *_cifra("desinformacion", p)),
+             ("CONFIANZA", *_cifra("confianza", p))]
     if cuenta is not None:
-        resumen += f"  ·  descubriste {cuenta[0]} de {cuenta[1]} decisiones"
-    cl.diagrama.append(E.pequena(resumen, (-0.84, -0.372), E.TEXTO_TENUE,
-                                 escala=0.58))
-    cl.diagrama.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
-                               z=E.Z_ADORNO))
-    cl.diagrama += E.leyenda((("enter", "continuar"),), -0.458)
+        chips.append(("DECISIONES", f"{cuenta[0]} DE {cuenta[1]}", E.TINTA))
+    chips.append(("RECORRISTE", f"{len(arbol.camino)} NODOS", E.TINTA))
+    titulo, _dias, lugar = capitulo_de(p.dia_actual)
+    resumen = f"Esta escena tenía {arbol.contar_finales()} desenlaces."
+    if cuenta is not None and cuenta[0] < cuenta[1]:
+        resumen += (" Las casillas con «¿?» son decisiones que no ganaste:"
+                    " la letra pequeña dice dónde buscar la próxima vez.")
+    sitio = lugar.split("·")[-1].strip() or "Inicio"
+    return {
+        "titulo": titulo, "arriba": _arriba(p), "dia": f"{p.dia_actual + 1:02d}",
+        "inicio": sitio, "pie_foto": f"{sitio} · {p.hora() if p.pistas else ''}"
+                                    .rstrip(" ·"),
+        "porcentaje": round(100 * conocidos / max(total, 1)),
+        "chips": chips, "nodos": nodos, "resumen": resumen,
+        "acento": color.rgb32(*p.protagonista.color),
+    }
 
 
-def posiciones_red(red):
-    """Columnas = niveles del BFS desde el origen del rumor.
-
-    Es el propio BFS el que ordena el dibujo: la columna de cada cuenta es
-    a cuantos saltos esta de @NovaAlerta. Lo que el BFS no alcanza (Sofia
-    y el concejo, que vieron el video original) es otra componente y se
-    dibuja aparte, abajo.
-    """
-    _padre, prof = red.invertido().bfs(ORIGEN_RUMOR)
-    aparte = [v for v in sorted(red.adyacencia) if v not in prof]
-    hondo = max(prof.values()) or 1
-    columnas = {}
-    for v in sorted(prof, key=lambda v: (prof[v], v)):
-        columnas.setdefault(prof[v], []).append(v)
-    pos = {}
-    for nivel, vs in columnas.items():
-        x = -0.72 + nivel * (1.44 / hondo)
-        for i, v in enumerate(vs):
-            pos[v] = (x, 0.12 + (i - (len(vs) - 1) / 2) * 0.115)
-    for i, v in enumerate(aparte):
-        pos[v] = (-0.72 + i * 0.30, -0.24)
-    return pos, prof
-
-
-def linea_ui(p, q, col, grosor=0.0026, z=E.Z_ADORNO):
-    (x0, y0), (x1, y1) = p, q
-    largo = math.hypot(x1 - x0, y1 - y0)
-    e = Entity(parent=camera.ui, model="quad", color=col,
-               position=((x0 + x1) / 2, (y0 + y1) / 2, z),
-               scale=(largo, grosor))
-    # Ursina gira en z en sentido horario: por eso el signo menos.
-    e.rotation_z = -math.degrees(math.atan2(y1 - y0, x1 - x0))
-    return e
-
-
-def dibujar_red():
-    """La segunda pagina del cierre: el grafo de quien paso el rumor.
-
-    Se ve entero, pero solo en tinta lo que descubriste. Si llegaste al
-    origen, la cadena va en rojo; si compartiste, la ola del BFS sale de
-    ti nivel a nivel.
-    """
-    limpiar(cl.diagrama)
-    cl.pagina_cierre = "red"
-    p = cl.partida
+def datos_red(p):
     red, conocida = p.red, p.red_conocida
-    pos, _ = posiciones_red(red)
-    camino = conocida.camino(ORIGEN_JUGADOR, ORIGEN_RUMOR) or []
-    tramos = set(zip(camino, camino[1:]))
-    compartio = any(n.id == "compartir" for n in p.arbol_decision.camino)
-    # El desenlace sobre la red: a quien le llego y a quien protegiste. Es
-    # lo que cuesta hablar de mas: cada charla deja bajar al rumor.
+    padre, prof = red.invertido().bfs(ORIGEN_RUMOR)
     creyentes = set(p.desenlace_red["creyentes"])
     protegidos = set(p.desenlace_red["protegidos"])
-    _, ola = red.invertido().bfs(ORIGEN_JUGADOR) if compartio else (None, {})
-
-    cl.diagrama.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
-    cl.diagrama.append(E.pequena(f"LA RED DEL RUMOR · DÍA 0{p.dia_actual + 1}",
-                                 (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
-    cl.diagrama.append(E.titular("¿Quién se lo pasó a quién?",
-                                 (-0.84, 0.405), 2.0, E.TEXTO))
-    cl.diagrama.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
-
-    # aristas: "a lo recibio de b", se dibuja de b hacia a
-    for a, b in red.aristas():
-        sabida = b in conocida.vecinos(a)
-        col = (E.GAITAN if (a, b) in tramos else
-               E.TEXTO if sabida else E.luz(22))
-        cl.diagrama.append(linea_ui(pos[b], pos[a], col,
-                                    0.0040 if (a, b) in tramos else 0.0024))
-        # la punta: un cuadrito cerca del que lo recibe dice el sentido
-        (x0, y0), (x1, y1) = pos[b], pos[a]
-        cl.diagrama.append(E.banda(0.010, 0.010, (x0 + (x1 - x0) * 0.82,
-                                                  y0 + (y1 - y0) * 0.82), col))
-        if a in ola and ola.get(b) == ola[a] - 1:
-            onda = linea_ui(pos[b], pos[a], E.GAITAN, 0.0040, E.Z_ADORNO - 0.01)
-            onda.alpha = 0
-            onda.animate_color(E.GAITAN, duration=0.25, delay=0.6 + ola[a] * 0.55)
-            cl.diagrama.append(onda)
-
+    ola = p.desenlace_red.get("ola", {})
     bots_vistos = p.pistas.buscar("fecha").desbloqueada
-    for v, (x, y) in pos.items():
-        datos = red.datos[v]
-        tocado = conocida.grado_salida(v) or conocida.grado_entrada(v)
-        col = (E.GAITAN if v in camino else E.UI if tocado else E.luz(40))
-        punto = Entity(parent=camera.ui, model="circle", color=col,
-                       scale=0.030 if v != ORIGEN_JUGADOR else 0.040,
-                       position=(x, y, E.Z_ADORNO - 0.02))
-        cl.diagrama.append(punto)
-        if v in creyentes or v in protegidos:
-            # el anillo dice como acabo cada vecino; el texto lo repite abajo
-            # con nombres, para no contarlo solo con color
-            cl.diagrama.append(Entity(parent=camera.ui, model="circle",
-                                      color=E.GAITAN if v in creyentes
-                                      else E.RESTREPO, scale=0.050,
-                                      position=(x, y, E.Z_ADORNO - 0.01)))
-        if v in ola and v != ORIGEN_JUGADOR:
-            punto.animate_color(E.GAITAN, duration=0.25,
-                                delay=0.6 + ola[v] * 0.55)
-        nombre = datos["nombre"]
-        if datos["tipo"] == "bot" and bots_vistos:
-            nombre += " · bot"
-        cl.diagrama.append(E.pequena(nombre, (x, y - 0.030),
-                                     E.TEXTO if tocado else E.TEXTO_TENUE,
-                                     escala=0.40, origen=(0, 0.5)))
+    camino = conocida.camino(ORIGEN_JUGADOR, ORIGEN_RUMOR) or []
 
-    sabidas = len(conocida.aristas())
-    lineas = [f"Conocías {sabidas} de {len(red.aristas())} conexiones"]
-    if creyentes:
-        cl.diagrama.append(E.pequena(
-            f"Anillo rojo, se lo creyeron: {en_lista(p.nombres(creyentes))}.",
-            (-0.84, -0.262), E.GAITAN, escala=0.54))
-    cl.diagrama.append(E.pequena(
-        f"Anillo verde, los protegiste a tiempo: {en_lista(p.nombres(protegidos))}."
-        if protegidos else
-        "No protegiste a nadie: el rumor siguió su camino.",
-        (-0.84, -0.297), E.RESTREPO if protegidos else E.TEXTO_TENUE,
-        escala=0.54))
-    if camino:
-        nombres = " → ".join(red.datos[v]["nombre"] for v in camino)
-        lineas.append(f"Rastreo (BFS, {len(camino) - 1} saltos): {nombres}")
+    nodos = {}
+    for v, d in red.datos.items():
+        nodos[v] = {
+            "nombre": d["nombre"], "tipo": d["tipo"],
+            "estado": ("creyente" if v in creyentes else
+                       "protegido" if v in protegidos else "neutro"),
+            "conocido": bool(conocida.grado_salida(v)
+                             or conocida.grado_entrada(v)),
+            "bot_visto": d["tipo"] == "bot" and bots_vistos,
+        }
+    # (quien lo paso, quien lo recibio, la sabias, es del arbol BFS)
+    aristas = [(b, a, b in conocida.vecinos(a), padre.get(a) == b)
+               for a, b in red.aristas()]
+    # hasta que nivel llego el frente: si lo frenaste, el de cuando
+    # decidiste; si no, hasta el ultimo que se lo creyo
+    hondo = max(prof.values())
+    if protegidos:
+        alcance = min(p.nivel_rumor(), hondo)
     else:
-        lineas.append("No llegaste al origen: la cadena quedó a medias.")
-    if compartio:
-        lineas.append(f"Al compartirlo llegó a {len(ola) - 1} personas "
-                      f"en {max(ola.values())} niveles.")
-    cl.diagrama.append(E.pequena("  ·  ".join(lineas[:2]), (-0.84, -0.335),
-                                 E.TEXTO_TENUE, escala=0.56))
-    if len(lineas) > 2:
-        cl.diagrama.append(E.pequena(lineas[2], (-0.84, -0.370), E.GAITAN,
-                                     escala=0.56))
-    cl.diagrama.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
-                               z=E.Z_ADORNO))
-    cl.diagrama += E.leyenda((("enter", "continuar"),), -0.458)
+        alcance = max([prof[v] for v in creyentes if v in prof] or [0])
+    sabidas, total = len(conocida.aristas()), len(red.aristas())
+
+    lineas = []
+    if creyentes:
+        lineas.append((E.GAITAN, f"Se lo creyeron: "
+                                 f"{en_lista(p.nombres(sorted(creyentes)))}."))
+    lineas.append((E.RESTREPO, f"Los protegiste a tiempo: "
+                               f"{en_lista(p.nombres(sorted(protegidos)))}.")
+                  if protegidos else
+                  (E.TINTA_TENUE, "No protegiste a nadie: el rumor siguió su "
+                                  "camino."))
+    if camino:
+        lineas.append((E.TINTA, f"Rastreo (BFS, {len(camino) - 1} saltos): "
+                                + " → ".join(red.datos[v]["nombre"]
+                                             for v in camino)))
+    if ola:
+        niveles = max(ola.values())
+        lineas.append((E.GAITAN, f"Al compartirlo llegó a {len(ola) - 1} "
+                                 f"personas en {niveles} "
+                                 f"nivel{'es' if niveles != 1 else ''}."))
+    vecinos = len(p.vecinos())
+    chips = [("CONEXIONES", f"{sabidas} DE {total}", E.TINTA),
+             ("LO CREEN", f"{len(creyentes)} DE {vecinos}", E.GAITAN),
+             ("PROTEGISTE", f"{len(protegidos)}",
+              E.RESTREPO if protegidos else E.TINTA_TENUE),
+             ("ORIGEN", f"{len(camino) - 1} SALTOS" if camino else "SIN RASTREAR",
+              E.TINTA if camino else E.TINTA_TENUE)]
+    return {
+        "titulo": "La red del rumor", "arriba": _arriba(p),
+        "dia": f"{p.dia_actual + 1:02d}",
+        "porcentaje": round(100 * sabidas / max(total, 1)), "chips": chips,
+        "nodos": nodos, "prof": prof,
+        "aparte": [v for v in sorted(red.adyacencia) if v not in prof],
+        "aristas": aristas, "origen": ORIGEN_RUMOR, "camino": camino,
+        "nivel_alcanzado": alcance, "frenado": bool(protegidos),
+        "hora": p.hora(), "ola": ola,
+        # por donde le llego a cada uno que se lo creyo (gotas del rumor)
+        "flujo": [(padre[v], v) for v in creyentes if padre.get(v)],
+        "lineas": lineas, "acento": color.rgb32(*p.protagonista.color),
+    }
 
 
-def dibujar_encuesta():
-    """La tercera pagina del cierre: quien va ganando, y por que."""
-    limpiar(cl.diagrama)
-    cl.pagina_cierre = "encuesta"
-    p = cl.partida
+def dibujar_diagrama(animado=True):
+    cl.pagina_cierre = "arbol"
+    nueva_pagina(cierre.flujo(datos_flujo(cl.partida), cl.foto_cierre, animado))
+
+
+def dibujar_red(animado=True):
+    cl.pagina_cierre = "red"
+    nueva_pagina(cierre.red(datos_red(cl.partida), animado))
+
+
+def titular_encuesta(candidatos):
+    """El titular lo escribe el resultado: quien se movio mas, y hacia
+    donde. Si nadie se movio, quien sigue al frente."""
+    mas = max(candidatos, key=lambda c: abs(c["pct"] - c["ayer"]))
+    cambio = mas["pct"] - mas["ayer"]
+    apellido = mas["nombre"].split()[-1]
+    if cambio >= 1:
+        return f"{apellido} sube {cambio} punto{'s' if cambio != 1 else ''}"
+    if cambio <= -1:
+        return f"{apellido} cae {-cambio} punto{'s' if cambio != -1 else ''}"
+    lider = max(candidatos, key=lambda c: c["pct"])
+    return f"{lider['nombre'].split()[-1]} sigue al frente"
+
+
+def datos_encuesta(p):
     candidatos = []
     for i, (nombre, lema, _pesos) in enumerate(CANDIDATOS):
         sabidos, faltan = p.expediente_de(nombre)
@@ -1432,14 +1518,44 @@ def dibujar_encuesta():
             "hechos": [(HECHOS[h], h in p.hechos_del_dia) for h in sabidos],
             "faltan": faltan,
         })
-    motivos = [(c, d, m) for c, d, m in p.motivos_encuesta if abs(d) >= 1]
-    memoria = [TEXTO_BANDERA[b] for b in p.banderas_del_dia if b in TEXTO_BANDERA]
-    cl.diagrama += pantallas.Encuesta(p.dia_actual + 1, candidatos,
-                                      motivos, memoria).piezas
+    tinta_de = {c["nombre"]: c["tinta"] for c in candidatos}
+    motivos = [(c, d, m, tinta_de[c]) for c, d, m in p.motivos_encuesta
+               if abs(d) >= 1]
+    memoria = [TEXTO_BANDERA[b] for b in p.banderas_del_dia
+               if b in TEXTO_BANDERA]
+
+    lider = max(candidatos, key=lambda c: c["pct"])
+    mas = max(candidatos, key=lambda c: abs(c["pct"] - c["ayer"]))
+    cambio = mas["pct"] - mas["ayer"]
+    chips = [("LIDERA", f"{lider['nombre'].split()[-1].upper()} "
+                        f"{lider['pct']} %", lider["tinta"])]
+    if cambio:
+        chips.append(("MAYOR CAMBIO", f"{mas['nombre'].split()[-1].upper()} "
+                                      f"{'+' if cambio > 0 else '−'}{abs(cambio)}",
+                      E.RESTREPO if cambio > 0 else E.GAITAN))
+    if p.desenlace_red is not None:
+        n = len(p.desenlace_red["creyentes"])
+        chips.append(("SE LO CREYERON", f"{n} VECINO{'S' if n != 1 else ''}",
+                      E.GAITAN if n else E.TINTA))
+    _titulo, faltan_dias, _lugar = capitulo_de(p.dia_actual + 1)
+    chips.append(("ELECCIÓN", f"EN {faltan_dias.upper()}", E.TINTA))
+    return {
+        "titular": titular_encuesta(candidatos), "arriba": _arriba(p),
+        "dia": f"{p.dia_actual + 1:02d}", "candidatos": candidatos,
+        "motivos": motivos, "memoria": memoria, "chips": chips,
+        "resumen": "Encuesta de intención de voto entre los vecinos del barrio.",
+    }
+
+
+def dibujar_encuesta(animado=True):
+    """La tercera pagina del cierre: quien va ganando, y por que."""
+    cl.pagina_cierre = "encuesta"
+    nueva_pagina(cierre.encuesta(datos_encuesta(cl.partida), animado))
 
 
 def siguiente_dia():
     cl.pagina_cierre = None
+    cl.pagina = None
     limpiar(cl.diagrama)
     if cl.partida.partida_terminada():
         pantalla_final()
@@ -1522,6 +1638,31 @@ def atender_alertas(dt):
         cl.alerta = pantallas.UltimaHora(texto, x, y, rotulo, titulo, tinta)
 
 
+def anunciar_tiempo_agotado():
+    """El reloj llego a cero y la Partida ya eligio por ti.
+
+    Antes se saltaba directo al diagrama sin decir nada: parecia que el
+    juego se habia adelantado. Ahora se cuenta como una consecuencia,
+    con lo que se eligio por omision, y luego se cierra el dia.
+    """
+    cl.agotado = True
+    cl.espera_cierre = DURACION_CONSECUENCIA
+    limpiar(cl.opciones)
+    animar("idle")
+    mundo.corte("PP")
+    elegido = cl.partida.arbol_decision.cursor
+    cl.opciones.append(E.pequena("SE ACABÓ EL TIEMPO", (0.14, 0.135),
+                                 E.ALERTA, escala=0.5))
+    titulo = E.etiqueta(elegido.texto, (0.14, 0.095), 1.35, E.TEXTO)
+    titulo.wordwrap = 34
+    cl.opciones.append(titulo)
+    detalle.text = "No decidiste a tiempo: la publicación siguió su camino."
+    detalle.wordwrap = 60
+    colocar_reloj(2)
+    reloj_cifra.text = "0 s"
+    reloj_barra.scale_x = 0.0001
+
+
 def cerrar_alerta():
     if cl.alerta is not None:
         cl.alerta.cerrar()
@@ -1549,7 +1690,10 @@ def update():
         if cl.rotulo.actualizar(time.dt):
             cerrar_rotulo()
         return
-    if cl.partida is not None and cl.estado in ("libre", "dialogo", "juego"):
+    # Con el dia cerrado no: el diagrama, la red y la encuesta son papel
+    # a pantalla completa, y una alerta encima tapaba media pagina.
+    if (cl.partida is not None and cl.estado in ("libre", "dialogo", "juego")
+            and not cl.dia_cerrado):
         atender_alertas(time.dt)
 
     if cl.estado == "libre" and cl.jugador is not None:
@@ -1586,6 +1730,15 @@ def update():
             al_elegir(nodo.id)
         return
 
+    if cl.agotado:
+        # La Partida termina de elegir por omision (puede ser mas de un
+        # nodo); el cliente solo espera a que se lea el cartel.
+        cl.espera_cierre -= time.dt
+        p.actualizar(time.dt)
+        if p.arbol_decision.termino() and cl.espera_cierre <= 0:
+            cerrar_dia()
+        return
+
     habia_modal = p.interrupcion is not None
     # leer no cuesta: con una alerta en pantalla el reloj no corre
     p.actualizar(0 if cl.alerta is not None else time.dt)
@@ -1593,14 +1746,21 @@ def update():
     if p.interrupcion is not None and not habia_modal:
         abrir_modal()
     elif p.interrupcion is None and habia_modal and cl.modal:
+        # Se le acabo el tiempo al otro jugador: se va de la escena igual
+        # que cuando decide (antes se quedaba de pie, con sus dos luces).
         limpiar(cl.modal)
+        retirar_invitado()
+        mundo.corte("PM")
         refrescar_opciones()
+
+    if p.tiempo_restante <= 0 and p.interrupcion is None:
+        anunciar_tiempo_agotado()
+        return
 
     if p.interrupcion is not None:
         resto = p.tiempo_interrupcion / TIEMPO_INTERVENCION
-        reloj_cifra.text = ""
-        if modal_reloj is not None:
-            modal_reloj.text = f"{p.tiempo_interrupcion:.0f} s"
+        # la cuenta del que decide si interviene, en el sitio de siempre
+        reloj_cifra.text = f"{p.tiempo_interrupcion:.0f} s"
     else:
         resto = p.tiempo_restante / p.tiempo_total
         reloj_cifra.text = f"{p.tiempo_restante:.0f} s"
@@ -1636,7 +1796,12 @@ def volver_al_menu():
     limpiar(cl.reloj_manana)
     quitar_npcs()
     cl.nodo_pendiente = None
+    cl.agotado = False
+    # La tarjeta de la interrupcion: si se volvia al menu con ella
+    # abierta, se quedaba encima del menu y su boton tumbaba el juego.
+    limpiar(cl.modal)
     limpiar(cl.diagrama)
+    cl.pagina = None
     limpiar(cl.hud)
     limpiar(cl.opciones)
     limpiar(cl.zonas)
@@ -1683,7 +1848,9 @@ def input(tecla):
         return
 
     elif cl.estado == "contexto":
-        if tecla in ("enter", "space"):
+        # Esc tambien sigue, como en el rotulo de antes: aqui no hay nada
+        # que cancelar y una tecla muerta parece un cuelgue.
+        if tecla in ("enter", "space", "escape"):
             audio.efecto("confirmar")
             cerrar_contexto()
         return
@@ -1702,6 +1869,18 @@ def input(tecla):
     elif (cl.estado == "juego" and tecla == "tab" and not cl.dia_cerrado
           and cl.nodo_pendiente is None and cl.partida.interrupcion is None):
         abrir_libreta()
+        return
+
+    elif (cl.estado == "juego" and tecla.isdigit() and tecla != "0"
+          and not cl.dia_cerrado):
+        # 1-9 eligen la opcion (o, en una interrupcion, intervenir o no),
+        # como en las charlas. Los botones siguen ahi para el raton.
+        visibles = [e for e in (cl.modal or cl.opciones)
+                    if isinstance(e, Button) and e.enabled]
+        i = int(tecla) - 1
+        if i < len(visibles):
+            audio.efecto("confirmar")
+            visibles[i].on_click()
         return
 
     elif cl.estado == "dialogo" and cl.dialogo is not None:
@@ -1818,7 +1997,19 @@ def input(tecla):
             audio.efecto("confirmar")
             cl.menu.activar()
     elif cl.dia_cerrado and tecla in ("enter", "space"):
+        # Mientras se revela, Enter la completa (como en Detroit, que no
+        # obliga a esperar); con la pagina entera, pasa a la siguiente.
+        if cl.pagina is not None and not cl.pagina.terminada:
+            if cl.pagina_cierre == "arbol":
+                dibujar_diagrama(animado=False)
+            elif cl.pagina_cierre == "red":
+                dibujar_red(animado=False)
+            elif cl.pagina_cierre == "encuesta":
+                dibujar_encuesta(animado=False)
+            return
         # arbol -> red (solo el dia que la tiene) -> encuesta -> otro dia
+        if cl.pagina_cierre is None:
+            return                   # aun no ha salido la primera pagina
         if cl.pagina_cierre == "arbol" and cl.partida.red is not None:
             dibujar_red()
         elif cl.pagina_cierre in ("arbol", "red"):
@@ -1832,8 +2023,14 @@ def main():
     # ventana y saltar a pantalla completa un segundo despues se ve como
     # un fallo de arranque.
     A.cargar()
+    # La ventana nace ya con su geometria final: en pantalla completa
+    # nativa a la resolucion del monitor, o en ventana centrada. Ver
+    # ajustes.geometria_ventana (y por que no se usa la de Ursina).
+    x, y, ancho, alto, completa = A.geometria_ventana()
+    if completa:
+        loadPrcFileData("", "fullscreen 1")
     app = Ursina(title="Alcalde Digital", borderless=False, vsync=True,
-                 fullscreen=A.VALORES["pantalla_completa"])
+                 fullscreen=False, size=(ancho, alto), position=(x, y))
     window.color = color.Color(*mundo.CIELO)
     E.cargar_fuentes()           # antes de crear cualquier texto
     E.ocultar_depuracion()

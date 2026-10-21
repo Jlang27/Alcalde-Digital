@@ -216,6 +216,11 @@ class Partida:
         self.publicacion = None
         self.evento_dia = None
         self.tiempo_restante = 0.0
+        # El ritmo que eligio el jugador en Ajustes (1.0 = normal). Vive
+        # aqui y no en el cliente porque estira TODO el reloj del dia,
+        # tambien el momento de las interrupciones; en red lo fijara el
+        # servidor para todos.
+        self.factor_tiempo = 1.0
         self.ultimo_detalle = ""
         self.ultimos_efectos = {}
         self.cartas = []              # cartas repartidas este dia
@@ -321,6 +326,10 @@ class Partida:
         #     para que las ramas de habilidades viajen con su subarbol)
         self.compartidos = self.publicacion["compartidos"]
         self._preparar_investigacion()
+        # El reloj del dia se fija antes de repartir: las cartas se
+        # programan contra el, no contra el de serie.
+        self.tiempo_total = (self.publicacion.get("tiempo", TIEMPO_ESCENA)
+                             * self.factor_tiempo)
         # 4. se reparten las cartas de intervencion a los demas jugadores
         self._repartir_cartas()
 
@@ -332,7 +341,6 @@ class Partida:
         self.evento_dia = nombre
         self._aplicar_efectos(efectos)
 
-        self.tiempo_total = self.publicacion.get("tiempo", TIEMPO_ESCENA)
         self.tiempo_restante = self.tiempo_total
         self.ultimo_detalle = ""
         self.hechos_del_dia = []
@@ -443,6 +451,10 @@ class Partida:
 
         self.red, self.red_conocida = Grafo(), Grafo()
         for v, (nombre, tipo, voto, peso) in VERTICES_CAPITULO_1.items():
+            # El vertice del jugador lleva el nombre del protagonista de
+            # hoy: la cabecera, la red y la libreta deben llamarlo igual.
+            if v == ORIGEN_JUGADOR:
+                nombre = self.protagonista.nombre
             for g in (self.red, self.red_conocida):
                 g.agregar_vertice(v, nombre=nombre, tipo=tipo, voto=voto,
                                   peso=peso)
@@ -622,11 +634,15 @@ class Partida:
             # no lo frenaste: sigue hasta el final del grafo
             creyentes = self.creyentes(nivel=len(self.red.adyacencia))
             protegidos = []
+        ola = {}
         if "compartir" in ids:
             # y si lo compartiste, ademas sale de ti: tus contactos tambien
             _, ola = self.red.invertido().bfs(ORIGEN_JUGADOR)
             creyentes = [v for v in self.vecinos() if v in creyentes or v in ola]
-        self.desenlace_red = {"creyentes": creyentes, "protegidos": protegidos}
+        # la ola va en el desenlace (nivel de cada uno desde ti) para que
+        # el cliente la dibuje sin repetir el BFS por su cuenta
+        self.desenlace_red = {"creyentes": creyentes, "protegidos": protegidos,
+                              "ola": ola}
 
     def _mover_encuesta(self):
         """Lo que hiciste hoy, convertido en intencion de voto."""
@@ -645,7 +661,8 @@ class Partida:
             if perdidos:
                 total = sum(perdidos.values())
                 quien = en_lista(self.nombres(perdidos))
-                mover("Daniel Ospina", -total, f"{quien} se creyeron el rumor")
+                verbo = "se creyó" if len(perdidos) == 1 else "se creyeron"
+                mover("Daniel Ospina", -total, f"{quien} {verbo} el rumor")
                 mover("Hugo Bravo", total / 2, "El escándalo le sirve")
         # 2. lo que movieron los nodos que recorriste
         for nodo in self.arbol_decision.camino:
@@ -730,12 +747,16 @@ class Partida:
         # escalonadas para que no se pisen una con otra.
         if not es_capitulo_1:
             random.shuffle(self.cartas)
+        # Los segundos se cuentan desde que empieza el dia y se estiran con
+        # el ritmo, contra el reloj de HOY: con los 25 s de serie, en un dia
+        # de 40 s la primera carta llegaba a los 20 s en vez de a los 5.
         for i, carta in enumerate(self.cartas):
             if es_capitulo_1:
                 transcurrido = 5.0 + i * 5.5
             else:
                 transcurrido = 5.0 + i * 5.5 + random.uniform(0.0, 2.0)
-            carta.momento = max(3.0, TIEMPO_ESCENA - transcurrido)
+            carta.momento = max(3.0, self.tiempo_total
+                                - transcurrido * self.factor_tiempo)
 
     def cartas_disponibles(self):
         return [c for c in self.cartas if not c.jugada and not c.rechazada]

@@ -112,13 +112,75 @@ def aplicar_brillo():
     mundo.brillo((VALORES["brillo"] - PASOS / 2) / (PASOS / 2) * PASOS_BRILLO)
 
 
-def aplicar_ventana():
-    """Pantalla completa o ventana. Se aplica al vuelo."""
-    from ursina import window
+def _monitor():
+    """(x, y, ancho, alto) del monitor principal."""
     try:
-        window.fullscreen = bool(VALORES["pantalla_completa"])
+        from ursina import window
+        m = window.main_monitor
+        if m is not None:
+            return m.x, m.y, m.width, m.height
     except Exception:
-        pass          # sin ventana real (banco de pruebas) no hay nada que hacer
+        pass
+    try:
+        import screeninfo
+        todos = screeninfo.get_monitors()
+        m = next((m for m in todos if m.is_primary), todos[0])
+        return m.x, m.y, m.width, m.height
+    except Exception:
+        return 0, 0, 1280, 720
+
+
+def geometria_ventana(completa=None):
+    """(x, y, ancho, alto, completa) de la ventana para el ajuste dado.
+
+    Pantalla completa = la nativa de Panda3D, pidiendo JUSTO la
+    resolucion del monitor (asi no hay cambio de modo de video).
+    No se usa la de Ursina: solo agranda la ventana con bordes y guarda
+    el tamano anterior para volver; como el juego arrancaba ya del tamano
+    del monitor, guardaba ESE tamano y al desactivarla la ventana se
+    quedaba ocupandolo todo. Una ventana sin bordes tampoco sirve: GNOME
+    la encoge para no tapar la barra superior ni el dock (probado en la
+    PC del equipo: 1299x736 en vez de 1366x768).
+
+    En ventana: 80 % del monitor, 16:9 y centrada. Un tamano propio y
+    fijo, para que siempre haya a donde volver.
+    """
+    if completa is None:
+        completa = bool(VALORES["pantalla_completa"])
+    mx, my, mw, mh = _monitor()
+    if completa:
+        return mx, my, mw, mh, True
+    ancho = min(1600, int(mw * 0.8))
+    alto = int(ancho * 9 / 16)
+    if alto > mh * 0.85:
+        alto = int(mh * 0.85)
+        ancho = int(alto * 16 / 9)
+    return mx + (mw - ancho) // 2, my + (mh - alto) // 2, ancho, alto, False
+
+
+def aplicar_ventana():
+    """Pantalla completa o ventana. Se aplica al vuelo, en los dos sentidos."""
+    from ursina import application, window
+    base = getattr(application, "base", None)
+    win = getattr(base, "win", None)
+    # sin ventana real (banco de pruebas, captura offscreen) no hay nada
+    # que cambiar: un buffer no tiene bordes ni posicion
+    if win is None or not hasattr(win, "requestProperties"):
+        return
+    from panda3d.core import WindowProperties
+    x, y, ancho, alto, completa = geometria_ventana()
+    props = WindowProperties()
+    props.setFullscreen(completa)
+    props.setSize(ancho, alto)
+    if not completa:
+        props.setUndecorated(False)
+        props.setOrigin(x, y)
+    try:
+        win.requestProperties(props)
+        # que Ursina sepa en que estado esta, sin pasar por su setter
+        window._fullscreen = completa
+    except Exception:
+        pass
 
 
 def aplicar_estilo():

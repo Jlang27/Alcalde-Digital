@@ -391,9 +391,23 @@ BUSES = ((1, 101.0), (3, -75.0), (2, 120.0))
 Z_TRAFICO = (-90.0, 225.0)
 
 # Peatones en la acera de la derecha: (x, z, rumbo). Rumbo 0 = de cara
-# a la camara.
-PEATONES = ((8.3, -22.0, 25), (7.9, -18.5, -15), (8.8, -15.0, 40),
-            (8.2, -12.0, -30), (8.6, -25.5, 10), (7.7, -9.0, 60))
+# a la camara. La camara del plano mira hacia +z desde z = -34, asi que
+# DELANTE es z mas negativa.
+#
+# Delante, los que tienen animacion de «celular»: son los que sacan el
+# telefono cuando suena la alerta, y es lo que tiene que leerse.
+PEATONES = ((8.3, -23.0, 25), (7.9, -20.5, -15), (8.8, -18.5, 40),
+            (8.2, -16.5, -30), (8.6, -25.5, 10), (7.7, -14.5, 60))
+# Detras, la gente de la cafeteria (assets/npc/), de pie. No tienen
+# animacion de telefono: se quedan en reposo mientras los de delante lo
+# sacan, y al fondo eso se lee como gente que aun no se ha enterado, no
+# como un modelo al que le falta una animacion.
+#   (modelo, x, z, rumbo)
+# Abiertos a los dos lados de la fila de delante (x 7.2 hacia la calle,
+# 9.4 hacia la vitrina): en la misma linea que ellos quedaban tapados.
+PEATONES_NPC = (("npc1", 9.4, -12.5, 20), ("npc3", 7.2, -11.5, -25),
+                ("npc2", 9.5, -9.5, 35), ("npc4", 7.3, -8.5, -10),
+                ("cashier", 9.2, -6.5, 45))
 
 
 def _caras_caja(x0, x1, y0, y1, z0, z1):
@@ -1024,6 +1038,10 @@ def _peatones(mundo):
     Instanciar comparte malla y animacion. Cargar seis .glb de nueve
     megas congelaria la carga varios segundos; con dos basta, y como
     cada uno mira hacia un lado no se nota que se mueven a la par.
+
+    Detras van los NPCs de la cafeteria, de pie (PEATONES_NPC). Esos si
+    se cargan uno a uno, pero el ModelPool de Panda3D los guarda: cuando
+    la cafeteria pide a Sofia, Hernan y Don Rafa, ya estan en memoria.
     """
     actores = []
     for i, rol in enumerate(("ciudadano", "periodista")):
@@ -1041,6 +1059,12 @@ def _peatones(mundo):
         if "idle" in actor.getAnimNames():
             actor.loop("idle")
         actores.append(actor)
+    # Van en la misma lista: cambiar_escenario() les hace cleanup() y
+    # ciudad_alerta() los salta solo, porque no tienen «celular».
+    for modelo, x, z, rumbo in PEATONES_NPC:
+        actor = npc(mundo, modelo, (x, 0.15, z), rumbo, "idle")
+        if actor is not None:
+            actores.append(actor)
     _ACTUAL["actores"] = actores
 
 

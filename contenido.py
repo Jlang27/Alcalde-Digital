@@ -566,6 +566,15 @@ PUBLICACIONES = [
         "compartidos": 1240,
         # mas que los 25 s de serie: el dia 1 tiene cinco zonas que mirar
         "tiempo": 40.0,
+        # Lo que se ve en el celular. Publicado a las 6:02 (la pista de la
+        # hora) y son las 7:30: «hace 1 h». Los que comentan son los bots
+        # del grafo: leer los comentarios es verlos repetir lo mismo.
+        "fecha": "hace 1 h",
+        "comentarios": [
+            ("@vecino_2291", "¡Qué vergüenza! Compartan antes de que lo borren"),
+            ("@nova_real", "¡Compartan antes de que lo borren!"),
+            ("@mama_preocupada7", "Compartan antes de que lo borren!!"),
+        ],
     },
     {
         "id": "alcalde",
