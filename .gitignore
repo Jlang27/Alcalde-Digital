@@ -5,3 +5,6 @@ __pycache__/
 .claude/
 diagnostico_blender.txt
 ajustes.json
+
+# capturas del banco de pruebas: se regeneran, no se versionan
+herramientas/banco_pruebas/capturas/

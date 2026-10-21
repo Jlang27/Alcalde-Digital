@@ -121,16 +121,16 @@ INYECCIONES = {
                      {"desinformacion": -14, "confianza": 9}, "empatia", 2,
                      "Llegas a todos los que vieron el error original."),
 
-    # ---------- CANDIDATO ----------
+    # ---------- ALCALDE ----------
     "comunicacion": ("raiz", "d_responder", "Responder públicamente",
                      {"confianza": 5, "conflictos": 3}, "alcance", 1,
                      "Das la cara. Algunos te creen, otros no."),
     "discurso_claro": ("d_responder", "d_datos", "Explicarlo con datos",
                        {"info_verificada": 9, "confianza": 8}, "rigor", 2,
                        "Muestras el presupuesto línea por línea."),
-    "debate": ("raiz", "d_debate", "Convocar un debate abierto",
+    "debate": ("raiz", "d_debate", "Convocar un foro con los candidatos",
                {"convivencia": 8, "confianza": 6}, "empatia", 2,
-               "Invitas a los otros candidatos. La plaza se llena."),
+               "Abres la Alcaldía a los cuatro candidatos. La plaza se llena."),
     "gestion_crisis": ("raiz", "d_crisis", "Activar el protocolo de crisis",
                        {"conflictos": -6, "desinformacion": -4}, "rigor", 1,
                        "Tu equipo responde coordinado, sin improvisar."),
@@ -157,6 +157,7 @@ INYECCIONES = {
 ROLES = {
     "ciudadano": {
         "nombre": "Ciudadano",
+        "personaje": "Mateo Gaitán",
         "simbolo": "C",
         "lema": "Interactuar con responsabilidad y cuidar la convivencia.",
         "descripcion": "Recibe la información como cualquier habitante.\n"
@@ -174,6 +175,7 @@ ROLES = {
     },
     "periodista": {
         "nombre": "Periodista",
+        "personaje": "Valeria Samper",
         "simbolo": "P",
         "lema": "Investigar, verificar y ayudar a distinguir lo confiable.",
         "descripcion": "Puede revelar la veracidad de una publicación\n"
@@ -190,6 +192,7 @@ ROLES = {
     },
     "influencer": {
         "nombre": "Influencer",
+        "personaje": "Santiago Lleras",
         "simbolo": "I",
         "lema": "Gran alcance: cada decisión pesa el doble.",
         "descripcion": "Lo que comparte llega a miles al instante.\n"
@@ -204,20 +207,27 @@ ROLES = {
             ("retractacion", "Retractación", "Corregir a gran escala", 2, "^", "responsabilidad"),
         ],
     },
-    "candidato": {
-        "nombre": "Candidato",
+    # El cuarto rol es el ALCALDE (documento del proyecto, seccion 13:
+    # Ciudadano, Periodista, Influencer y Alcalde). No es candidato: es
+    # quien gobierna hasta la eleccion. Tiene los datos oficiales y la voz
+    # de la institucion, y por eso todo lo que dice se lee como politica.
+    # Antes era el «Candidato» Daniel Ospina, que el dia 1 protagonizaba un
+    # rumor sobre si mismo.
+    "alcalde": {
+        "nombre": "Alcalde",
+        "personaje": "Ernesto Villamizar",
         "simbolo": "A",
-        "lema": "Construir confianza y enfrentar los rumores de frente.",
-        "descripcion": "Es blanco de los ataques y a la vez\n"
-                       "quien más puede calmar a Ciudad Nova.",
+        "lema": "Gobernar con transparencia mientras la ciudad elige.",
+        "descripcion": "No está en la papeleta, pero responde por Ciudad Nova.\n"
+                       "Tiene los datos oficiales y la voz de la Alcaldía.",
         "arbol": [
-            ("comunicacion", "Comunicación", "Dar la cara", 1, "o", None),
-            ("discurso_claro", "Discurso claro", "Explicar con datos", 2, "^", "comunicacion"),
-            ("debate", "Debate directo", "Debatir en público", 2, "*", "comunicacion"),
-            ("gestion_crisis", "Gestión de crisis", "Responder coordinado", 1, "o", None),
-            ("control_danos", "Control de daños", "Cortar el rumor", 2, "~", "gestion_crisis"),
-            ("confianza_cand", "Confianza", "Escuchar a la gente", 1, "o", None),
-            ("promesa", "Promesa cumplida", "Comprometerte en firme", 2, "^", "confianza_cand"),
+            ("comunicacion", "Comunicado oficial", "Dar la cara", 1, "o", None),
+            ("discurso_claro", "Datos abiertos", "Publicar las cifras", 2, "^", "comunicacion"),
+            ("debate", "Foro de candidatos", "Reunirlos en público", 2, "*", "comunicacion"),
+            ("gestion_crisis", "Gabinete de crisis", "Responder coordinado", 1, "o", None),
+            ("control_danos", "Mesa de verificación", "Cortar el rumor", 2, "~", "gestion_crisis"),
+            ("confianza_cand", "Escucha ciudadana", "Ir a los barrios", 1, "o", None),
+            ("promesa", "Rendición de cuentas", "Comprometerte en firme", 2, "^", "confianza_cand"),
         ],
     },
 }
@@ -614,6 +624,29 @@ PUBLICACIONES = [
                     "El video omite esa parte a propósito.",
         "compartidos": 2050,
     },
+    # Dias 6 y 7: la recta final. Siete dias hasta la eleccion es la
+    # espina del guion («faltan 7 dias» en la intro); con cinco
+    # publicaciones la partida se acababa dos dias antes de votar.
+    {
+        "id": "encuesta",
+        "escenario": "plaza",
+        "autor": "@DatosYaNova",
+        "texto": "Encuesta filtrada: Bravo gana con el 60 % de los votos.",
+        "veracidad": "falsa",
+        "contexto": "No tiene ficha técnica ni encuestadora registrada,\n"
+                    "y los porcentajes de los cuatro candidatos suman 130 %.",
+        "compartidos": 1530,
+    },
+    {
+        "id": "audio",
+        "escenario": "barrio",
+        "autor": "@FiltracionesNova",
+        "texto": "Audio: Juan Medina se burla de los profesores del barrio.",
+        "veracidad": "falsa",
+        "contexto": "La voz es sintética: Medina estaba a esa hora en un\n"
+                    "foro público transmitido en vivo.",
+        "compartidos": 2760,
+    },
 ]
 
 # Eventos aleatorios del dia (seccion 8 del enunciado)
@@ -900,8 +933,8 @@ CARTAS_BASE = {
                    {"conflictos": 4, "desinformacion": 5, "confianza": -2}, "alcance", 1,
                    "El tema explota antes de que puedas pensarlo con calma.",
                    "Tendencia"),
-    "candidato": ("raiz", "x_candidato", "El candidato responde en vivo",
-                  {"confianza": 5, "conflictos": -3}, "alcance", 1,
-                  "El candidato sale a responder y cambia el tono del debate.",
-                  "Respuesta en vivo"),
+    "alcalde": ("raiz", "x_alcalde", "La Alcaldía publica un comunicado",
+                {"info_verificada": 5, "confianza": 4, "conflictos": -3}, "rigor", 1,
+                "La Alcaldía publica el acta del concejo y aclara qué se propuso.",
+                "Comunicado oficial"),
 }

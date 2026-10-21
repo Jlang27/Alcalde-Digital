@@ -16,7 +16,7 @@ RUTA_PERSONAJE = os.path.join(RAIZ, "assets", "personajes", "prueba.glb")
 def ruta_personaje(rol=None):
     """El modelo de cada rol.
 
-    Los archivos se llaman como el ROL (candidato.glb, influencer.glb...)
+    Los archivos se llaman como el ROL (alcalde.glb, influencer.glb...)
     y no como el personaje, porque el rol es la clave que ya usa la
     logica: asi no hace falta ninguna tabla de traduccion. Si todavia no
     existe el modelo de ese rol, se usa el de prueba.
@@ -1403,7 +1403,7 @@ def crear(escenario="cafeteria", rol=None):
 # El orden del tarjeton: de menos a mas alcance. Es la lectura del
 # guion, y de paso ordena la pantalla de izquierda a derecha por cuanto
 # pesa lo que publicas.
-ROLES_JUGABLES = ("ciudadano", "periodista", "influencer", "candidato")
+ROLES_JUGABLES = ("ciudadano", "periodista", "influencer", "alcalde")
 
 # Separacion en fila. Mas juntos se les solapan los brazos en cuanto la
 # camara se mueve de su sitio.

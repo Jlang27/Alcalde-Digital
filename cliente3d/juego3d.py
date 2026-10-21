@@ -182,8 +182,8 @@ def fichas_de_rol():
     for id_rol in mundo.ROLES_JUGABLES:
         rol = ROLES[id_rol]
         ramas = [nodo[1] for nodo in rol["arbol"] if nodo[5] is None]
-        fichas.append((id_rol, rol["nombre"], rol["lema"],
-                       rol["descripcion"], ramas))
+        fichas.append((id_rol, rol.get("personaje", rol["nombre"]), rol["lema"],
+                       rol["descripcion"], ramas, rol["nombre"]))
     return fichas
 
 
@@ -195,8 +195,7 @@ def abrir_seleccion():
                                        alumbrar_reparto)
 
 
-def alumbrar_reparto(indice):
-    tinta = E.CANDIDATOS[indice % len(E.CANDIDATOS)]
+def alumbrar_reparto(indice, tinta):
     mundo.iluminar_elenco(cl.elenco, indice, (tinta.r, tinta.g, tinta.b))
     for i, actor in enumerate(cl.elenco):
         nombre = "idle" if i != indice else "hablar"
@@ -249,8 +248,10 @@ def rehacer_ajustes(_clave):
     cl.ajustes.cerrar()
     abrir_ajustes(donde)
 
-CAPITULOS = [("01", "El primer rumor", True)] + \
-            [(f"{n:02d}", "Próximamente", False) for n in range(2, 13)]
+# Los siete dias del guion; solo el primero esta terminado y se puede
+# jugar suelto. Antes la lista llegaba a doce, que nunca existieron.
+CAPITULOS = [(f"{i + 1:02d}", titulo if i == 0 else f"{titulo} · próximamente",
+              i == 0) for i, (titulo, _lugar) in enumerate(pantallas.CAPITULOS)]
 
 def abrir_capitulos():
     cl.estado = "capitulos"
@@ -341,7 +342,9 @@ def terminar_intro():
 
 
 def empezar_partida():
-    audio.callar_todo()             # a partir de aqui manda la escena
+    # a partir de aqui manda la escena: la musica de la intro se va y el
+    # cafe entra por debajo del rotulo, antes de verse
+    audio.callar_todo(fundido=0.8)
     cl.estado = "juego"
     # El reparto sale de la pantalla de seleccion, tal cual: si solo
     # ficharon a uno, la partida es de uno. Rellenarla por detras
@@ -632,6 +635,7 @@ def inspeccionar(id_zona):
     # Investigar tiene que DOLER: la Partida ya cobro los segundos, aqui
     # solo se ensena cuanto.
     costo = antes - p.tiempo_restante
+    audio.efecto("toque")
     x,y,w,h = ZONAS[id_zona]
     if primera:
         cl.marcas.append(E.banda(w,h,(x,y), color.rgb32(224, 164, 42, 90),
@@ -768,10 +772,12 @@ def mostrar_consecuencia(nodo):
     colocar_reloj(2)
 
 
-def al_elegir(id_opcion):
+def al_elegir(id_opcion, del_jugador=True):
     nodo = cl.partida.elegir(id_opcion)
     if nodo is None:
         return
+    if del_jugador:
+        audio.efecto("decidir")
     animar("celular" if nodo.rasgo == "rigor" else "hablar", bucle=False)
     mundo.corte("PP" if nodo.rasgo in ("rigor", "empatia") else "PM")
     # el de la Partida y no el del nodo: trae el «llegaste tarde» si toca
@@ -788,7 +794,8 @@ def al_elegir(id_opcion):
 def capitulo_de(indice):
     """(titulo, dias que faltan, lugar) del dia que empieza."""
     tabla = pantallas.CAPITULOS
-    return tabla[min(indice + 1, len(tabla) - 1)]
+    titulo, lugar = tabla[max(0, min(indice, len(tabla) - 1))]
+    return titulo, pantallas.dias_que_faltan(indice), lugar
 
 
 def iniciar_dia(indice):
@@ -821,10 +828,22 @@ def iniciar_dia(indice):
 
 def abrir_rotulo(indice):
     cl.estado = "rotulo"
+    # el «DÍA 01» cae como un sello, y debajo ya suena el lugar
+    audio.efecto("sello")
+    audio.ambiente(True, audio.AMBIENTE_CAFETERIA, fundido=2.5)
     animar("idle")
     mundo.corte("PG")
     titulo, _dias, lugar = capitulo_de(indice)
-    cl.rotulo = pantallas.Rotulo(indice + 1, titulo, lugar)
+    p = cl.partida
+    prota = p.protagonista
+    # Multijugador local por turnos: cada dia lo juega otro, y el rotulo
+    # espera a que el teclado cambie de manos.
+    turno = None
+    if len(p.jugadores) > 1:
+        turno = (f"Turno del jugador {prota.indice + 1} · {prota.nombre_rol}",
+                 color.rgb32(*prota.color))
+    cl.rotulo = pantallas.Rotulo(indice + 1, titulo,
+                                 f"{prota.nombre} · {lugar}", turno)
 
 
 def cerrar_rotulo():
@@ -837,6 +856,8 @@ def cerrar_rotulo():
 
 def abrir_contexto():
     cl.estado = "contexto"
+    audio.efecto("vibracion")
+    invoke(audio.efecto, "notificacion", delay=0.9)
     # PM y no PP: en primer plano solo se le ve la cara y no se entiende
     # que esta mirando el telefono, que es justo lo que cuenta la escena.
     mundo.corte("PM")
@@ -875,6 +896,9 @@ def abrir_libre():
         return
     cl.estado = "libre"
     animar("idle")
+    audio.agachar(False)
+    audio.musica(audio.MUSICA_CAFETERIA, fundido=3.0, nivel=0.8)
+    audio.ambiente(True, audio.AMBIENTE_CAFETERIA)
     bloqueos = list(mundo.bloqueos()) + cl.bloqueos_npc
     if cl.jugador is None:
         cl.jugador = Jugador(cl.actor, limites=mundo.limites(),
@@ -899,8 +923,12 @@ def cerrar_libre():
         cl.aviso = None
 
 
-def empezar_decision():
-    """Saca el telefono: aqui si aparecen las opciones del dia."""
+def empezar_decision(notificacion=True):
+    """Saca el telefono: aqui si aparecen las opciones del dia.
+
+    notificacion=False cuando el telefono sale solo a las 8:30: ahi la
+    senal es el timbre del colegio, y los dos a la vez se pisan.
+    """
     cerrar_libre()
     limpiar(cl.reloj_manana)      # en el celular manda su propio reloj
     # Lo que quedo en cola de la manana ya esta en la libreta y en las
@@ -921,6 +949,11 @@ def empezar_decision():
     fundido.desvanecer(0.45, retraso=0.1)
     cl.estado = "juego"
     animar("idle")
+    audio.agachar(False)
+    if notificacion:
+        audio.efecto("notificacion")
+    audio.musica(audio.MUSICA_TENSION, fundido=1.8, nivel=0.45)
+    audio.ambiente(True, audio.AMBIENTE_CAFETERIA, fundido=1.5, nivel=0.45)
     mundo.corte("PG")
     pintar_publicacion()
     refrescar_opciones()
@@ -1028,6 +1061,7 @@ def abrir_dialogo(id_npc):
         actor.loop("hablar")
     animar("hablar")
     cl.dialogo = pantallas.Dialogo(nombre, quien, elegir_pregunta)
+    audio.agachar(True)
     mostrar_preguntas()
 
 
@@ -1165,7 +1199,8 @@ def elegir_pregunta(i):
     if not ok:
         cerrar_dialogo()
         return
-    audio.efecto("confirmar")
+    # cada charla son diez minutos: el reloj se oye avanzar
+    audio.efecto("pasa_tiempo")
     # Si no abrio decision, igual se anota: la red crece o el dato queda.
     if len(p.novedades) == antes:
         cl.cola_avisos.append((texto, "PISTA ANOTADA", "La red crece", E.LLERAS))
@@ -1191,7 +1226,8 @@ def agotar_manana():
     """8:30: empieza la reunion y el telefono se saca solo."""
     ya = len(cl.partida.creyentes())
     # Despues de sacar el telefono, que vacia la cola: este aviso va primero.
-    empezar_decision()
+    audio.efecto("timbre")
+    empezar_decision(notificacion=False)
     cl.cola_avisos.append((f"Empezó la reunión de padres. Ya lo creen {ya} "
                            f"vecinos.", "8:30", "Se acabó la mañana", E.GAITAN))
 
@@ -1210,6 +1246,7 @@ def abrir_modal():
 
     cl.invitado, cl.luces_invitado = mundo.invitado(
         cl.mundo, carta.jugador.color, carta.jugador.id_rol)
+    audio.efecto("puerta")
     cl.invitado.loop("hablar")
     mundo.corte("DOS", mundo.PUNTO_MEDIO)
     animar("idle")
@@ -1233,6 +1270,45 @@ def abrir_modal():
     colocar_reloj(4)
 
 
+def es_multijugador():
+    return cl.partida is not None and len(cl.partida.jugadores) > 1
+
+
+def pasar_control(jugador, despues, devolver=False):
+    """Multijugador local por turnos: el teclado cambia de manos.
+
+    Hay una sola pantalla, asi que la informacion asimetrica (lo que el
+    otro decide en secreto) solo existe si el protagonista suelta el
+    teclado y no mira. La tarjeta lo pide, y mientras esta abierta el
+    reloj no corre: update() solo lo avanza en el estado "juego".
+    """
+    botones = [e for e in cl.opciones + cl.modal
+               if isinstance(e, Button) and e.enabled]
+    for b in botones:
+        b.enabled = False          # un clic por debajo de la tarjeta no elige
+
+    def seguir():
+        for b in botones:
+            b.enabled = True
+        cl.estado = "juego"
+        despues()
+
+    prota = cl.partida.protagonista
+    if devolver:
+        cuerpo = (f"Ya está decidido. El teclado vuelve a {prota.nombre} "
+                  f"para que siga con su día.")
+        rotulo = "DEVUELVE EL CONTROL"
+    else:
+        cuerpo = (f"{jugador.nombre} puede intervenir en el día de "
+                  f"{prota.nombre}. {prota.nombre.split()[0]}, no mires: "
+                  f"tiene {TIEMPO_INTERVENCION:.0f} segundos para decidir "
+                  f"en secreto.")
+        rotulo = "PASA EL CONTROL"
+    audio.efecto("pagina")
+    abrir_aviso_papel(rotulo, f"Jugador {jugador.indice + 1} · {jugador.nombre}",
+                      cuerpo, seguir)
+
+
 def retirar_invitado():
     if cl.invitado is not None:
         cl.invitado.cleanup()
@@ -1249,6 +1325,8 @@ def cerrar_modal(acepta):
     mundo.corte("PM")
     cl.partida.resolver_interrupcion(acepta)
     refrescar_opciones()
+    if es_multijugador():
+        pasar_control(cl.partida.protagonista, lambda: None, devolver=True)
 
 
 # ===================================================================
@@ -1259,6 +1337,9 @@ def cerrar_dia():
     cl.dia_cerrado = True
     cl.nodo_pendiente = None
     cl.agotado = False
+    audio.tictac(False)
+    audio.ambiente(False, fundido=1.5)
+    audio.musica(audio.MUSICA_CAFETERIA, fundido=2.0, nivel=0.65)
     cerrar_alerta()
     # Las tres colas: si quedaba un hecho (los que revela la decision
     # final) salia encima del diagrama, de la red y de la encuesta.
@@ -1537,8 +1618,11 @@ def datos_encuesta(p):
         n = len(p.desenlace_red["creyentes"])
         chips.append(("SE LO CREYERON", f"{n} VECINO{'S' if n != 1 else ''}",
                       E.GAITAN if n else E.TINTA))
-    _titulo, faltan_dias, _lugar = capitulo_de(p.dia_actual + 1)
-    chips.append(("ELECCIÓN", f"EN {faltan_dias.upper()}", E.TINTA))
+    # el dia que viene: tras el 7 (la vispera), se vota manana
+    restan = pantallas.DIAS_ELECCION - (p.dia_actual + 1)
+    chips.append(("ELECCIÓN", "MAÑANA" if restan <= 0 else
+                  f"EN {pantallas.dias_que_faltan(p.dia_actual + 1).upper()}",
+                  E.TINTA))
     return {
         "titular": titular_encuesta(candidatos), "arriba": _arriba(p),
         "dia": f"{p.dia_actual + 1:02d}", "candidatos": candidatos,
@@ -1625,7 +1709,7 @@ def atender_alertas(dt):
     x, y = (-0.46, -0.12) if cl.estado == "juego" else (0.0, 0.30)
     if cl.partida.novedades:
         cl.alerta = pantallas.UltimaHora(cl.partida.novedades.pop(0), x, y)
-        audio.efecto("confirmar")
+        audio.efecto("decision_nueva")
     elif cl.partida.hechos_nuevos:
         # lo que aprendiste de un candidato, con su tinta
         hecho = HECHOS[cl.partida.hechos_nuevos.pop(0)]
@@ -1633,9 +1717,12 @@ def atender_alertas(dt):
         cl.alerta = pantallas.UltimaHora(hecho["texto"], x, y, "EXPEDIENTE",
                                          hecho["candidato"],
                                          E.CANDIDATOS[i % len(E.CANDIDATOS)])
+        audio.efecto("hecho")
     elif cl.cola_avisos:
         texto, rotulo, titulo, tinta = cl.cola_avisos.pop(0)
         cl.alerta = pantallas.UltimaHora(texto, x, y, rotulo, titulo, tinta)
+        if rotulo == "PISTA ANOTADA":
+            audio.efecto("pista")
 
 
 def anunciar_tiempo_agotado():
@@ -1647,6 +1734,8 @@ def anunciar_tiempo_agotado():
     """
     cl.agotado = True
     cl.espera_cierre = DURACION_CONSECUENCIA
+    audio.tictac(False)
+    audio.efecto("tiempo_agotado")
     limpiar(cl.opciones)
     animar("idle")
     mundo.corte("PP")
@@ -1722,12 +1811,13 @@ def update():
     # Durante una consecuencia el reloj de la escena se detiene: no es
     # justo cobrar tiempo por algo que el jugador no decide.
     if cl.nodo_pendiente is not None:
+        audio.tictac(False)
         cl.espera -= time.dt
         if cl.espera <= 0:
             nodo = cl.nodo_pendiente
             cl.nodo_pendiente = None
             limpiar(cl.opciones)
-            al_elegir(nodo.id)
+            al_elegir(nodo.id, del_jugador=False)
         return
 
     if cl.agotado:
@@ -1744,6 +1834,9 @@ def update():
     p.actualizar(0 if cl.alerta is not None else time.dt)
 
     if p.interrupcion is not None and not habia_modal:
+        if es_multijugador():
+            pasar_control(p.interrupcion.jugador, abrir_modal)
+            return
         abrir_modal()
     elif p.interrupcion is None and habia_modal and cl.modal:
         # Se le acabo el tiempo al otro jugador: se va de la escena igual
@@ -1752,6 +1845,9 @@ def update():
         retirar_invitado()
         mundo.corte("PM")
         refrescar_opciones()
+        if es_multijugador():
+            pasar_control(p.protagonista, lambda: None, devolver=True)
+            return
 
     if p.tiempo_restante <= 0 and p.interrupcion is None:
         anunciar_tiempo_agotado()
@@ -1767,12 +1863,18 @@ def update():
 
     reloj_barra.scale_x = max(0.0001, 0.70 * resto)
     reloj_barra.color = E.ALERTA if resto < 0.3 else E.TEXTO
+    if p.interrupcion is None:
+        audio.tension(resto)
+    # el tic-tac entra con la barra en rojo, y se calla en una interrupcion
+    audio.tictac(resto < 0.3 and p.interrupcion is None)
 
     if p.arbol_decision is not None and p.arbol_decision.termino():
         cerrar_dia()
 
 
 def volver_al_menu():
+    audio.callar_todo()
+    audio.agachar(False)
     cerrar_libre()
     # Si el jugador se fue andando y vuelve al menu, el protagonista se
     # queda donde lo dejo y la portada se queda sin nadie delante.
@@ -2010,6 +2112,8 @@ def input(tecla):
         # arbol -> red (solo el dia que la tiene) -> encuesta -> otro dia
         if cl.pagina_cierre is None:
             return                   # aun no ha salido la primera pagina
+        # (la hoja que pasa la pone la pagina nueva al nacer: aqui sonaba
+        # una segunda vez encima)
         if cl.pagina_cierre == "arbol" and cl.partida.red is not None:
             dibujar_red()
         elif cl.pagina_cierre in ("arbol", "red"):

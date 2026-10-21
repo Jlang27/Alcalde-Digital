@@ -40,8 +40,31 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 
 ## Audio
 
+Recortados y normalizados con ffmpeg (volumen, fundidos y recorte anotados en cada fila). BigSoundBank publica todo su catálogo bajo CC0; las búsquedas por número llevan a la ficha de cada sonido.
+
 | Archivo | Qué es | Fuente | Licencia | Requiere crédito | Quién / Cuándo |
 |---|---|---|---|---|---|
+| `assets/audio/ambiente_cafeteria.ogg` | Ambiente de la cafetería del día 1 (bucle de 4 min, normalizado a −26 LUFS, fundidos de 2 s) | [BigSoundBank #2561](https://bigsoundbank.com/search?q=2561) — «Coffee shop at the Capucins» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/musica_cafeteria.ogg` | Música de la mañana en la cafetería y del cierre del día (normalizada a −20 LUFS) | [OpenGameArt — «Morning Sky» (Centurion_of_war)](https://opengameart.org/node/179462) | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/musica_tension.ogg` | Música del teléfono: sube con el reloj (bucle sin costura) | [OpenGameArt — «Unsolved Investigation» (isaiah658)](https://opengameart.org/content/unsolved-investigation) | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_vibracion.ogg` | El teléfono vibra sobre la mesa al llegar el rumor (recortado a 1,6 s) | [BigSoundBank #0023](https://bigsoundbank.com/search?q=0023) — «Mobile phone vibrator 2» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_notificacion.ogg` | Notificación de Civitas: llega el rumor y al sacar el teléfono | [BigSoundBank #2064](https://bigsoundbank.com/search?q=2064) — «Notification Lasolisa 2» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_decision_nueva.ogg` | «ÚLTIMA HORA · Nueva decisión» | [BigSoundBank #2061](https://bigsoundbank.com/search?q=2061) — «Notification Lasomarie 3» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_rumor_llega.ogg` | En la red: el rumor llega al teléfono de un vecino | [BigSoundBank #2066](https://bigsoundbank.com/search?q=2066) — «Notification Lasolisa 4» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_toque.ogg` | Tocar una zona de la publicación en el celular | [BigSoundBank #2059](https://bigsoundbank.com/search?q=2059) — «Notification Lasomarie 1» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_tecla.ogg` | Pista anotada y nodos del diagrama (tecla de máquina de escribir) | [BigSoundBank #2842](https://bigsoundbank.com/search?q=2842) — «Typewriter key» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_campanilla.ogg` | Expediente: se descubre un hecho de un candidato | [BigSoundBank #2844](https://bigsoundbank.com/search?q=2844) — «Typewriter bell» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_pasa_tiempo.ogg` | Pasan 10 minutos con cada charla (1,8 s de reloj) | [BigSoundBank #2816](https://bigsoundbank.com/search?q=2816) — «Tic tac mechanical alarm clock 5» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_tictac.ogg` | Tic-tac en bucle en el último tercio del reloj del teléfono | [BigSoundBank #2816](https://bigsoundbank.com/search?q=2816) — mismo sonido, completo | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_timbre_colegio.ogg` | 8:30, empieza la reunión de padres (timbre eléctrico, 1,7 s) | [BigSoundBank #1269](https://bigsoundbank.com/search?q=1269) — «Industrial doorbell» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_puerta.ogg` | Entra otro jugador a la cafetería (campanita de tienda) | [BigSoundBank #3588](https://bigsoundbank.com/search?q=3588) — «Shop doorbell chime» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_tiempo_agotado.ogg` | Se acabó el tiempo (zumbador, 1,2 s) | [BigSoundBank #0089](https://bigsoundbank.com/search?q=0089) — «Electronic alarm buzzer 2» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_barrido.ogg` | Frente de onda de la red y barras de la encuesta | [BigSoundBank #1796](https://bigsoundbank.com/search?q=1796) — «Whoosh 4» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_decidir.ogg` | Golpe seco al elegir una opción | [Kenney — RPG Audio](https://kenney.nl/assets/rpg-audio), «bookClose» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_pagina.ogg` | Pasa la hoja: cada página del cierre del día | [Kenney — RPG Audio](https://kenney.nl/assets/rpg-audio), «bookFlip1» | CC0 1.0 | No | Claude · 2026-10-21 |
+| `assets/audio/fx_sello.ogg` | El sello: rótulo del día, desenlace, LIDERA (mezcla de dos golpes) | [Kenney — Impact Sounds](https://kenney.nl/assets/impact-sounds) «impactSoft_heavy_000» + RPG Audio «bookPlace1» | CC0 1.0 | No | Claude · 2026-10-21 |
+
+---|---|---|---|---|---|
 | | | | | | |
 
 ---

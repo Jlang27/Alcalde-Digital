@@ -30,6 +30,7 @@ import math
 
 from ursina import Entity, Mesh, Text, Circle, camera, color, curve, time
 
+import audio
 import estilo as E
 
 # Profundidades dentro de la pagina (menor z = mas cerca). Texto a z 0.
@@ -76,6 +77,8 @@ class Pagina(Entity):
         self.duracion = 0.0
         self.piezas = [self]
         self.movimientos = []
+        self.sonidos = []          # (t, nombre, volumen) aun por sonar
+        self._ultimo = {}          # nombre -> t en que sono por ultima vez
         self.capa_fondo = self.add(Entity(parent=camera.ui))
         self.lienzo = self.add(Entity(parent=camera.ui))
         if animado:
@@ -96,6 +99,23 @@ class Pagina(Entity):
         self.t += time.dt
         for mover in self.movimientos:
             mover(self.t)
+        while self.sonidos and self.sonidos[0][0] <= self.t:
+            t, nombre, volumen = self.sonidos.pop(0)
+            # dos del mismo casi a la vez se oyen como uno mas fuerte:
+            # se deja un respiro minimo entre repeticiones
+            if self.t - self._ultimo.get(nombre, -1.0) < 0.06:
+                continue
+            self._ultimo[nombre] = self.t
+            audio.efecto(nombre, volumen)
+
+    def sonar(self, t, nombre, volumen=1.0):
+        """Agenda un efecto en el reloj de la pagina. Si la pagina se
+        dibuja ya completa (Enter a mitad), no suena nada: seria una
+        rafaga de todo junto."""
+        if not self.animado:
+            return
+        self.sonidos.append((t, nombre, volumen))
+        self.sonidos.sort(key=lambda s: s[0])
 
     # ---------------- piezas y como nacen ----------------
 
@@ -238,6 +258,7 @@ def fondo(pg, dia="01", acento=None):
     registro de imprenta y el numero del dia como marca de agua."""
     papel = caja(pg, 2.4, 1.2, (0, 0), E.PAPEL, Z_PAPEL, padre=camera.ui)
     pg.aparecer(papel, 0.0, 0.2)
+    pg.sonar(0.05, "pagina")
     capa = pg.capa_fondo
     # columnas de periodico: reglas verticales muy tenues
     for i in range(7):
@@ -517,6 +538,7 @@ def _sello(pg, texto_sello, pos, col, t, escala=1.0):
                      **E.fuente_titular()))
     sello.rotation_z = -9
     sello.scale = escala
+    pg.sonar(t + 0.12, "sello")
     pg._hasta(t + 0.35)
     if pg.animado:
         sello.scale = escala * 1.35
@@ -601,6 +623,8 @@ def flujo(datos, foto=None, animado=True):
               0.0032 if elegido else 0.0016, t - 0.18,
               z=Z_TRAZO if elegido else Z_LINEA)
         _renglon(pg, n, (cx, cy), t)
+        # la edicion se compone a maquina: una tecla por renglon
+        pg.sonar(t, "tecla")
         t += 0.09
 
     # El desenlace elegido se sella
@@ -720,6 +744,8 @@ def red(datos, animado=True):
                      con_alfa(E.GAITAN, 0.0), Z_GUIA - 0.001)
     t_fin_onda = t_nivel(alcance)
 
+    pg.sonar(T0, "barrido")
+
     def barrer(tt):
         if tt < T0 - 0.1 or tt > t_fin_onda + 0.8:
             for e in (estela, proa):
@@ -790,6 +816,8 @@ def red(datos, animado=True):
             pg.virar(relleno, E.GAITAN, tv)
             pg.virar(borde, E.GAITAN, tv)
             _onda_nodo(pg, pos[v], E.GAITAN, tv)
+            # le llega el rumor al telefono: su notificacion
+            pg.sonar(tv, "rumor_llega")
         elif d["estado"] == "protegido":
             pg.virar(relleno, E.RESTREPO, t_barrera + 0.2)
             pg.virar(borde, E.RESTREPO, t_barrera + 0.2)
@@ -806,6 +834,7 @@ def red(datos, animado=True):
         xb = x_fin + ancho_col / 2
         bar = caja(pg, 0.0045, 0.40, (xb, 0.0), E.RESTREPO, Z_TRAZO)
         pg.aparecer(bar, t_barrera, 0.3, dy=0.04)
+        pg.sonar(t_barrera, "sello", 0.7)
         r = texto(pg, f"LO FRENASTE · {datos['hora']}", (xb + 0.010, -0.170),
                   0.38, E.RESTREPO, gruesa=True)
         pg.aparecer(r, t_barrera + 0.1, dx=0.02)
@@ -817,6 +846,7 @@ def red(datos, animado=True):
     for i, (a, b) in enumerate(zip(camino, camino[1:])):
         e = linea(pg, pos[a], pos[b], E.GAITAN, 0.0045, Z_TRAZO)
         pg.crecer(e, t_cam + i * 0.22, 0.22)
+        pg.sonar(t_cam + i * 0.22, "tecla", 0.8)
     if len(camino) > 1:
         puntos = [pos[v] for v in camino]
         viajero = circulo(pg, 0.015, puntos[0], con_alfa(E.GAITAN, 0.0),
@@ -844,6 +874,7 @@ def red(datos, animado=True):
             pg.virar(rellenos[v][1], E.GAITAN, tv)
             pg.virar(rellenos[v][0], E.GAITAN, tv)
             _onda_nodo(pg, pos[v], E.GAITAN, tv)
+            pg.sonar(tv, "rumor_llega")
             pg._hasta(tv + 0.7)
 
     # El rumor sigue vivo: gotas que bajan por las aristas que lo llevaron
@@ -931,6 +962,7 @@ def _columna(pg, c, x, t, lider):
         fx = x + 0.150
         pg.brotar(caja(pg, ancho_f, 0.030, (fx + ancho_f / 2, 0.109), col,
                        Z_CAJA), t + 1.2)
+        pg.sonar(t + 1.2, "tecla")
         pg.brotar(texto(pg, ficha, (fx + ancho_f / 2, 0.109), 0.48, E.PAPEL,
                         origen=(0, 0), gruesa=True), t + 1.22)
         pg.aparecer(texto(pg, "DESDE AYER", (fx, 0.086), 0.32, E.TINTA_TENUE),
@@ -1015,6 +1047,8 @@ def encuesta(datos, animado=True):
     tierra = caja(pg, 1.07, 0.0030, (-0.84 + 0.535, BASE_BARRA), E.TINTA,
                   Z_TRAZO)
     pg.aparecer(tierra, 0.7)
+    # las cuatro barras arrancan casi juntas: un solo barrido para todas
+    pg.sonar(0.9, "barrido", 0.5)
     for i, c in enumerate(candidatos):
         _columna(pg, c, -0.84 + i * 0.27, 0.75 + i * 0.12, c is lider)
 
@@ -1045,6 +1079,7 @@ def encuesta(datos, animado=True):
                        E.TINTA)
         porque.wordwrap = 40
         pg.aparecer(porque, t + 0.08, dx=0.02)
+        pg.sonar(t, "tecla", 0.8)
         y -= 0.050 if len(motivo) <= 40 else 0.066
         t += 0.14
     if not datos["motivos"]:

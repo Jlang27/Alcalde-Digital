@@ -18,6 +18,8 @@ Videojuego educativo sobre el uso responsable de las redes sociales, con estruct
 - **Árbol de decisión**: las ramas no ganadas se sueltan con `desprender()` y vuelven con `insertar_opcion()` al encontrar la pista. Al cerrar el día se reinsertan marcadas `descubierto=False` para que el diagrama muestre lo que pudo ser.
 - Todo pasa por `Partida.descubrir()`; el desenlace (`desenlace_red`) mueve la **encuesta**, y el escrutinio final es la encuesta del último día.
 - Candidatos (orden = tintas): **Daniel Ospina** azul, **Hugo Bravo** rojo, **Juan Medina** amarillo, **Elena Ruiz** verde.
+- Personajes por rol (`ROLES[...]["personaje"]`): Ciudadano **Mateo Gaitán**, Periodista **Valeria Samper**, Influencer **Santiago Lleras**, Alcalde **Ernesto Villamizar** (nombre provisional). El protagonista es el que eliges; `Jugador.nombre` es el personaje y `nombre_rol` el rol.
+- **7 días** hasta la elección (`DIAS_PARTIDA`, `pantallas.DIAS_ELECCION`, `pantallas.CAPITULOS` = título y lugar de cada día; la cuenta atrás sale de `dias_que_faltan`).
 
 ## Dirección de arte
 - **Escena (3D):** atardecer/noche, **ámbar cálido contra azul frío**, contraluz en el personaje, niebla, emisiones brillantes. Lenguaje de planos PG/PM/PP/LATERAL/AFICHE/DOS.
@@ -32,7 +34,8 @@ Videojuego educativo sobre el uso responsable de las redes sociales, con estruct
 ## Cómo ejecutar y probar
 - Cliente 3D: `venv-win\Scripts\python.exe cliente3d/juego3d.py` · Linux: `.venv/bin/python cliente3d/juego3d.py`
 - Visor de modelos: `python previsualizar.py assets/personajes/<rol>.glb`
-- Pruebas del grafo: `python -I grafo.py`. La `Partida` se puede simular sin gráficos (bots que llaman a `descubrir`/`elegir`); hacerlo tras tocar reglas.
+- Pruebas del grafo: `python -I grafo.py`. Reglas: `.venv/bin/python herramientas/banco_pruebas/simular.py` (400 partidas con bots; hacerlo tras tocar reglas).
+- **Banco de pruebas** (`herramientas/banco_pruebas/`): `banco.py` juega el cliente real sin ventana visible y con reloj fijo (teclas, charlas, elegir, capturas en `capturas/`, ignorada por git). Escenarios: `dia1.py` (regresión del día 1 completo) y `turnos.py` (dos jugadores por turnos). Necesita GPU.
 - **Verificación visual: solo con GPU.** El render por software no muestra simplepbr. La PC Linux del repo tiene GPU (AMD): el cliente corre en ventana `offscreen` con reloj fijo y saca capturas reales (banco de pruebas que maneja `juego3d.input` y `update`). Sin GPU, no declares "se ve bien" sin captura del usuario.
 - Referencia del cierre: el diagrama de flujo de Detroit (video «EL PLATINO de DETROIT…» en Descargas, ~1:05, 2:16 y 3:56) — como guía de ritmo y estructura, no para copiarlo.
 
@@ -58,7 +61,11 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 - [ ] `intro.py` usa colores sueltos (`color.rgba`/`color.Color`) en vez de `E.*`
 - [x] La ola de "compartir" viene en `desenlace_red["ola"]` (antes el cliente repetía el BFS)
 - [x] Las tres páginas del cierre (árbol, red, encuesta) son papel animado en `cierre.py`; la encuesta titula con el resultado del día y toma la tinta de quien lidera
-- [ ] Nombre del protagonista: el capítulo 1 es de «Mateo Gaitán» (`pantallas.CAPITULOS`) pero la cabecera y la red usan el nombre del rol («Ciudadano»); decidir cuál manda
+- [x] Protagonista = personaje del rol elegido (Mateo, Valeria, Santiago, Ospina) en reparto, rótulo, cabecera, red y avisos
+- [x] Cuarto rol = **Alcalde** (documento del proyecto §13), no «Candidato»: es el alcalde saliente, no está en la papeleta. Los cuatro candidatos de la elección no cambian
+- [ ] La publicación `alcalde` («El alcalde actual está robando dinero…») será un rumor sobre el propio jugador si el Alcalde protagoniza ese día: decidirlo al escribir los días 2-7
+- [ ] Días 6 («El debate») y 7 («La víspera») y sus publicaciones (`encuesta`, `audio`) son provisionales
+- [ ] `menu.ogg` y los `ui_*.wav` siguen con licencia POR CONFIRMAR
 - [ ] `herramientas/aplicar_capitulos.py` está vacío
 - [ ] `.glb` en git (~85 MB entre personajes y NPCs, repo ~35 MB comprimido): pasar a Git LFS
 - [ ] Servidor y cliente de red (entrega final)
@@ -69,6 +76,7 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 ## Decisiones tomadas
 - Se descartaron las cámaras fijas por zonas para explorar (se lee como aventura gráfica antigua): exploración con cámara de hombro; **planos fijos solo para decisiones y cortes**.
 - Colisiones por rectángulos, no contra malla (el empujador de Panda3D atascaba/expulsaba al personaje). Los NPCs aportan su propio rectángulo de bloqueo.
+- Roles jugables (§13 del documento): Ciudadano, Periodista, Influencer y **Alcalde** (id `alcalde`, modelo `assets/personajes/alcalde.glb`). La elección es entre los cuatro candidatos, que no son jugables.
 - Un único modelo base para los jugadores; se distinguen por la **luz de color**, no por la piel. Los NPCs sí tienen modelos propios.
 - El día 1 se **investiga**: las decisiones se ganan con pistas, y hablar cuesta tiempo (cada charla = 10 min; a las 8:30 se acaba la mañana).
 - Pantalla completa = la **nativa** de Panda3D a la resolución del monitor (`ajustes.geometria_ventana`); la de Ursina solo agranda la ventana y no deja volver, y una ventana sin bordes la encoge GNOME. En ventana: 80 % del monitor, centrada.
@@ -76,4 +84,6 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 - Al sacar el teléfono el protagonista vuelve a su marca (0,0,0) tras un fundido: los planos fijos están medidos desde ahí.
 - En el celular se decide con 1-9 (como en las charlas) y se investiga con clic; las alertas de la mañana se descartan al sacarlo.
 - Cierre del día: de Detroit se toma la **dramaturgia** (entra desde negro, empuje de cámara, nodos uno a uno en **orden BFS**, secciones agrupadas, línea de progreso, imagen de la escena al inicio), no el aspecto. El aspecto es «Prensa y urna»: edición del día con filete doble, titular Archivo Black con registro corrido en la tinta del protagonista, nodos como renglones del tarjetón (casilla con aspa + trazo de marcador = elegido), foto de prensa con pie, sección recuadrada y sello de «DESENLACE». No copiar triángulos, degradados ni paralelogramos de Detroit. El primer Enter completa la animación, el segundo pasa de página.
+- **Multijugador local por turnos**: cada día juega otro (rotación de `protagonista_de`). El rótulo muestra «Turno del jugador N · Rol» en su color y espera Enter; en una interrupción, tarjeta «PASA EL CONTROL» (reloj congelado) y luego «DEVUELVE EL CONTROL». Colores: tintas = candidatos, `COLORES_JUGADOR` = jugadores (también en el reparto).
+- **Sonido** (todo CC0, ver `CREDITOS.md` y el mapa en el docstring de `audio.py`): el cliente pide momentos (`audio.efecto("pista")`), no archivos. Música calmada en la cafetería, tensión en el teléfono que sube con el reloj (`audio.tension`), tic-tac en el último 30 %, música que baja en los diálogos (`audio.agachar`); el cierre agenda sus sonidos en el reloj de la página (`Pagina.sonar`). No usar `Audio.fade()` ni `Audio.stop()` de Ursina a pelo: ver `_fundir` y `_parar`.
 - Peatones de la intro: delante los que tienen `celular` (sacan el teléfono), detrás los NPCs de pie en reposo.

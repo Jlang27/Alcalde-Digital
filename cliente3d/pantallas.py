@@ -11,16 +11,31 @@ from ursina import Button, Entity, Func, Vec3, camera, color, curve, destroy, in
 
 import ajustes as A
 import estilo as E
+from juego import COLORES_JUGADOR
 
-# El guion arranca a siete dias de la eleccion y cada capitulo descuenta.
+# El guion arranca a siete dias de la eleccion y cada capitulo descuenta
+# uno: el dia 1 «faltan 7», el dia 7 (la vispera) «falta 1».
+DIAS_ELECCION = 7
+
+# (titulo, lugar) de cada dia. El PROTAGONISTA no va aqui: es el
+# personaje que juega ese dia (el que se eligio en el reparto, o el de
+# turno en el multijugador por turnos), y lo pone el cliente al lado.
 CAPITULOS = (
-    ("Intro", "7 días", "Ciudad Nova despierta con una alerta en todos los teléfonos."),
-    ("El primer rumor", "7 días", "Mateo Gaitán · Cafetería de barrio"),
-    ("La propuesta", "6 días", "Valeria Samper · Colegio Técnico Nova"),
-    ("La primera jugada sucia", "6 días", "Daniel Ospina · Despacho de campaña"),
-    ("La oferta", "5 días", "Santiago Lleras · Estudio de streaming"),
-    ("La plaza", "4 días", "Mateo Gaitán · Plaza Central"),
+    ("El primer rumor", "Cafetería de barrio"),
+    ("La propuesta", "Colegio Técnico Nova"),
+    ("La primera jugada sucia", "Despacho de campaña"),
+    ("La oferta", "Estudio de streaming"),
+    ("La plaza", "Plaza Central"),
+    ("El debate", "Auditorio municipal"),
+    ("La víspera", "Ciudad Nova, la noche antes"),
 )
+
+
+def dias_que_faltan(dia):
+    """«7 días», «1 día» o «0 días» para el dia (desde 0) que empieza."""
+    n = max(0, DIAS_ELECCION - dia)
+    return f"{n} día" if n == 1 else f"{n} días"
+
 
 PISTAS = (
     "Verificar no es un final. Te dice si la publicación es falsa; "
@@ -72,22 +87,27 @@ RUTINA_MENU = (
 # Esto ya no vive en la portada: vive detras de una opcion. Era el
 # bloque que la convertia en una diapositiva llena de texto.
 COMO_SE_JUEGA = (
-    ("1", "Llega la publicación",
-     "Un rumor entra al teléfono de la ciudad y el reloj empieza a "
-     "correr. Si no haces nada, sigue su camino sin ti."),
-    ("2", "Mirar cuesta",
-     "Puedes abrir la fuente, el perfil y la fecha. Cada cosa que "
-     "miras te quita segundos: investigar tiene precio."),
-    ("3", "Decides, y la ciudad recuerda",
-     "Compartes, verificas o callas. Mañana te encuentras lo que "
-     "hiciste hoy, y lo que hicieron los demás."),
+    ("1", "Llega el rumor",
+     "A las 7:30 una publicación entra a Civitas y el barrio empieza a "
+     "creerla. Si no haces nada, sigue su camino sin ti."),
+    ("2", "Investiga: hablar cuesta",
+     "Pregunta a la gente (cada charla son 10 minutos y el rumor avanza) "
+     "y toca la publicación en el celular. Tab abre tu libreta."),
+    ("3", "Decide con el teléfono",
+     "Al sacarlo se acaba la investigación: eliges con 1-9 antes de que "
+     "el reloj llegue a cero. Lo que no ganaste no estará."),
+    ("4", "La ciudad recuerda",
+     "Al cerrar el día ves tu camino, a quién le llegó el rumor y cómo se "
+     "mueve la encuesta. Con amigos, cada día juega otro: pasen el control."),
 )
 
 CONTROLES = (
-    ("Flechas", "moverse por los menús"),
-    ("Enter", "marcar la opción"),
-    ("Esc", "volver atrás"),
-    ("1 2 3", "elegir en la jornada"),
+    ("WASD", "moverse"),
+    ("E", "hablar"),
+    ("Tab", "libreta"),
+    ("Enter", "teléfono y confirmar"),
+    ("1-9", "decidir"),
+    ("Esc", "menú"),
 )
 
 # La fila del elenco, igual que en mundo.PASO_ELENCO.
@@ -203,9 +223,13 @@ class Rotulo:
 
     DURACION = 2.6
 
-    def __init__(self, dia, titulo="", lugar=""):
+    def __init__(self, dia, titulo="", lugar="", turno=None):
+        """turno: (texto, tinta) en el multijugador por turnos. Entonces
+        el rotulo NO se cierra solo: espera a que el jugador de turno
+        tome el control (Enter), porque el teclado cambia de manos."""
         self.piezas = []
         self.reloj = 0.0
+        self.espera = turno is not None
         a = self.piezas.append
 
         a(E.banda(2.4, 1.20, (0, 0), E.tinta(250), z=E.Z_FONDO))
@@ -236,11 +260,23 @@ class Rotulo:
             l.alpha = 0
             l.fade_in(duration=0.5, delay=0.5)
             a(l)
+        if turno is not None:
+            texto, tinta = turno
+            banda = E.banda(0.001, 0.060, (0, -0.250), tinta, z=E.Z_ADORNO)
+            banda.animate_scale_x(0.92, duration=0.5, delay=0.6,
+                                  curve=curve.out_cubic)
+            a(banda)
+            t = E.titular(texto, (0, -0.238), 1.15, E.TEXTO, origen=(0, 0.5))
+            t.alpha = 0
+            t.fade_in(duration=0.4, delay=0.8)
+            a(t)
+            self.piezas += E.leyenda((("enter", "tomar el control"),), -0.458)
 
     def actualizar(self, dt):
-        """Devuelve True cuando ya ha durado lo suyo."""
+        """Devuelve True cuando ya ha durado lo suyo (nunca, si espera
+        a que el jugador de turno tome el control)."""
         self.reloj += dt
-        return self.reloj >= self.DURACION
+        return not self.espera and self.reloj >= self.DURACION
 
     def cerrar(self):
         _limpiar(self.piezas)
@@ -884,7 +920,7 @@ class Seleccion:
         self.titulo = []
         self.ficha = []
         self.boton = []
-        self.fichas = fichas              # (id, nombre, lema, texto, ramas)
+        self.fichas = fichas              # (id, personaje, lema, texto, ramas, rol)
         self.al_confirmar = al_confirmar
         self.al_cambiar = al_cambiar
         self.seleccion = 0
@@ -942,20 +978,30 @@ class Seleccion:
     # ----------------------------------------------------------------
 
     def _tinta(self, indice):
-        return E.CANDIDATOS[indice % len(E.CANDIDATOS)]
+        """El color del JUGADOR que lo ficha (o que esta eligiendo ahora).
+
+        Antes cada rol llevaba la tinta de un candidato: el Ciudadano salia
+        azul en el reparto y turquesa en la partida. Las tintas son de los
+        candidatos; los colores de jugador, de los jugadores.
+        """
+        dueno = self._dueno(indice)
+        puesto = dueno if dueno is not None else self.turno
+        puesto = max(0, min(puesto, len(COLORES_JUGADOR) - 1))
+        return color.rgb32(*COLORES_JUGADOR[puesto])
 
     def _pintar(self):
         for pieza in self.titulo:
             _apagar(pieza)
         self.titulo = []
 
-        _id, nombre, _lema, _texto, _ramas = self.fichas[self.seleccion]
+        _id, nombre, _lema, _texto, _ramas, rol = self.fichas[self.seleccion]
         tinta = self._tinta(self.seleccion)
         dueno = self._dueno(self.seleccion)
 
         self.titulo.append(self._nace(E.pequena(
-            "REPARTO DE LA JORNADA" if dueno is None
-            else f"JUGADOR {dueno + 1}  ·  ENTER PARA QUITARLO", (0, 0.478),
+            f"{rol.upper()}  ·  REPARTO DE LA JORNADA" if dueno is None
+            else f"{rol.upper()}  ·  JUGADOR {dueno + 1}  ·  ENTER PARA QUITARLO",
+            (0, 0.478),
             tinta if dueno is not None else E.TEXTO_TENUE,
             escala=0.56, origen=(0, 0.5)), 0.0))
         self.titulo.append(self._nace(E.titular(
@@ -971,7 +1017,7 @@ class Seleccion:
                 col = self._tinta(elegido)
                 franja.color = col
                 rotulo.color = E.TEXTO
-                estado.text = self.fichas[elegido][1].lower()
+                estado.text = self.fichas[elegido][1]
                 estado.color = col
             else:
                 franja.color = E.TEXTO if activo else E.luz(40)
@@ -983,7 +1029,7 @@ class Seleccion:
         if self.abierta:
             self._abrir_ficha()
         if self.al_cambiar is not None:
-            self.al_cambiar(self.seleccion)
+            self.al_cambiar(self.seleccion, self._tinta(self.seleccion))
 
     def _pintar_boton(self):
         """El boton de continuar: apagado hasta que haya alguien fichado."""
@@ -1043,7 +1089,7 @@ class Seleccion:
 
     def _abrir_ficha(self):
         self._cerrar_ficha()
-        _id, nombre, lema, texto, ramas = self.fichas[self.seleccion]
+        _id, nombre, lema, texto, ramas, rol = self.fichas[self.seleccion]
         tinta = self._tinta(self.seleccion)
         x = -0.84
 
@@ -1055,6 +1101,8 @@ class Seleccion:
             return pieza
 
         nace(E.banda(0.075, 0.0045, (x + 0.037, 0.212), tinta), 0.00)
+        nace(E.pequena(rol.upper(), (x, 0.236), E.TEXTO_TENUE, escala=0.54),
+             0.02)
         nace(E.titular(nombre, (x, 0.178), 1.9, tinta), 0.03)
         cita = E.entradilla(lema, (x, 0.112), 0.80, E.TEXTO, ancho=30)
         nace(cita, 0.06)

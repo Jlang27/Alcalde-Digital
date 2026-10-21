@@ -68,7 +68,8 @@ FACTOR_MINIMO = 0.4
 # Cuanto pesa en la encuesta el cambio de los indicadores durante el dia.
 PESO_INDICADORES = 0.05
 
-DIAS_PARTIDA = 5
+# Siete dias hasta la eleccion: la espina del guion («faltan 7 dias»).
+DIAS_PARTIDA = 7
 
 # El orden es el de las tintas (estilo.CANDIDATOS): Ospina azul, Bravo rojo,
 # Medina amarillo, Ruiz verde. Cada uno conserva su color en toda pantalla.
@@ -107,7 +108,11 @@ class Jugador:
         self.indice = indice
         self.id_rol = id_rol
         self.rol = ROLES[id_rol]
-        self.nombre = nombre or self.rol["nombre"]
+        # El nombre es el del PERSONAJE (Mateo Gaitan), no el del rol
+        # (Ciudadano): el protagonista es quien eliges en el reparto, y
+        # la cabecera, la red y los avisos lo llaman igual.
+        self.nombre = nombre or self.rol.get("personaje", self.rol["nombre"])
+        self.nombre_rol = self.rol["nombre"]
         self.color = COLORES_JUGADOR[indice % len(COLORES_JUGADOR)]
 
         self.arbol_habilidades = construir_arbol_habilidades(id_rol)
