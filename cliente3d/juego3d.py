@@ -18,8 +18,9 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 
 from panda3d.core import loadPrcFileData
-from ursina import (Ursina, Entity, Text, Button, Func, Texture, application,
-                    camera, color, destroy, invoke, time, window)
+from ursina import (Ursina, Entity, Text, Button, Func, Texture, Vec3,
+                    application, camera, color, destroy, invoke, time,
+                    window)
 
 import ajustes as A
 import audio
@@ -629,6 +630,8 @@ def inspeccionar(id_zona):
     antes = p.tiempo_restante
     ok, texto = p.descubrir(id_pista)
     detalle.text = texto
+    if ok:
+        mundo.reaccionar(cl.actor, "pensar")
     detalle.wordwrap = 60
     if not ok:
         return
@@ -923,6 +926,25 @@ def cerrar_libre():
         cl.aviso = None
 
 
+def mirar_npcs(dt, mirar=True):
+    """Los NPC siguen al protagonista con la cabeza cuando pasa cerca.
+
+    Es lo que mas separa a una persona de un maniqui, y no cuesta una
+    animacion nueva: solo girar el cuello. Vale tambien en el dialogo,
+    donde el que habla te mira a ti y no al frente.
+    """
+    if cl.actor is None:
+        return
+    donde = cl.actor.getPos(cl.mundo)
+    donde = Vec3(donde[0], donde[1] + 1.55, donde[2])      # a la cara
+    if mirar:
+        for actor in cl.npcs.values():
+            mundo.mirar_a(getattr(actor, "mirada", None), donde, cl.mundo, dt)
+    # El protagonista entra tambien: no tiene rutina, pero si gestos,
+    # y alguien tiene que devolverlo a su bucle cuando acaben.
+    mundo.avanzar_rutinas(list(cl.npcs.values()) + [cl.actor], dt)
+
+
 def empezar_decision(notificacion=True):
     """Saca el telefono: aqui si aparecen las opciones del dia.
 
@@ -948,7 +970,11 @@ def empezar_decision(notificacion=True):
     cl.actor.setH(0)
     fundido.desvanecer(0.45, retraso=0.1)
     cl.estado = "juego"
-    animar("idle")
+    # Con el telefono en la mano NO se esta de brazos caidos. Es el
+    # tramo mas largo del dia —leer el rumor, mirar las cuatro zonas,
+    # decidir— y hasta ahora el protagonista lo pasaba en reposo con un
+    # clip de «celular» de 18 s sin usar.
+    animar("celular")
     audio.agachar(False)
     if notificacion:
         audio.efecto("notificacion")
@@ -1199,6 +1225,11 @@ def elegir_pregunta(i):
     if not ok:
         cerrar_dialogo()
         return
+    # Gesto, no solo texto: el que pregunta asiente y al que le
+    # preguntan le cambia la cara. Si el personaje no tiene ese clip,
+    # reaccionar() no hace nada y se queda hablando como antes.
+    mundo.reaccionar(cl.actor, random.choice(("asentir", "asentir2")))
+    mundo.reaccionar(cl.npcs.get(cl.con_quien), "sentado_dudar")
     # cada charla son diez minutos: el reloj se oye avanzar
     audio.efecto("pasa_tiempo")
     # Si no abrio decision, igual se anota: la red crece o el dato queda.
@@ -1784,6 +1815,12 @@ def update():
     if (cl.partida is not None and cl.estado in ("libre", "dialogo", "juego")
             and not cl.dia_cerrado):
         atender_alertas(time.dt)
+
+    # Los gestos y las rutinas corren tambien con el telefono fuera: si
+    # no, un «pensar» disparado ahi termina y deja al cuerpo sin ninguna
+    # animacion, congelado en el ultimo fotograma.
+    if cl.estado in ("libre", "dialogo", "juego"):
+        mirar_npcs(time.dt, mirar=cl.estado != "juego")
 
     if cl.estado == "libre" and cl.jugador is not None:
         if not cl.confirmando:

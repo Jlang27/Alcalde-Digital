@@ -1388,6 +1388,7 @@ def crear(escenario="cafeteria", rol=None):
     ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
     actor = Actor(ruta)
     actor.reparentTo(mundo)
+    mezclar(actor)
     _luz_de_personaje(mundo, actor)
 
     _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=4,
@@ -1543,6 +1544,241 @@ def ruta_npc(nombre):
     return os.path.join(CARPETA_NPC, f"{nombre}.glb")
 
 
+# Cuanto se desafina el ritmo de cada cuerpo, arriba y abajo. Mas de un
+# 6% y se nota que alguien va en camara lenta; menos, y siguen pareciendo
+# el mismo muñeco repetido.
+VARIACION_RITMO = 0.06
+
+
+def animar_con_vida(actor, nombre, azar=None):
+    """Arranca un bucle con ritmo y arranque propios de ese cuerpo.
+
+    Dos personas en la misma sala no respiran al mismo compas. Con el
+    clip puesto tal cual, todos los NPC avanzan el mismo fotograma a la
+    vez: medido en el banco de pruebas, la diferencia entre dos cuerpos
+    se mantenia CONSTANTE durante cinco segundos. Eso es exactamente lo
+    que delata un maniqui, y no se arregla con mas animaciones sino
+    desfasando y desafinando las que ya hay.
+    """
+    if actor is None or nombre not in actor.getAnimNames():
+        return
+    azar = azar or random
+    control = actor.getAnimControl(nombre)
+    actor.loop(nombre)
+    if control is None:
+        return
+    control.setPlayRate(1.0 + azar.uniform(-VARIACION_RITMO, VARIACION_RITMO))
+    # Y que no empiecen todos por el principio.
+    total = control.getNumFrames()
+    if total > 1:
+        control.pose(azar.randrange(total))
+        control.loop(True)
+
+
+def mezclar(actor):
+    """Interpola ENTRE FOTOGRAMAS del clip que este sonando.
+
+    Un «sentado» de 101 fotogramas a 30 fps se ve a tirones; con esto
+    el cuerpo se mueve continuo.
+
+    Ojo con enableBlend(): eso es otra cosa (mezclar varios clips a la
+    vez) y exige repartir setControlEffect entre ellos. Si se activa sin
+    repartirlo, todas las animaciones pesan cero y el actor se queda en
+    la pose de reposo: en pantalla, un maniqui en T. Comprobado.
+    """
+    if actor is None:
+        return
+    try:
+        actor.setBlend(frameBlend=True)
+    except Exception:
+        pass          # sin esqueleto compatible, se queda como estaba
+
+
+# Hasta donde puede girar el cuello antes de parecer un buho.
+GIRO_CUELLO = 52.0
+# Si el jugador esta mas atras que esto, no lo mira: no tiene ojos en la
+# nuca, y forzarlo es lo que hace que un NPC parezca poseido.
+ATENCION = 115.0
+# A partir de aqui le deja de interesar y vuelve a lo suyo.
+DISTANCIA_MIRADA = 3.2
+SUAVIDAD_CUELLO = 4.5
+# El que esta DE PIE puede acompañar con el cuerpo lo que no alcanza el
+# cuello. El que esta sentado no: girarle el torso sin que gire la silla
+# se ve peor que dejarlo a medias.
+GIRO_CUERPO = 38.0
+SUAVIDAD_CUERPO = 2.2
+
+
+# Cuantas vueltas completas da un clip antes de cambiar a otro, y el
+# margen en segundos que no se pasa ni por abajo ni por arriba.
+#
+# Se cuenta en VUELTAS y no en segundos porque los clips duran cosas muy
+# distintas: «idle3» dura 2 s y «sentado» 44. Con un tiempo fijo de 6-13
+# segundos, el corto se repetiria cinco veces seguidas —que es justo lo
+# que delata que hay pocas animaciones— y del largo no verias ni la
+# mitad. Cortar en vuelta completa ademas evita el salto de volver al
+# primer fotograma a medias.
+VUELTAS_RUTINA = (1, 3)
+ESPERA_RUTINA = (5.0, 15.0)
+
+
+def clips_de(actor, base):
+    """Los clips de esa familia: «idle», «idle2», «idle3»...
+
+    Asi el juego se adapta a lo que haya. Si solo existe «idle», no
+    rota; si mañana aparecen cuatro, rota entre los cuatro sin tocar
+    una linea de codigo.
+    """
+    if actor is None:
+        return []
+    return sorted(n for n in actor.getAnimNames()
+                  if n == base or (n.startswith(base)
+                                   and n[len(base):].isdigit()))
+
+
+def poner_rutina(actor, base, azar=None):
+    """Deja al actor rotando entre todos los clips de esa familia."""
+    if actor is None:
+        return
+    clips = clips_de(actor, base)
+    if not clips:
+        return
+    azar = azar or random
+    actor.rutina = {"clips": clips, "espera": 0.0, "ultimo": None,
+                    "azar": azar}
+    _siguiente_de_rutina(actor)
+
+
+def _siguiente_de_rutina(actor):
+    r = getattr(actor, "rutina", None)
+    if not r:
+        return
+    azar = r["azar"]
+    # Nunca dos veces el mismo seguido: repetir es justo lo que delata
+    # que hay pocos clips.
+    opciones = [c for c in r["clips"] if c != r["ultimo"]] or r["clips"]
+    elegido = azar.choice(opciones)
+    r["ultimo"] = elegido
+    animar_con_vida(actor, elegido, azar)
+    control = actor.getAnimControl(elegido)
+    dura = (control.getNumFrames() / max(1.0, control.getFrameRate())
+            if control else 8.0)
+    vueltas = azar.randint(*VUELTAS_RUTINA)
+    r["espera"] = max(ESPERA_RUTINA[0], min(ESPERA_RUTINA[1], dura * vueltas))
+
+
+def reaccionar(actor, nombre):
+    """Dispara un gesto puntual y despues vuelve a lo que estaba.
+
+    Para asentir, pensar o poner cara de no creerselo. Si el clip no
+    existe en ese personaje, no pasa nada y se queda como estaba: asi
+    el mismo aviso vale para todos sin preguntar quien tiene que.
+
+    Guarda a que clip volver. Sin eso, play() termina y deja al cuerpo
+    CONGELADO en el ultimo fotograma, que es peor que no hacer el gesto.
+    """
+    if actor is None or nombre not in actor.getAnimNames():
+        return False
+    volver = actor.getCurrentAnim()
+    control = actor.getAnimControl(nombre)
+    if control is None:
+        return False
+    actor.play(nombre)
+    actor.gesto = {"control": control, "volver": volver}
+    return True
+
+
+def avanzar_rutinas(actores, dt):
+    """Un paso de rutinas y gestos. Se llama una vez por fotograma."""
+    for actor in actores:
+        if actor is None:
+            continue
+        # Mientras dura un gesto, todo lo demas espera.
+        gesto = getattr(actor, "gesto", None)
+        if gesto is not None:
+            if gesto["control"].isPlaying():
+                continue
+            actor.gesto = None
+            if getattr(actor, "rutina", None):
+                _siguiente_de_rutina(actor)
+            elif gesto["volver"]:
+                actor.loop(gesto["volver"])
+            continue
+
+        r = getattr(actor, "rutina", None)
+        if not r:
+            continue
+        r["espera"] -= dt
+        if r["espera"] <= 0:
+            _siguiente_de_rutina(actor)
+
+
+def preparar_mirada(actor):
+    """Toma el control del cuello para poder girar la cabeza.
+
+    Se controla el CUELLO y no la cabeza: asi la cabeza conserva su
+    micromovimiento animado y el cuello solo añade el giro. Controlar la
+    cabeza la dejaria rigida, que es peor que no girarla.
+
+    El eje util es el H del hueso, medido con una sonda: girarlo gira la
+    mirada en horizontal sin inclinarla. No se deduce, se midio.
+    """
+    if actor is None:
+        return None
+    nombres = [j.getName() for j in actor.getJoints()]
+    cuello = next((n for n in nombres if n.endswith(":Neck")), None)
+    cabeza = next((n for n in nombres if n.endswith(":Head")), None)
+    if cuello is None or cabeza is None:
+        return None
+    try:
+        ojo = actor.exposeJoint(None, "modelRoot", cabeza)
+        nodo = actor.controlJoint(None, "modelRoot", cuello)
+    except Exception:
+        return None
+    return {"nodo": nodo, "ojo": ojo, "reposo": nodo.getHpr(),
+            "yaw_reposo": None, "giro": 0.0,
+            "actor": actor, "rumbo": actor.getH(), "cuerpo": 0.0,
+            "mueve_cuerpo": False}
+
+
+def _yaw(vector):
+    return math.degrees(math.atan2(vector[0], vector[2]))
+
+
+def mirar_a(mirada, objetivo, mundo, dt):
+    """Gira la cabeza hacia objetivo (Vec3 del mundo). Suave y con limite."""
+    if not mirada:
+        return
+    nodo, ojo, reposo = mirada["nodo"], mirada["ojo"], mirada["reposo"]
+    # La primera vez hay que saber hacia donde mira en reposo, y eso solo
+    # se sabe cuando la pose ya esta aplicada.
+    if mirada["yaw_reposo"] is None:
+        mirada["yaw_reposo"] = _yaw(ojo.getQuat(mundo).getForward())
+
+    aqui = ojo.getPos(mundo)
+    dx, dz = objetivo[0] - aqui[0], objetivo[2] - aqui[2]
+    lejos = math.hypot(dx, dz)
+    delta = 0.0
+    if lejos < DISTANCIA_MIRADA:
+        bruto = (_yaw((dx, 0.0, dz)) - mirada["yaw_reposo"] + 180.0) % 360.0 - 180.0
+        if abs(bruto) <= ATENCION:
+            delta = bruto
+
+    # Lo que no alcanza el cuello lo pone el cuerpo, si puede girar.
+    cuerpo = 0.0
+    if mirada["mueve_cuerpo"] and abs(delta) > GIRO_CUELLO:
+        sobra = delta - math.copysign(GIRO_CUELLO, delta)
+        cuerpo = max(-GIRO_CUERPO, min(GIRO_CUERPO, sobra))
+    mirada["cuerpo"] += (cuerpo - mirada["cuerpo"]) * min(1.0, SUAVIDAD_CUERPO * dt)
+    mirada["actor"].setH(mirada["rumbo"] - mirada["cuerpo"])
+
+    # Y al cuello le queda el resto, siempre dentro de su limite.
+    deseado = max(-GIRO_CUELLO, min(GIRO_CUELLO, delta - mirada["cuerpo"]))
+    mirada["giro"] += (deseado - mirada["giro"]) * min(1.0, SUAVIDAD_CUELLO * dt)
+    # H negativo porque girar el hueso +H lleva la mirada hacia -X.
+    nodo.setHpr(reposo[0] - mirada["giro"], reposo[1], reposo[2])
+
+
 def npc(mundo, nombre, posicion=(0.0, 0.0, 0.0), mirando=0.0,
         animacion="idle"):
     """Pone a alguien de fondo en la escena y devuelve su Actor.
@@ -1564,8 +1800,14 @@ def npc(mundo, nombre, posicion=(0.0, 0.0, 0.0), mirando=0.0,
     actor.setPos(Vec3(*posicion))
     actor.setH(mirando)
     _quitar_mapa_de_brillo(actor)
-    if animacion in actor.getAnimNames():
-        actor.loop(animacion)
+    mezclar(actor)
+    animar_con_vida(actor, animacion)
+    actor.mirada = preparar_mirada(actor)
+    if actor.mirada:
+        # Solo gira el cuerpo quien esta de pie.
+        actor.mirada["mueve_cuerpo"] = animacion != "sentado"
+    # Y si hay mas de un clip de su familia, que rote entre ellos.
+    poner_rutina(actor, animacion)
     return actor
 
 
