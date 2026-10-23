@@ -1327,7 +1327,7 @@ LIMITES = {
 BLOQUEOS = {
     "cafeteria": (
         (0.30, 3.80, 3.30, 4.80),      # la barra
-        (0.76, 3.54, 2.59, 2.97),      # la banqueta corrida
+        (0.41, 2.59, 2.59, 2.97),      # la fila de banquetas
     ),
     "plaza": (),
 }
@@ -1824,7 +1824,10 @@ def quitar_npc(actores):
 NPCS_CAFETERIA = {
     "sofia":  ("npc1", (-2.08, 0.0, 1.60), -90.0, "sentado"),   # mesa de la pared
     "hernan": ("npc2", (2.28, 0.0, -1.10), 90.0, "sentado"),    # mesa de la derecha
-    "cajero": ("cashier", (-0.05, 0.0, 3.95), 0.0, "idle"),     # punta de la barra
+    # Detras de la barra, en el pasillo de servicio (la barra llega a
+    # z=4.0 y la repisa del fondo empieza en 4.5), a la altura de la
+    # registradora: ahi el tramo de enfrente esta libre de banquetas.
+    "cajero": ("cashier", (2.50, 0.0, 4.25), 0.0, "idle"),
 }
 # Medio lado del rectangulo que no se deja pisar alrededor de cada uno.
 RADIO_NPC = 0.28

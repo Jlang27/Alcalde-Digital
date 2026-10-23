@@ -95,8 +95,22 @@ def tecla(k, despues=0.15):
 
 
 def foto(nombre):
+    """Guarda una captura. Devuelve la ruta.
+
+    Se escribe con saveScreenshot de Panda3D y no con el screenshot de
+    Ursina: en ventana offscreen ese ultimo no escribia nada y fallaba
+    en silencio, asi que dia1.py creia estar sacando fotos y llevaba
+    tiempo sin sacar ninguna. Antes se pintan dos cuadros porque el
+    primero todavia puede llevar el estado anterior.
+    """
+    from panda3d.core import Filename
     ruta = os.path.join(CAPTURAS, f"{nombre}.png")
-    _app.screenshot(ruta, defaultFilename=False)
+    os.makedirs(CAPTURAS, exist_ok=True)
+    motor = _app.graphicsEngine
+    motor.renderFrame()
+    motor.renderFrame()
+    ok = _app.win.saveScreenshot(Filename.from_os_specific(ruta))
+    assert ok, f"no se pudo guardar {ruta}"
     pasar(frames=1)
     return ruta
 
@@ -141,13 +155,39 @@ def ir_a_cafeteria(jugadores=1):
 
 
 def junto_a(id_npc, dist=0.9):
-    """Pone al protagonista al lado de un NPC (sin caminar)."""
+    """Pone al protagonista al lado de un NPC (sin caminar).
+
+    Barre un anillo de angulos y se queda con el punto mas cercano que
+    sea ALCANZABLE: ni dentro de un bloqueo ni fuera de los limites de
+    la sala. Las cuatro direcciones de antes no bastaban con el cajero
+    detras de la barra: los lados quedan dentro del mueble y el unico
+    hueco libre era el de atras, o sea, dentro de la pared. La prueba
+    pasaba igual (cerca == cajero) hablando a traves del muro.
+    """
+    import math
     actor = J.cl.npcs[id_npc]
     x, _y, z = actor.getPos()
-    for dx, dz in ((dist, 0), (-dist, 0), (0, dist), (0, -dist)):
-        if not J.cl.jugador._bloqueado(x + dx, z + dz):
-            J.cl.actor.setPos(x + dx, 0, z + dz)
+    limites = J.cl.jugador.limites
+    def vale(px, pz):
+        if J.cl.jugador._bloqueado(px, pz):
+            return False
+        if limites is None:
+            return True
+        x0, x1, z0, z1 = limites
+        return x0 <= px <= x1 and z0 <= pz <= z1
+    radios = [dist + 0.2 * i for i in range(8)]       # hasta ~2.3 m
+    mejor = None
+    for r in radios:
+        for grados in range(0, 360, 10):
+            rad = math.radians(grados)
+            px, pz = x + r * math.sin(rad), z + r * math.cos(rad)
+            if vale(px, pz):
+                mejor = (px, pz)
+                break
+        if mejor:
             break
+    assert mejor, f"no hay donde ponerse junto a {id_npc}"
+    J.cl.actor.setPos(mejor[0], 0, mejor[1])
     pasar(0.2)
 
 
