@@ -27,15 +27,16 @@ Videojuego educativo sobre el uso responsable de las redes sociales, con estruct
 - Todo en español con tildes y ñ.
 
 ## Mapa rápido
-- `juego.py` (`Partida`: reglas, investigación, encuesta) · `contenido.py` (datos: publicaciones, pistas, vértices/aristas del día 1, hechos) · `estructuras.py` · `grafo.py`.
+- `juego.py` (`Partida`: reglas, investigación, encuesta) · `contenido.py` (datos: publicaciones, pistas, vértices/aristas del día 1, hechos, rondas del día 2) · `estructuras.py` · `grafo.py` · `sigilo.py` (día 2: ronda de vigilantes, cono de linterna, sospecha y avisos; `Partida.sigilo`; pruebas con `python -I sigilo.py`).
 - `cliente3d/`: `juego3d.py` (flujo del juego; `datos_flujo`/`datos_red` preparan el cierre), `cierre.py` (diagrama de flujo y red animados, estilo Detroit), `pantallas.py`, `mundo.py` (escenarios, luces, NPCs, planos), `intro.py` (cinemática del cap. 1), `jugador.py`, `estilo.py`, `ajustes.py`, `audio.py`.
-- `herramientas/`: `aligerar_glb.py` (texturas a 1024 **y endereza**: todo `.glb` nuevo pasa por aquí), `revisar_glb.py`, `unir_esqueletos.py`, `componer_intro.py` (música/ambiente sintetizados), `generar_cafeteria.py`, scripts de Blender.
+- `herramientas/`: `aligerar_glb.py` (texturas a 1024 **y endereza**: todo `.glb` nuevo pasa por aquí), `revisar_glb.py`, `unir_esqueletos.py`, `componer_intro.py` (música/ambiente sintetizados), `generar_cafeteria.py`, `sintetizar_animaciones.py` (`correr`/`agachado`/`agachado_caminar` derivadas por IK, sin Blender), scripts de Blender.
+- Un `.glb` recién modificado se carga primero **desde Ursina** (juego o banco de pruebas): la caché de modelos de Panda3D guarda la conversión de ejes del primer proceso que lo abre, y si es Panda3D puro (Z arriba) Ursina lo verá tumbado.
 
 ## Cómo ejecutar y probar
 - Cliente 3D: `venv-win\Scripts\python.exe cliente3d/juego3d.py` · Linux: `.venv/bin/python cliente3d/juego3d.py`
 - Visor de modelos: `python previsualizar.py assets/personajes/<rol>.glb`
 - Pruebas del grafo: `python -I grafo.py`. Reglas: `.venv/bin/python herramientas/banco_pruebas/simular.py` (400 partidas con bots; hacerlo tras tocar reglas).
-- **Banco de pruebas** (`herramientas/banco_pruebas/`): `banco.py` juega el cliente real sin ventana visible y con reloj fijo (teclas, charlas, elegir, capturas en `capturas/`, ignorada por git). Escenarios: `dia1.py` (regresión del día 1 completo) y `turnos.py` (dos jugadores por turnos). Necesita GPU.
+- **Banco de pruebas** (`herramientas/banco_pruebas/`): `banco.py` juega el cliente real sin ventana visible y con reloj fijo (teclas, charlas, elegir, capturas en `capturas/`, ignorada por git). Escenarios: `dia1.py` (regresión del día 1 completo), `turnos.py` (dos jugadores por turnos) y `colegio.py` (sigilo del día 2: ronda, cobertura, tres avisos). Necesita GPU.
 - **Verificación visual: solo con GPU.** El render por software no muestra simplepbr. La PC Linux del repo tiene GPU (AMD): el cliente corre en ventana `offscreen` con reloj fijo y saca capturas reales (banco de pruebas que maneja `juego3d.input` y `update`). Sin GPU, no declares "se ve bien" sin captura del usuario.
 - Referencia del cierre: el diagrama de flujo de Detroit (video «EL PLATINO de DETROIT…» en Descargas, ~1:05, 2:16 y 3:56) — como guía de ritmo y estructura, no para copiarlo.
 
@@ -48,7 +49,7 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 - La lógica vive en `juego.Partida`; el cliente 3D **solo dibuja** (no duplicar reglas). Pensar siempre que `Partida` correrá en un servidor: lo que el cliente necesite calcular debe venir ya hecho de `Partida`.
 - Colores de UI siempre vía `estilo.py` (`E.*`); luces/materiales siempre vía `mundo.py`. Primitivas de Ursina dentro del mundo PBR llevan `clearShader()`.
 - Máx. 6 luces de mundo + 2 por personaje (límite 8 de simplepbr). Los NPCs **no llevan luces propias**: los ilumina la sala.
-- Nombres de animación = contrato con el código: `idle`, `hablar`, `celular`, `caminar` (protagonista) y `sentado` (NPCs). Si falta una, el actor se queda en reposo sin fallar.
+- Nombres de animación = contrato con el código: `idle`, `hablar`, `celular`, `caminar`, `correr`, `agachado`, `agachado_caminar` (protagonista) y `sentado` (NPCs). Si falta una, el actor se queda en reposo sin fallar; `correr` y `agachado_caminar` caen en `caminar` acelerado o lento (`jugador.CLIPS`).
 - Cada archivo descargado se anota en `CREDITOS.md` **al bajarlo** (fuente + licencia). Preferir CC0/OFL; confirmar la licencia de Mixamo.
 - Comentarios que expliquen el **porqué** (ya es la costumbre del repo; mantenerla).
 - Commits pequeños, uno por mejora.
@@ -65,6 +66,7 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 - [x] Cuarto rol = **Alcalde** (documento del proyecto §13), no «Candidato»: es el alcalde saliente, no está en la papeleta. Los cuatro candidatos de la elección no cambian
 - [ ] La publicación `alcalde` («El alcalde actual está robando dinero…») será un rumor sobre el propio jugador si el Alcalde protagoniza ese día: decidirlo al escribir los días 2-7
 - [ ] Días 6 («El debate») y 7 («La víspera») y sus publicaciones (`encuesta`, `audio`) son provisionales
+- [ ] Día 2 («La propuesta», colegio de noche): ya hay escenario, sigilo y vigilantes. Falta: fijar su publicación (hoy sale una al azar del resto), las fotos de los folios con enfoque, el mensaje anónimo y la decisión PUBLICAR / GUARDAR
 - [ ] `menu.ogg` y los `ui_*.wav` siguen con licencia POR CONFIRMAR
 - [ ] `herramientas/aplicar_capitulos.py` está vacío
 - [ ] `.glb` en git (~85 MB entre personajes y NPCs, repo ~35 MB comprimido): pasar a Git LFS

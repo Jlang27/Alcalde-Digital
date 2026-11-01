@@ -38,10 +38,11 @@ from contenido import (
     VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1, NIVEL_INICIAL, RONDAS_POR_NIVEL,
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
-    OPCIONES_QUE_PROTEGEN,
+    OPCIONES_QUE_PROTEGEN, DIA_SIGILO, RONDAS_CAPITULO_2, REGRESO_CAPITULO_2,
     construir_arbol_habilidades, construir_arbol_decision,
     aplicar_habilidades, aplicar_banderas,
 )
+from sigilo import Sigilo
 
 RASGOS = ["rigor", "empatia", "alcance", "impulso"]
 
@@ -252,6 +253,9 @@ class Partida:
         self.tiempo_total = TIEMPO_ESCENA
         self.desenlace_red = None     # {"creyentes": [...], "protegidos": [...]}
 
+        # --- sigilo del dia 2: la ronda de vigilantes del colegio ---
+        self.sigilo = None
+
         # --- lo que el jugador sabe de los candidatos (dura toda la partida) ---
         self.expediente = set()
         self.hechos_del_dia = []
@@ -331,6 +335,8 @@ class Partida:
         #     para que las ramas de habilidades viajen con su subarbol)
         self.compartidos = self.publicacion["compartidos"]
         self._preparar_investigacion()
+        self.sigilo = (Sigilo(RONDAS_CAPITULO_2, REGRESO_CAPITULO_2)
+                       if indice == DIA_SIGILO else None)
         # El reloj del dia se fija antes de repartir: las cartas se
         # programan contra el, no contra el de serie.
         self.tiempo_total = (self.publicacion.get("tiempo", TIEMPO_ESCENA)
@@ -383,6 +389,9 @@ class Partida:
         if self.pistas is not None and self.manana_agotada():
             self.banderas_del_dia.append("llegaste_tarde")
             self.banderas.add("llegaste_tarde")
+        if self.sigilo is not None and self.sigilo.expulsada:
+            self.banderas_del_dia.append("te_sacaron_del_colegio")
+            self.banderas.add("te_sacaron_del_colegio")
 
         self._cerrar_red()
         self._mover_encuesta()

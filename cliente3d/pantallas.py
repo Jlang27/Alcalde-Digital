@@ -356,10 +356,42 @@ class AvisoLibre:
         self.piezas.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
                                    z=E.Z_ADORNO))
         self.piezas += E.leyenda((("wasd", "moverse"),
+                                  ("shift", "correr"),
+                                  ("ctrl", "agacharse"),
                                   ("ratón", "mirar"),
-                                  ("enter", "sacar el teléfono"),
+                                  ("enter", "teléfono"),
                                   ("tab", "libreta"),
                                   ("esc", "menú")), -0.458)
+
+    def cerrar(self):
+        _limpiar(self.piezas)
+
+
+class Sospecha:
+    """Lo cerca que estas de que te pillen (capitulo 2).
+
+    Solo existe mientras alguien te ve: una franja de tinta roja que se
+    llena. Cuando no hay peligro calla, para que la escena se vea entera.
+    """
+
+    ANCHO = 0.5
+
+    def __init__(self):
+        y = 0.40
+        self.piezas = [E.banda(self.ANCHO, 0.016, (0, y), E.tinta(170))]
+        self.barra = E.banda(self.ANCHO, 0.016, (-self.ANCHO / 2, y), E.GAITAN)
+        self.barra.origin = (-0.5, 0)        # crece desde la izquierda
+        self.texto = E.pequena("", (0, y + 0.034), E.GAITAN, escala=0.62,
+                               origen=(0, 0))
+        self.piezas += [self.barra, self.texto]
+        self.poner(0.0, 0, 0)
+
+    def poner(self, sospecha, avisos, maximo):
+        visible = sospecha > 0.01
+        for p in self.piezas:
+            p.enabled = visible
+        self.barra.scale_x = self.ANCHO * min(1.0, sospecha)
+        self.texto.text = f"TE ESTÁN VIENDO   ·   AVISOS {avisos}/{maximo}"
 
     def cerrar(self):
         _limpiar(self.piezas)
@@ -431,8 +463,8 @@ class Dialogo:
                 self.cuerpo.append(E.pequena(nota, (0.86, y - 0.002), E.GAITAN,
                                              escala=0.52, origen=(0.5, 0.5)))
             self.cuerpo.append(Button(
-                parent=camera.ui, color=color.rgba(255, 255, 255, 0),
-                highlight_color=color.rgba(255, 255, 255, 26),
+                parent=camera.ui, color=color.clear,
+                highlight_color=E.luz(26),
                 scale=(1.74, 0.038), position=(0, y - 0.011),
                 on_click=Func(self.al_elegir, i)))
         self.cuerpo += E.leyenda(((f"1-{len(opciones)}", "preguntar"),
@@ -485,115 +517,183 @@ class AvisoPapel:
 class Libreta:
     """La libreta de Mateo (Tab): todo lo que sabes, en papel y por tintas.
 
-    Tres columnas. Los candidatos con su tinta y su expediente. El arbol
-    de pistas dibujado con sangria (lo que sabes, lo que ya puedes
-    preguntar, lo que ni sabes que existe). Y la red y tu tarjeton.
+    Tres pestañas, como los separadores de una libreta de reportero:
+    los EXPEDIENTES de los candidatos, el árbol de PISTAS con sangría
+    (lo que sabes y los cabos sueltos) y LA RED con tu tarjetón. Antes
+    las tres iban en una sola hoja y la letra no daba para leerse; una
+    página por tema deja escribir al doble de tamaño.
     Recibe los datos ya preparados: la pantalla no conoce la Partida.
     """
 
-    ANCHO = 50          # caracteres por renglon en cada columna
-    RENGLON = 0.024
+    PAGINAS = ("EXPEDIENTES", "PISTAS", "LA RED")
+    CUERPO = 0.58       # escala de la letra de los renglones
+    TOPE = 0.300        # primer renglon de cada pagina
     FONDO = -0.375      # de aqui para abajo ya no se escribe
+    COLUMNA = 0.80      # ancho de media pagina
+    X1, X2 = -0.84, 0.06
 
-    def __init__(self, cabecera, candidatos, pistas, ocultas, red, tarjeton):
+    def __init__(self, cabecera, candidatos, pistas, ocultas, red, tarjeton,
+                 pagina=0):
         """candidatos: [{nombre, tinta, hechos: [hecho], faltan}]
         pistas: [(profundidad, sabida, texto, tinta)] en DFS preorden
         ocultas: cuantas pistas aun no sabes que existen
         red: [texto]; tarjeton: (ganadas, total, [texto])"""
-        self.piezas = []
+        self.datos = (candidatos, pistas, ocultas, red, tarjeton)
+        self.piezas = []      # lo fijo: papel, cabecera, pie
+        self.hoja = []        # lo de la pagina abierta
+        self.actual = None
         a = self.piezas.append
         a(E.banda(2.4, 1.20, (0, 0), E.PAPEL, z=E.Z_FONDO))
         a(E.pequena(cabecera, (-0.84, 0.462), E.TINTA_TENUE, escala=0.56))
         a(E.titular("Lo que sé", (-0.84, 0.430), 2.0, E.TINTA))
         self.piezas += E.filete(1.70, (-0.85, 0.352))
+        self.piezas += _boton_papel("← →  CAMBIAR DE PÁGINA   ·   TAB  CERRAR",
+                                    (0, -0.440), ancho=0.62, z=E.Z_ADORNO)
+        self.pagina(pagina)
 
-        self._candidatos(candidatos, -0.84)
-        self._pistas(pistas, ocultas, -0.26)
-        self._red(red, tarjeton, 0.32)
+    # --- pestañas ---
+    def _pestanas(self):
+        ancho, alto, y = 0.25, 0.058, 0.392
+        for i, nombre in enumerate(self.PAGINAS):
+            x = 0.85 - (len(self.PAGINAS) - i) * (ancho + 0.012) + ancho / 2
+            activa = i == self.actual
+            # la activa es tinta llena, como la tecla impresa del pie; las
+            # demas, papel en sombra: se ven, pero no compiten
+            self.hoja.append(E.banda(ancho, alto, (x, y),
+                                     E.TINTA if activa else E.PAPEL_SOMBRA))
+            if activa:
+                self.hoja.append(E.banda(ancho, 0.006, (x, y - alto / 2),
+                                         E.LLERAS, z=E.Z_ADORNO - 0.005))
+            self.hoja.append(E.pequena(f"{i + 1}  {nombre}", (x, y + 0.011),
+                                       E.PAPEL if activa else E.TINTA_TENUE,
+                                       escala=0.56, origen=(0, 0.5)))
+            self.hoja.append(Button(
+                parent=camera.ui, color=color.clear,
+                highlight_color=color.Color(E.TINTA.r, E.TINTA.g, E.TINTA.b, 0.10),
+                scale=(ancho, alto), position=(x, y),
+                on_click=Func(self.pagina, i)))
 
-        self.piezas += _boton_papel("TAB  ·  CERRAR LA LIBRETA", (0, -0.440),
-                                    ancho=0.40, z=E.Z_ADORNO)
+    def pagina(self, i):
+        i %= len(self.PAGINAS)
+        if i == self.actual:
+            return
+        _limpiar(self.hoja)
+        self.actual = i
+        self._pestanas()
+        candidatos, pistas, ocultas, red, tarjeton = self.datos
+        if i == 0:
+            self._candidatos(candidatos)
+        elif i == 1:
+            self._pistas(pistas, ocultas)
+        else:
+            self._red(red, tarjeton)
+
+    def mover(self, paso):
+        self.pagina(self.actual + paso)
 
     # --- utilidades de columna ---
-    def _titulo(self, texto, x, y=0.305):
-        self.piezas.append(E.pequena(texto, (x, y), E.TINTA, escala=0.54))
-        self.piezas.append(E.regla(0.52, (x, y - 0.030), 0.0018, E.TINTA_TENUE))
-        return y - 0.048
+    def _titulo(self, texto, x, y=TOPE, largo=COLUMNA):
+        self.hoja.append(E.pequena(texto, (x, y), E.TINTA, escala=0.62))
+        self.hoja.append(E.regla(largo, (x, y - 0.034), 0.0018,
+                                 E.TINTA_TENUE))
+        return y - 0.056
 
-    def _texto(self, texto, x, y, col=None, escala=0.42, ancho=None):
+    def _texto(self, texto, x, y, col=None, escala=CUERPO, largo=COLUMNA):
         """Escribe con salto de linea y devuelve la y siguiente, o None si
-        ya no cabe en la pagina."""
-        if y < self.FONDO:
+        ya no cabe en la pagina. largo es el ancho en pantalla; los
+        caracteres por renglon salen de el y del tamaño de letra, asi el
+        texto grande de Ajustes no se sale de la columna."""
+        if y is None or y < self.FONDO:
             return None
-        ancho = ancho or self.ANCHO
+        k = escala * E.ESCALA_TEXTO
+        ancho = max(12, int(largo / (0.0248 * k)))
         t = E.pequena(texto, (x, y), col or E.TINTA_TENUE, escala=escala)
         t.wordwrap = ancho
-        self.piezas.append(t)
+        self.hoja.append(t)
         renglones = sum(len(r) // ancho + 1 for r in texto.split("\n"))
-        return y - renglones * self.RENGLON
+        return y - renglones * 0.057 * k
 
-    # --- columna 1: candidatos ---
-    def _candidatos(self, candidatos, x):
-        y = self._titulo("CANDIDATOS", x)
-        for c in candidatos:
-            if y is None or y < self.FONDO:
-                break
-            arriba = y
-            y = self._texto(c["nombre"], x + 0.022, y, E.TINTA, escala=0.56) - 0.004
-            for hecho in c["hechos"]:
-                linea = f"{hecho['tema']}: {hecho['texto']}"
-                if hecho["barrio"]:
-                    linea += f"  {hecho['barrio']}"
-                y = self._texto(linea, x + 0.022, y)
-                if y is None:
-                    break
-            if y is None:
-                break
-            y = self._texto("· · ·  " + (f"{c['faltan']} por descubrir"
-                                         if c["faltan"] else "nada más por ahora"),
-                            x + 0.022, y, E.TINTA_TENUE)
-            if y is None:
-                break
-            # la franja de tinta del candidato, tan alta como su bloque
-            alto = arriba - y
-            self.piezas.append(E.banda(0.008, alto, (x + 0.004, arriba - alto / 2 + 0.012),
-                                       c["tinta"]))
-            y -= 0.018
+    # --- pagina 1: expedientes, de dos en dos ---
+    def _candidatos(self, candidatos):
+        fila = self.TOPE
+        for par in (candidatos[:2], candidatos[2:]):
+            abajo = fila
+            for c, x in zip(par, (self.X1, self.X2)):
+                y = self._expediente(c, x, fila)
+                abajo = min(abajo, self.FONDO if y is None else y)
+            fila = abajo - 0.030
 
-    # --- columna 2: el arbol de pistas ---
-    def _pistas(self, pistas, ocultas, x):
-        y = self._titulo("PISTAS  ·  el árbol de lo que sabes", x)
+    def _expediente(self, c, x, y):
+        if y < self.FONDO:
+            return None
+        arriba = y
+        y = self._texto(c["nombre"], x + 0.024, y, E.TINTA, escala=0.78)
+        for hecho in c["hechos"]:
+            y = self._texto(f"{hecho['tema']}: {hecho['texto']}", x + 0.024, y,
+                            E.TINTA, largo=self.COLUMNA - 0.03)
+            if hecho["barrio"]:
+                y = self._texto(f"— {hecho['barrio']}", x + 0.048, y,
+                                largo=self.COLUMNA - 0.05)
+        y = self._texto("· · ·  " + (f"{c['faltan']} por descubrir" if c["faltan"]
+                                     else "nada más por ahora"),
+                        x + 0.024, y)
+        # la franja de tinta del candidato, tan alta como su bloque
+        fin = self.FONDO if y is None else y
+        alto = arriba - fin
+        self.hoja.append(E.banda(0.010, alto, (x + 0.005, arriba - alto / 2),
+                                 c["tinta"]))
+        return y
+
+    # --- pagina 2: el arbol de pistas ---
+    def _pistas(self, pistas, ocultas):
+        x = self.X1
+        y = self._titulo("EL ÁRBOL DE LO QUE SÉ", x)
+        largo = 1.12
         for profundidad, sabida, texto, tinta in pistas:
             if y is None:
                 break
-            sangria = x + profundidad * 0.026
-            self.piezas += E.casilla((sangria + 0.008, y - 0.010), tinta,
-                                     marcada=sabida, lado=0.016, fondo=E.PAPEL)
-            y = self._texto(texto, sangria + 0.026, y,
+            sangria = x + profundidad * 0.040
+            self.hoja += E.casilla((sangria + 0.010, y - 0.012), tinta,
+                                   marcada=sabida, lado=0.020, fondo=E.PAPEL)
+            y = self._texto(texto, sangria + 0.034, y,
                             E.TINTA if sabida else tinta,
-                            ancho=self.ANCHO - 2 * profundidad - 3)
-        if y is not None and ocultas:
-            self._texto(f"· · ·  y {ocultas} pista(s) que aún no sabes que existen",
-                        x, y - 0.006)
+                            largo=largo - profundidad * 0.040 - 0.034)
+        if ocultas:
+            self._texto("· · ·  y hay más por averiguar", x, y and y - 0.008)
+        self._clave(0.42)
 
-    # --- columna 3: la red y el tarjeton ---
-    def _red(self, red, tarjeton, x):
-        y = self._titulo("LA RED", x)
+    def _clave(self, x):
+        """Como leer el arbol: la libreta no dice que preguntar, pero si
+        como esta apuntado lo que ya sabes."""
+        y = self._titulo("CÓMO LEERLO", x, largo=0.42)
+        for marcada, tinta, texto in (
+                (True, E.TINTA, "lo que ya sabes"),
+                (False, E.LLERAS, "un cabo suelto: alguien de aquí sabe más"),
+                (False, E.OSPINA, "un cabo suelto en el teléfono"),
+                (None, None, "la sangría: lo que supiste gracias a lo de arriba")):
+            if marcada is not None:
+                self.hoja += E.casilla((x + 0.010, y - 0.012), tinta,
+                                       marcada=marcada, lado=0.020, fondo=E.PAPEL)
+            y = self._texto(texto, x + 0.034, y, largo=0.40)
+
+    # --- pagina 3: la red y el tarjeton ---
+    def _red(self, red, tarjeton):
+        y = self._titulo("LA RED", self.X1)
         for linea in red:
-            if y is None:
-                return
-            y = self._texto(linea, x, y)
+            y = self._texto(linea, self.X1, y, E.TINTA if "→" in linea else None)
         ganadas, total, opciones = tarjeton
         y = self._titulo(f"TU TARJETÓN  ·  {ganadas} de {total} decisiones",
-                         x, (y or self.FONDO) - 0.030)
+                         self.X2)
         for texto in opciones:
             if y is None:
                 return
-            self.piezas += E.casilla((x + 0.008, y - 0.010), E.TINTA,
-                                     marcada=False, lado=0.016, fondo=E.PAPEL)
-            y = self._texto(texto, x + 0.026, y, E.TINTA)
+            self.hoja += E.casilla((self.X2 + 0.010, y - 0.012), E.TINTA,
+                                   marcada=False, lado=0.020, fondo=E.PAPEL)
+            y = self._texto(texto, self.X2 + 0.034, y, E.TINTA,
+                            largo=self.COLUMNA - 0.034)
 
     def cerrar(self):
+        _limpiar(self.hoja)
         _limpiar(self.piezas)
 
 

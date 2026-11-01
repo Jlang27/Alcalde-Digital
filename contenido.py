@@ -492,6 +492,7 @@ TEXTO_BANDERA = {
     "expusiste_bots": "Que expusiste las cuentas bot.",
     "rastreaste_el_origen": "Que llegaste hasta @NovaAlerta.",
     "llegaste_tarde": "Que el rumor te ganó la carrera.",
+    "te_sacaron_del_colegio": "Que te sacaron del colegio de noche.",
 }
 
 # Nombre y oficio de los que hablan en la cafeteria.
@@ -558,6 +559,27 @@ ARISTAS_CAPITULO_1 = [
 # baja un nivel cada RONDAS_POR_NIVEL charlas.
 NIVEL_INICIAL = 3
 RONDAS_POR_NIVEL = 2
+
+
+# ===================================================================
+#  DIA 2: EL SIGILO EN EL COLEGIO (ver sigilo.py)
+# ===================================================================
+# El capitulo 2, «La propuesta» (pantallas.CAPITULOS), es de noche en el
+# Colegio Tecnico Nova: se entra a los archivos esquivando la ronda.
+DIA_SIGILO = 1
+
+# La ronda de cada vigilante, ida y vuelta, en puntos (x, z) del plano de
+# mundo.py. Cada una pasa junto a un folio: no hay foto gratis.
+RONDAS_CAPITULO_2 = {
+    # el pasillo entre la mesa del folio 2 y los estantes, y el fondo
+    "archivo": [(3.6, 7.0), (3.6, 15.9), (-3.8, 15.9)],
+    # por delante del mostrador (folio 3) y junto a la mesa del folio 4
+    "restringido": [(13.2, 7.0), (22.0, 7.0), (22.0, 16.2)],
+    # cubre la puerta de la sala de profesores al pasillo de salida
+    "sala": [(20.8, 1.9), (20.8, -2.9)],
+}
+# A donde te llevan cuando te pillan: el pasillo, frente a la rectoria.
+REGRESO_CAPITULO_2 = (3.9, 4.9, 90.0)
 
 
 # ===================================================================

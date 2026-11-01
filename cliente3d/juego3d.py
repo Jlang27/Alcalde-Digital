@@ -36,6 +36,7 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        HECHOS, TEXTO_BANDERA)
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
+from sigilo import AVISOS_MAXIMOS
 
 DURACION_CARGA = 2.8
 
@@ -82,6 +83,10 @@ class Cliente:
         self.alerta = None            # el cintillo de ULTIMA HORA en pantalla
         self.npcs = {}                # id -> Actor de la cafeteria
         self.bloqueos_npc = []
+        self.capitulo = 0             # el dia con el que arranca la partida
+        self.capitulo_sel = 0         # el renglon marcado en «Capítulos»
+        self.vigilantes = {}          # id -> (actor, abanico, foco) del dia 2
+        self.sospecha = None          # el medidor de «te estan viendo»
         self.vio_aviso = False        # el aviso de «hablar cuesta», una vez
         self.dia_avisado = None       # el aviso de la jornada, una vez por dia
         self.aviso_papel = None
@@ -191,6 +196,7 @@ def fichas_de_rol():
 
 def abrir_seleccion():
     cl.estado = "seleccion"
+    cl.capitulo = 0                 # «Jugar» es la partida desde el principio
     cl.actor.hide()                 # el protagonista deja sitio al reparto
     cl.elenco = mundo.elenco(cl.mundo)
     cl.seleccion = pantallas.Seleccion(fichas_de_rol(), confirmar_reparto,
@@ -250,13 +256,21 @@ def rehacer_ajustes(_clave):
     cl.ajustes.cerrar()
     abrir_ajustes(donde)
 
-# Los siete dias del guion; solo el primero esta terminado y se puede
-# jugar suelto. Antes la lista llegaba a doce, que nunca existieron.
-CAPITULOS = [(f"{i + 1:02d}", titulo if i == 0 else f"{titulo} · próximamente",
-              i == 0) for i, (titulo, _lugar) in enumerate(pantallas.CAPITULOS)]
+# Los siete dias del guion; los primeros se pueden jugar sueltos desde el
+# menu. Antes la lista llegaba a doce, que nunca existieron.
+CAPITULOS_JUGABLES = 2
+CAPITULOS = [(f"{i + 1:02d}",
+              titulo if i < CAPITULOS_JUGABLES else f"{titulo} · próximamente",
+              i < CAPITULOS_JUGABLES)
+             for i, (titulo, _lugar) in enumerate(pantallas.CAPITULOS)]
+# Quien protagoniza un capitulo jugado suelto, segun el guion. El 1 lo
+# juega el rol que ya tengas; el 2 es de Valeria, la periodista.
+ROL_CAPITULO = {1: "periodista"}
 
-def abrir_capitulos():
+
+def abrir_capitulos(seleccion=0):
     cl.estado = "capitulos"
+    cl.capitulo_sel = seleccion
     p = cl.pantalla
     p.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
     p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.462), E.TEXTO_TENUE,
@@ -265,14 +279,45 @@ def abrir_capitulos():
     p.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
     for i, (num, titulo, libre) in enumerate(CAPITULOS):
         y = 0.272 - i * 0.052
-        col = E.TEXTO if libre else E.TEXTO_TENUE
+        col = E.TEXTO if i == seleccion else E.TEXTO_TENUE
+        if i == seleccion:
+            # La misma marca de luz que Ajustes: lo jugable se elige igual
+            # en todo el menu.
+            caja, filo, largo = E.marca_seleccion(-0.86, y - 0.010, 1.10,
+                                                  alto=0.040,
+                                                  tinta_filo=E.ACENTO_UI)
+            caja.scale_x, filo.scale_x = 1.0, largo
+            p += [caja, filo]
         # El numero en la tinta del capitulo abierto: es lo unico que
         # distingue lo jugable de lo que todavia esta en maquina.
         p.append(E.pequena(num, (-0.84, y),
                            E.UI if libre else E.TEXTO_TENUE, escala=0.62))
         p.append(E.etiqueta(titulo, (-0.74, y), 0.92, col))
     p.append(E.banda(2.4, 0.003, (0, -0.408), E.luz(46), z=E.Z_ADORNO))
-    p += E.leyenda((("enter", "jugar"), ("esc", "volver")), -0.448)
+    p += E.leyenda((("flechas", "elegir"), ("enter", "jugar"),
+                    ("esc", "volver")), -0.448)
+
+
+def mover_capitulo(paso):
+    """Solo se pasa por los capitulos que ya se pueden jugar."""
+    nuevo = (cl.capitulo_sel + paso) % CAPITULOS_JUGABLES
+    limpiar(cl.pantalla)
+    abrir_capitulos(nuevo)
+
+
+def jugar_capitulo():
+    """Arranca el capitulo marcado, sin pasar por el reparto."""
+    cl.capitulo = cl.capitulo_sel
+    rol = ROL_CAPITULO.get(cl.capitulo)
+    # Siempre se recarga: el actor del menu es el de prueba, diga lo que
+    # diga rol_elegido, y la partida suelta es de uno solo.
+    if rol is not None:
+        cl.rol_elegido, cl.reparto = rol, [rol]
+        cl.actor.cleanup()
+        cl.actor.removeNode()
+        cl.actor = mundo.protagonista(cl.mundo, rol)
+        animar("idle")
+    cerrar_pantalla(jugar=True)
 
 EQUIPO = ["David Martínez", "José Angulo", "Yuceth Gil",
           "Sebastián Ibáñez"]
@@ -311,8 +356,10 @@ def abrir_carga():
     cl.reloj_carga = 0.0
     mundo.corte("AFICHE")
     animar("idle")
-    cl.carga = pantallas.Carga("el primer día",
-                               random.choice(pantallas.PISTAS))
+    titulo = ("el primer día" if cl.capitulo == 0
+              else pantallas.CAPITULOS[cl.capitulo][0])
+    cl.carga = pantallas.Carga(titulo, random.choice(pantallas.PISTAS),
+                               numero=f"{cl.capitulo + 1:02d}")
 
 
 def abrir_intro():
@@ -355,7 +402,16 @@ def empezar_partida():
     roles = list(cl.reparto) or [cl.rol_elegido]
     cl.partida = Partida(roles)
     construir_hud()
-    iniciar_dia(0)
+    iniciar_dia(cl.capitulo)
+
+
+def entrar_capitulo():
+    """De la carga a un capitulo suelto, con el mismo corte a negro."""
+    fundido = pantallas.Fundido()
+    cl.carga.cerrar()
+    cl.carga = None
+    empezar_partida()
+    fundido.desvanecer(0.9, retraso=0.25)
 
 TEXTOS_CONFIRMACION = {
     "menu": ("¿Volver al menú?", "Se pierde la partida en curso."),
@@ -829,6 +885,7 @@ def iniciar_dia(indice):
     # Aqui y no al soltar al personaje: cargar los .glb da un tiron, y
     # detras del rotulo opaco no se ve.
     preparar_npcs()
+    preparar_vigilantes()
     detalle.text = ""
     limpiar(cl.opciones)
     for e in cl.hud:
@@ -927,6 +984,8 @@ def abrir_libre():
 def cerrar_libre():
     limpiar(cl.marca_hablar)
     cl.cerca = None
+    if cl.sospecha is not None:
+        cl.sospecha.poner(0.0, 0, 0)      # fuera de la ronda no se avisa
     if cl.jugador is not None:
         cl.jugador.desactivar()
     if cl.aviso is not None:
@@ -1016,6 +1075,77 @@ def quitar_npcs():
     mundo.quitar_npc(list(cl.npcs.values()))
     cl.npcs = {}
     cl.bloqueos_npc = []
+
+
+# ===================================================================
+#  VIGILANTES DEL COLEGIO (dia 2): las reglas estan en sigilo.py
+# ===================================================================
+
+TEXTO_PILLADA = (
+    "Un vigilante te alumbra la cara. «A esta hora no puede estar aquí». "
+    "Te acompaña al pasillo sin soltarte el brazo. Agáchate detrás de las "
+    "mesas y no corras cerca de ellos: correr se oye.")
+TEXTO_EXPULSADA = (
+    "Esta vez no hay advertencia: te sacan del colegio y cierran el "
+    "portón. Lo que no alcanzaste a ver se queda en el archivo.")
+
+
+def preparar_vigilantes():
+    """El dia con ronda monta a sus vigilantes; los demas, ninguno."""
+    quitar_vigilantes()
+    s = cl.partida.sigilo
+    if s is None:
+        return
+    s.tapan_de_pie, s.tapan_agachado = mundo.coberturas()
+    for v in s.vigilantes:
+        cl.vigilantes[v.id] = mundo.vigilante(cl.mundo)
+    cl.sospecha = pantallas.Sospecha()
+    dibujar_ronda()
+
+
+def quitar_vigilantes():
+    mundo.quitar_vigilantes(cl.vigilantes.values())
+    cl.vigilantes = {}
+    if cl.sospecha is not None:
+        cl.sospecha.cerrar()
+        cl.sospecha = None
+
+
+def dibujar_ronda():
+    s = cl.partida.sigilo
+    for v in s.vigilantes:
+        mundo.mover_vigilante(cl.vigilantes[v.id], v.x, v.z, v.rumbo,
+                              v.andando, s.rayos(v), v.id == s.quien)
+
+
+def ronda(dt):
+    """Un paso de la ronda mientras exploras. Las reglas deciden; aqui se
+    dibuja y, si te pillaron, se cuenta."""
+    s = cl.partida.sigilo
+    evento = s.actualizar(dt, cl.actor.getX(), cl.actor.getZ(),
+                          cl.jugador.agachado, cl.jugador.corriendo)
+    dibujar_ronda()
+    cl.sospecha.poner(s.sospecha, s.avisos, AVISOS_MAXIMOS)
+    if evento:
+        pillada(evento)
+
+
+def pillada(evento):
+    """Te vio un vigilante: al pasillo con un aviso, o fuera del colegio."""
+    s = cl.partida.sigilo
+    x, z, rumbo = s.regreso
+    cl.actor.setPos(x, 0, z)
+    cl.actor.setH(180.0 - rumbo)
+    cl.jugador.yaw, cl.jugador.rumbo, cl.jugador.pivote = rumbo, 180.0 - rumbo, None
+    audio.efecto("vibracion")
+    if evento == "expulsada":
+        # Sin colegio no hay mas que investigar: queda el telefono.
+        abrir_aviso_papel("TE SACARON DEL COLEGIO",
+                          f"Aviso {s.avisos} de {AVISOS_MAXIMOS}",
+                          TEXTO_EXPULSADA, empezar_decision)
+    else:
+        abrir_aviso_papel("TE VIERON", f"Aviso {s.avisos} de {AVISOS_MAXIMOS}",
+                          TEXTO_PILLADA, abrir_libre)
 
 
 def senalar_cercano():
@@ -1836,6 +1966,8 @@ def update():
         if not cl.confirmando:
             cl.jugador.paso(time.dt)
         cl.jugador.seguir(time.dt)
+        if cl.partida.sigilo is not None and not cl.confirmando:
+            ronda(time.dt)
         if cl.npcs:
             senalar_cercano()
         return
@@ -1847,7 +1979,9 @@ def update():
         cl.reloj_carga += time.dt
         cl.carga.avance(cl.reloj_carga / DURACION_CARGA)
         if cl.reloj_carga >= DURACION_CARGA:
-            abrir_intro()
+            # La cinematica «7 días» es la entrada del capitulo 1; un
+            # capitulo jugado suelto entra directo a su escena.
+            abrir_intro() if cl.capitulo == 0 else entrar_capitulo()
         return
 
     if cl.estado != "juego" or cl.dia_cerrado or cl.partida is None:
@@ -2124,6 +2258,16 @@ def input(tecla):
             cl.ajustes.graduar(-1)
         elif tecla in ("enter", "space"):
             cl.ajustes.activar()
+        return
+
+    elif cl.estado == "capitulos" and tecla in ("up arrow", "w", "down arrow", "s"):
+        audio.efecto("mover")
+        mover_capitulo(-1 if tecla in ("up arrow", "w") else 1)
+        return
+
+    elif cl.estado == "capitulos" and tecla in ("enter", "space"):
+        audio.efecto("confirmar")
+        jugar_capitulo()
         return
 
     elif cl.estado in ("capitulos", "creditos"):

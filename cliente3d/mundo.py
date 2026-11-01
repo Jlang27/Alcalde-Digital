@@ -6,7 +6,7 @@ import simplepbr
 from direct.actor.Actor import Actor
 from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
                           LColor, Material, PNMImage, PointLight, Texture,
-                          TextureAttrib)
+                          TextureAttrib, TransparencyAttrib)
 from ursina import Entity, Mesh, application, camera, color, destroy, Vec3
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1273,6 +1273,9 @@ def _muro(eje, plano, a0, a1, huecos):
 # sigue es el atrezo, sala por sala. Todo es caja: se funde en una malla
 # por material, asi que mil cajas cuestan lo mismo que diez.
 ALTO_CAMARA = 1.6     # un mueble mas alto que esto tapa tambien la camara
+# Lo que esconde a alguien agachado de la linterna de un vigilante: una
+# mesa si, una caja de carton baja no. Lo alto (ALTO_CAMARA) tapa de pie.
+ALTO_COBERTURA = 0.7
 
 
 class _Obra:
@@ -1284,6 +1287,7 @@ class _Obra:
         self.letreros = []    # (texto, x, y, z, giro, alto de letra, color)
         self.paso = []        # rectangulos que no se dejan pisar
         self.vista = []       # rectangulos que ademas tapan la camara
+        self.cobertura = []   # los que esconden a alguien agachado
 
     def caja(self, mat, x0, x1, y0, y1, z0, z1, bloquea=False):
         self.cajas.append((mat, x0, x1, y0, y1, z0, z1))
@@ -1294,6 +1298,8 @@ class _Obra:
         self.paso.append(rect)
         if alto >= ALTO_CAMARA:
             self.vista.append(rect)
+        if alto >= ALTO_COBERTURA:
+            self.cobertura.append(rect)
 
     def pared(self, mat, eje, plano, signo, a0, a1, y0, y1, d0, d1,
               bloquea=False):
@@ -1624,7 +1630,7 @@ def _obra_colegio():
     _mesa(o, 22.8, 24.4, 14.8, 15.8)
     o.caja("madera", 16.7, 20.2, 0, 0.95, 7.6, 8.1, bloquea=True)   # mostrador
     for x, z, h in ((10.6, 15.6, 0.35), (10.6, 15.6 + 0.4, 0.3), (11.1, 16.4, 0.7),
-                    (3.4, 16.3, 0.35), (16.2, 16.4, 0.65), (21.8, 9.0, 0.35)):
+                    (3.4, 16.3, 0.35), (16.2, 16.4, 0.65), (12.4, 16.6, 0.35)):
         o.caja("carton", x, x + 0.42, 0, h, z, z + 0.36, bloquea=True)
     o.letrero("SOLO PERSONAL AUTORIZADO", "x", 12.0 - 0.1, -1, 11.3, 2.55, 0.11,
               (0.95, 0.30, 0.20))
@@ -2002,6 +2008,13 @@ def muros():
     return MUROS_CAMARA.get(_ACTUAL["nombre"], ())
 
 
+def coberturas():
+    """Lo que corta la vista de un vigilante: (de pie, agachada)."""
+    if _ACTUAL["nombre"] != "rectoria":
+        return [], []
+    return list(OBRA_COLEGIO.vista), list(OBRA_COLEGIO.cobertura)
+
+
 def limites():
     """Rectangulo andable del escenario activo."""
     return LIMITES.get(_ACTUAL["nombre"], LIMITES["cafeteria"])
@@ -2045,6 +2058,20 @@ def cambiar_escenario(mundo, escenario):
     _montar(mundo, escenario)
 
 
+def protagonista(mundo, rol=None):
+    """Carga al personaje que juega, con su clave y su contraluz.
+
+    Tambien sirve fuera de crear(): un capitulo jugado suelto desde el
+    menu no pasa por el reparto, y hay que traer a su protagonista.
+    """
+    ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
+    actor = Actor(ruta)
+    actor.reparentTo(mundo)
+    mezclar(actor)
+    _luz_de_personaje(mundo, actor)
+    return actor
+
+
 def crear(escenario="cafeteria", rol=None):
     """Monta el mundo entero y devuelve (nodo_raiz, actor).
 
@@ -2053,12 +2080,7 @@ def crear(escenario="cafeteria", rol=None):
     """
     mundo = application.base.render.attachNewNode("mundo")
     _montar(mundo, escenario)
-
-    ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
-    actor = Actor(ruta)
-    actor.reparentTo(mundo)
-    mezclar(actor)
-    _luz_de_personaje(mundo, actor)
+    actor = protagonista(mundo, rol)
 
     _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=4,
                                         max_lights=8, enable_shadows=False)
@@ -2482,6 +2504,75 @@ def npc(mundo, nombre, posicion=(0.0, 0.0, 0.0), mirando=0.0,
 
 def quitar_npc(actores):
     for actor in actores:
+        actor.cleanup()
+        actor.removeNode()
+
+
+# ===================================================================
+#  VIGILANTES (capitulo 2): las reglas estan en sigilo.py
+# ===================================================================
+
+LINTERNA = (1.0, 0.80, 0.48)      # ambar: la luz calida contra la noche azul
+LINTERNA_ALERTA = (1.0, 0.16, 0.10)
+# La ronda va a 1,1 m/s y el clip de caminar esta hecho para mas: sin
+# frenarlo, los pies patinan.
+RITMO_RONDA = 0.6
+
+
+def vigilante(mundo):
+    """Un vigilante de ronda. Devuelve (actor, abanico).
+
+    El cuerpo es el modelo de prueba (el unico de fondo que sabe andar).
+    El abanico es la luz de la linterna en el suelo: va fuera del nodo PBR,
+    sin luz ni niebla, porque es lo que el jugador tiene que leer siempre.
+    """
+    actor = Actor(Filename.from_os_specific(RUTA_PERSONAJE).getFullpath())
+    actor.reparentTo(mundo)
+    _quitar_mapa_de_brillo(actor)
+    actor.setPlayRate(RITMO_RONDA, "caminar")
+    # El brillo de la linterna a la altura del pecho; el modelo mira a -z.
+    # No va por _pieza: esa lo apunta al escenario, y este se va con el actor.
+    foco = Entity(model="sphere", scale=0.09, position=(0.0, 1.15, -0.35))
+    foco.reparentTo(actor)
+    foco.clearShader()
+    foco.setMaterial(_material((0.05, 0.05, 0.05, 1),
+                               emision=(3.0, 2.4, 1.4, 1)), 1)
+    abanico = Entity(model=Mesh(vertices=[(0, 0, 0)] * 3, triangles=[0, 1, 2],
+                                colors=[color.clear] * 3, mode="triangle",
+                                static=False))
+    abanico.setTransparency(TransparencyAttrib.MAlpha)
+    abanico.setDepthWrite(False)
+    abanico.setTwoSided(True)
+    return actor, abanico, foco
+
+
+def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta):
+    """Lo pone donde dicen las reglas y le redibuja la luz.
+
+    rayos: los extremos del cono (sigilo.Vigilante.rayos), ya cortados
+    contra muros y estantes. alerta: te esta viendo; la luz vira a rojo.
+    """
+    actor, abanico, _ = par
+    actor.setPos(x, 0, z)
+    actor.setH(180.0 - rumbo)            # el convenio de jugador.py
+    clip = "caminar" if andando else "idle"
+    if actor.getCurrentAnim() != clip:
+        actor.loop(clip)
+    r, g, b = LINTERNA_ALERTA if alerta else LINTERNA
+    y = 0.03                             # encima de la baldosa y del damero
+    malla = abanico.model
+    malla.vertices = [(x, y, z)] + [(px, y, pz) for px, pz in rayos]
+    # Fuerte al pie de la linterna y casi nada en el borde: se lee como luz.
+    malla.colors = ([color.Color(r, g, b, 0.42)]
+                    + [color.Color(r, g, b, 0.05)] * len(rayos))
+    malla.triangles = [i for k in range(1, len(rayos)) for i in (0, k, k + 1)]
+    malla.generate()
+
+
+def quitar_vigilantes(pares):
+    for actor, abanico, foco in pares:
+        destroy(foco)
+        destroy(abanico)
         actor.cleanup()
         actor.removeNode()
 
