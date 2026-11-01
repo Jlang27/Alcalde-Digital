@@ -30,6 +30,7 @@ import estilo as E
 import intro
 import mundo
 import pantallas
+import minimapa
 from jugador import Jugador
 from contenido import INDICADORES_META
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
@@ -113,6 +114,7 @@ class Cliente:
         self.foto_cierre = None       # la escena del dia, para la miniatura
         self.agotado = False          # el reloj llego a cero y se esta contando
         self.espera_cierre = 0.0      # lo que falta para pasar al diagrama
+        self.mapa = minimapa.Minimapa()
 
 
 cl = Cliente()
@@ -1027,10 +1029,12 @@ def abrir_libre():
     cl.jugador.encuadrar()
     cl.jugador.activar()
     cl.aviso = pantallas.AvisoLibre()
+    cl.mapa.preparar(mundo.escenario(), mundo.limites(), mundo.bloqueos())
     pintar_reloj_manana()
 
 
 def cerrar_libre():
+    cl.mapa.mostrar(False)
     limpiar(cl.marca_hablar)
     cl.cerca = None
     if cl.sospecha is not None:
@@ -2006,6 +2010,30 @@ def cerrar_alerta():
 # ===================================================================
 #  BUCLE Y ENTRADA
 # ===================================================================
+def gente_del_mapa():
+    gente = [(f"n_{i}", a.getX(), a.getZ(), "npc")
+             for i, a in cl.npcs.items()]
+    gente += [(f"f_{i}", a.getX(), a.getZ(), "npc")
+              for i, a in cl.figurantes.items()]
+    s = cl.partida.sigilo                  # primero se asigna...
+    if s is not None and minimapa.MOSTRAR_VIGILANTES:
+        gente += [(f"v_{v.id}", v.x, v.z, "vigilante", v.rumbo)
+                  for v in s.vigilantes]   # ...y después se usa
+    if cl.ronda_asesor is not None:
+        gente.append(("asesor", cl.ronda_asesor.x, cl.ronda_asesor.z,
+                      "asesor"))
+    return gente
+
+def actualizar_mapa():
+    """El minimapa solo se ve mientras caminas, sin nada encima."""
+    visible = (cl.estado == "libre" and cl.jugador is not None
+               and cl.partida is not None and not cl.dia_cerrado
+               and cl.libreta is None and cl.aviso_papel is None
+               and not cl.confirmando)
+    cl.mapa.mostrar(visible)
+    if visible:
+        cl.mapa.actualizar(cl.actor.getX(), cl.actor.getZ(),
+                           cl.jugador.yaw, gente_del_mapa())
 
 def update():
     if cl.estado == "menu" and cl.menu is not None:
@@ -2048,6 +2076,8 @@ def update():
     # animacion, congelado en el ultimo fotograma.
     if cl.estado in ("libre", "dialogo", "juego"):
         mirar_npcs(time.dt, mirar=cl.estado != "juego")
+
+    actualizar_mapa()
 
     if cl.estado == "libre" and cl.jugador is not None:
         if not cl.confirmando:
@@ -2185,6 +2215,7 @@ def volver_al_menu():
     limpiar(cl.opciones)
     limpiar(cl.zonas)
     limpiar(cl.marcas)
+    cl.mapa.destruir()
     cl.partida = None
     cl.dia_cerrado = False
     cl.pagina_cierre = None
