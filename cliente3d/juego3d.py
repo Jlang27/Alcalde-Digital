@@ -25,6 +25,7 @@ from ursina import (Ursina, Entity, Text, Button, Func, Texture, Vec3,
 import ajustes as A
 import audio
 import cierre
+import cine_colegio
 import estilo as E
 import intro
 import mundo
@@ -36,7 +37,7 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        HECHOS, TEXTO_BANDERA)
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
-from sigilo import AVISOS_MAXIMOS
+from sigilo import AVISOS_MAXIMOS, Vigilante
 
 DURACION_CARGA = 2.8
 
@@ -86,6 +87,10 @@ class Cliente:
         self.capitulo = 0             # el dia con el que arranca la partida
         self.capitulo_sel = 0         # el renglon marcado en «Capítulos»
         self.vigilantes = {}          # id -> (actor, abanico, foco) del dia 2
+        self.figurantes = {}          # gente de escenario sin pistas (el rector)
+        self.cine = None              # la cinematica de un capitulo, si suena
+        self.asesor = None            # el asesor de Daniel (dia 3)
+        self.ronda_asesor = None      # su ida y vuelta (sigilo.Vigilante)
         self.sospecha = None          # el medidor de «te estan viendo»
         self.vio_aviso = False        # el aviso de «hablar cuesta», una vez
         self.dia_avisado = None       # el aviso de la jornada, una vez por dia
@@ -258,14 +263,15 @@ def rehacer_ajustes(_clave):
 
 # Los siete dias del guion; los primeros se pueden jugar sueltos desde el
 # menu. Antes la lista llegaba a doce, que nunca existieron.
-CAPITULOS_JUGABLES = 2
+CAPITULOS_JUGABLES = 3
 CAPITULOS = [(f"{i + 1:02d}",
               titulo if i < CAPITULOS_JUGABLES else f"{titulo} · próximamente",
               i < CAPITULOS_JUGABLES)
              for i, (titulo, _lugar) in enumerate(pantallas.CAPITULOS)]
 # Quien protagoniza un capitulo jugado suelto, segun el guion. El 1 lo
-# juega el rol que ya tengas; el 2 es de Valeria, la periodista.
-ROL_CAPITULO = {1: "periodista"}
+# juega el rol que ya tengas; el 2 es de Valeria, la periodista, y el 3
+# de Daniel Ospina, el candidato.
+ROL_CAPITULO = {1: "periodista", 2: "candidato"}
 
 
 def abrir_capitulos(seleccion=0):
@@ -858,7 +864,7 @@ def capitulo_de(indice):
     return titulo, pantallas.dias_que_faltan(indice), lugar
 
 
-ESCENARIO_DIA = {1: "rectoria"}   # indice de dia -> escenario de mundo.py
+ESCENARIO_DIA = {1: "rectoria", 2: "campana"}   # indice de dia -> escenario
 
 
 def iniciar_dia(indice):
@@ -886,18 +892,59 @@ def iniciar_dia(indice):
     # detras del rotulo opaco no se ve.
     preparar_npcs()
     preparar_vigilantes()
+    preparar_asesor()
+    quitar_figurantes()
+    cl.figurantes, _rects = mundo.figurantes(cl.mundo)
     detalle.text = ""
     limpiar(cl.opciones)
     for e in cl.hud:
         e.enabled = False
-    abrir_rotulo(indice)
+    abrir_cinematica(indice)
+
+
+# Lo que suena en cada escenario mientras se juega: (musica, nivel,
+# ambiente). El colegio de noche lleva lluvia y una tension baja; la
+# oficina de campana, el murmullo de la ciudad de abajo.
+SONIDO_LUGAR = {
+    "rectoria": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_LLUVIA),
+    "campana": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_CALLE),
+}
+
+
+def sonido_del_lugar():
+    return SONIDO_LUGAR.get(mundo.escenario(), (audio.MUSICA_CAFETERIA, 0.8,
+                                                audio.AMBIENTE_CAFETERIA))
+
+
+# La cinematica con la que abre cada escenario, si la tiene. Va antes del
+# rotulo del dia, como la de «7 días» antes del dia 1.
+CINEMATICAS = {"rectoria": cine_colegio.CineColegio}
+
+
+def abrir_cinematica(indice):
+    clase = CINEMATICAS.get(mundo.escenario())
+    if clase is None:
+        abrir_rotulo(indice)
+        return
+    cl.estado = "cinematica"
+    animar("idle")
+    cl.cine = clase(cl.actor, cl.partida.protagonista.nombre)
+
+
+def terminar_cinematica():
+    """Del negro de la cinematica al rotulo del dia, sin costura."""
+    fundido = pantallas.Fundido()
+    cl.cine.cerrar()
+    cl.cine = None
+    abrir_rotulo(cl.partida.dia_actual)
+    fundido.desvanecer(0.9, retraso=0.25)
 
 
 def abrir_rotulo(indice):
     cl.estado = "rotulo"
     # el «DÍA 01» cae como un sello, y debajo ya suena el lugar
     audio.efecto("sello")
-    audio.ambiente(True, audio.AMBIENTE_CAFETERIA, fundido=2.5)
+    audio.ambiente(True, sonido_del_lugar()[2], fundido=2.5)
     animar("idle")
     mundo.corte("PG")
     titulo, _dias, lugar = capitulo_de(indice)
@@ -964,8 +1011,9 @@ def abrir_libre():
     cl.estado = "libre"
     animar("idle")
     audio.agachar(False)
-    audio.musica(audio.MUSICA_CAFETERIA, fundido=3.0, nivel=0.8)
-    audio.ambiente(True, audio.AMBIENTE_CAFETERIA)
+    musica, nivel, ambiente = sonido_del_lugar()
+    audio.musica(musica, fundido=3.0, nivel=nivel)
+    audio.ambiente(True, ambiente)
     bloqueos = list(mundo.bloqueos()) + cl.bloqueos_npc
     if cl.jugador is None:
         cl.jugador = Jugador(cl.actor, limites=mundo.limites(),
@@ -975,6 +1023,7 @@ def abrir_libre():
         cl.jugador.limites = mundo.limites()
         cl.jugador.bloqueos = bloqueos
         cl.jugador.muros = list(mundo.muros())
+    cl.jugador.techo = mundo.techo()
     cl.jugador.encuadrar()
     cl.jugador.activar()
     cl.aviso = pantallas.AvisoLibre()
@@ -1046,7 +1095,7 @@ def empezar_decision(notificacion=True):
     if notificacion:
         audio.efecto("notificacion")
     audio.musica(audio.MUSICA_TENSION, fundido=1.8, nivel=0.45)
-    audio.ambiente(True, audio.AMBIENTE_CAFETERIA, fundido=1.5, nivel=0.45)
+    audio.ambiente(True, sonido_del_lugar()[2], fundido=1.5, nivel=0.45)
     mundo.corte("PG")
     pintar_publicacion()
     refrescar_opciones()
@@ -1101,6 +1150,31 @@ def preparar_vigilantes():
         cl.vigilantes[v.id] = mundo.vigilante(cl.mundo)
     cl.sospecha = pantallas.Sospecha()
     dibujar_ronda()
+
+
+def preparar_asesor():
+    """El capitulo 3 tiene al asesor de Daniel yendo y viniendo.
+
+    Es ambiente, no regla: se mueve con la misma ronda de ida y vuelta que
+    los vigilantes (se para, mira a un lado y a otro, sigue), que en un
+    asesor nervioso se lee justo como tiene que leerse.
+    """
+    quitar_asesor()
+    if ESCENARIO_DIA.get(cl.partida.dia_actual) != "campana":
+        return
+    cl.asesor = mundo.asesor(cl.mundo)
+    cl.ronda_asesor = Vigilante("asesor", mundo.RUTA_ASESOR, velocidad=0.9)
+
+
+def quitar_figurantes():
+    mundo.quitar_npc(list(cl.figurantes.values()))
+    cl.figurantes = {}
+
+
+def quitar_asesor():
+    if cl.asesor is not None:
+        mundo.quitar_npc([cl.asesor])
+        cl.asesor = cl.ronda_asesor = None
 
 
 def quitar_vigilantes():
@@ -1941,6 +2015,19 @@ def update():
         cl.seleccion.actualizar(time.dt)
         return
 
+    # El fondo vive pase lo que pase en primer plano: el trafico tras los
+    # ventanales y el asesor no se congelan al sacar el telefono.
+    mundo.fondo_vivo(time.dt)
+    if cl.asesor is not None:
+        v = cl.ronda_asesor
+        v.avanzar(time.dt)
+        mundo.mover_actor(cl.asesor, v.x, v.z, v.rumbo, v.andando)
+
+    if cl.estado == "cinematica" and cl.cine is not None:
+        if cl.cine.actualizar(time.dt):
+            terminar_cinematica()
+        return
+
     if cl.estado == "intro" and cl.intro is not None:
         if cl.intro.actualizar(time.dt):
             terminar_intro()
@@ -2078,6 +2165,15 @@ def volver_al_menu():
     cl.cola_avisos.clear()
     limpiar(cl.reloj_manana)
     quitar_npcs()
+    quitar_vigilantes()
+    quitar_asesor()
+    quitar_figurantes()
+    if cl.cine is not None:
+        cl.cine.cerrar()
+        cl.cine = None
+    # La portada esta compuesta en la cafeteria: un capitulo jugado suelto
+    # dejaba el menu encima del colegio o de la oficina de campana.
+    mundo.cambiar_escenario(cl.mundo, "cafeteria")
     cl.nodo_pendiente = None
     cl.agotado = False
     # La tarjeta de la interrupcion: si se volvia al menu con ella
@@ -2115,6 +2211,12 @@ def input(tecla):
             cerrar_confirmacion(True)
         elif tecla in ("escape", "n"):
             cerrar_confirmacion(False)
+        return
+
+    elif cl.estado == "cinematica":
+        # Como la intro: Enter, espacio o Esc la saltan.
+        if tecla in ("enter", "space", "escape") and cl.cine is not None:
+            cl.cine.saltar()
         return
 
     elif cl.estado == "intro":

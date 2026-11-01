@@ -28,15 +28,15 @@ Videojuego educativo sobre el uso responsable de las redes sociales, con estruct
 
 ## Mapa rápido
 - `juego.py` (`Partida`: reglas, investigación, encuesta) · `contenido.py` (datos: publicaciones, pistas, vértices/aristas del día 1, hechos, rondas del día 2) · `estructuras.py` · `grafo.py` · `sigilo.py` (día 2: ronda de vigilantes, cono de linterna, sospecha y avisos; `Partida.sigilo`; pruebas con `python -I sigilo.py`).
-- `cliente3d/`: `juego3d.py` (flujo del juego; `datos_flujo`/`datos_red` preparan el cierre), `cierre.py` (diagrama de flujo y red animados, estilo Detroit), `pantallas.py`, `mundo.py` (escenarios, luces, NPCs, planos), `intro.py` (cinemática del cap. 1), `jugador.py`, `estilo.py`, `ajustes.py`, `audio.py`.
-- `herramientas/`: `aligerar_glb.py` (texturas a 1024 **y endereza**: todo `.glb` nuevo pasa por aquí), `revisar_glb.py`, `unir_esqueletos.py`, `componer_intro.py` (música/ambiente sintetizados), `generar_cafeteria.py`, `sintetizar_animaciones.py` (`correr`/`agachado`/`agachado_caminar` derivadas por IK, sin Blender), scripts de Blender.
+- `cliente3d/`: `juego3d.py` (flujo del juego; `datos_flujo`/`datos_red` preparan el cierre), `cierre.py` (diagrama de flujo y red animados, estilo Detroit), `pantallas.py`, `mundo.py` (escenarios, luces, NPCs, planos), `intro.py` (cinemática del cap. 1), `cine_colegio.py` (cinemática del cap. 2: fachada con lluvia, llegada, pasillo y el rector; va antes del rótulo del día, ver `juego3d.CINEMATICAS`), `jugador.py`, `estilo.py`, `ajustes.py`, `audio.py`.
+- `herramientas/`: `aligerar_glb.py` (texturas a 1024 **y endereza**: todo `.glb` nuevo pasa por aquí), `revisar_glb.py`, `unir_esqueletos.py`, `componer_intro.py` (música/ambiente sintetizados), `componer_lluvia.py` (lluvia y trueno del cap. 2, en WAV), `generar_cafeteria.py`, `sintetizar_animaciones.py` (`correr`/`agachado`/`agachado_caminar` derivadas por IK, sin Blender), scripts de Blender.
 - Un `.glb` recién modificado se carga primero **desde Ursina** (juego o banco de pruebas): la caché de modelos de Panda3D guarda la conversión de ejes del primer proceso que lo abre, y si es Panda3D puro (Z arriba) Ursina lo verá tumbado.
 
 ## Cómo ejecutar y probar
 - Cliente 3D: `venv-win\Scripts\python.exe cliente3d/juego3d.py` · Linux: `.venv/bin/python cliente3d/juego3d.py`
 - Visor de modelos: `python previsualizar.py assets/personajes/<rol>.glb`
 - Pruebas del grafo: `python -I grafo.py`. Reglas: `.venv/bin/python herramientas/banco_pruebas/simular.py` (400 partidas con bots; hacerlo tras tocar reglas).
-- **Banco de pruebas** (`herramientas/banco_pruebas/`): `banco.py` juega el cliente real sin ventana visible y con reloj fijo (teclas, charlas, elegir, capturas en `capturas/`, ignorada por git). Escenarios: `dia1.py` (regresión del día 1 completo), `turnos.py` (dos jugadores por turnos) y `colegio.py` (sigilo del día 2: ronda, cobertura, tres avisos). Necesita GPU.
+- **Banco de pruebas** (`herramientas/banco_pruebas/`): `banco.py` juega el cliente real sin ventana visible y con reloj fijo (teclas, charlas, elegir, capturas en `capturas/`, ignorada por git). Escenarios: `dia1.py` (regresión del día 1 completo), `turnos.py` (dos jugadores por turnos) y `colegio.py` (sigilo del día 2: ronda, cobertura, tres avisos) y `campana.py` (capítulo 3 desde el menú: Daniel, asesor, tráfico, capturas de cada sala). Necesita GPU.
 - **Verificación visual: solo con GPU.** El render por software no muestra simplepbr. La PC Linux del repo tiene GPU (AMD): el cliente corre en ventana `offscreen` con reloj fijo y saca capturas reales (banco de pruebas que maneja `juego3d.input` y `update`). Sin GPU, no declares "se ve bien" sin captura del usuario.
 - Referencia del cierre: el diagrama de flujo de Detroit (video «EL PLATINO de DETROIT…» en Descargas, ~1:05, 2:16 y 3:56) — como guía de ritmo y estructura, no para copiarlo.
 
@@ -66,7 +66,8 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 - [x] Cuarto rol = **Alcalde** (documento del proyecto §13), no «Candidato»: es el alcalde saliente, no está en la papeleta. Los cuatro candidatos de la elección no cambian
 - [ ] La publicación `alcalde` («El alcalde actual está robando dinero…») será un rumor sobre el propio jugador si el Alcalde protagoniza ese día: decidirlo al escribir los días 2-7
 - [ ] Días 6 («El debate») y 7 («La víspera») y sus publicaciones (`encuesta`, `audio`) son provisionales
-- [ ] Día 2 («La propuesta», colegio de noche): ya hay escenario, sigilo y vigilantes. Falta: fijar su publicación (hoy sale una al azar del resto), las fotos de los folios con enfoque, el mensaje anónimo y la decisión PUBLICAR / GUARDAR
+- [ ] Día 3 («La primera jugada sucia», comando de campaña): ya hay escenario, ciudad tras los ventanales, asesor y entrada desde el menú. Falta: usar con E las pantallas, el mapa y la mesa; la escena del expediente y la decisión PUBLICAR EL RUMOR / RUEDA DE PRENSA / INVESTIGAR A GAITÁN (¿«Gaitán» es Hugo Bravo?); fijar su publicación
+- [ ] Día 2 («La propuesta», colegio de noche): ya hay escenario con fachada y calle, lluvia y sirenas (`mundo.fondo_vivo`), cinemática con el rector (figurante `npc4`), sonido propio (`juego3d.SONIDO_LUGAR`), sigilo y vigilantes. Falta: fijar su publicación (hoy sale una al azar del resto), las fotos de los folios con enfoque, el mensaje anónimo y la decisión PUBLICAR / GUARDAR
 - [ ] `menu.ogg` y los `ui_*.wav` siguen con licencia POR CONFIRMAR
 - [ ] `herramientas/aplicar_capitulos.py` está vacío
 - [ ] `.glb` en git (~85 MB entre personajes y NPCs, repo ~35 MB comprimido): pasar a Git LFS
@@ -78,7 +79,8 @@ Render → `alcalde-render-pipeline` · Planos/luz/wow → `alcalde-direccion-fo
 ## Decisiones tomadas
 - Se descartaron las cámaras fijas por zonas para explorar (se lee como aventura gráfica antigua): exploración con cámara de hombro; **planos fijos solo para decisiones y cortes**.
 - Colisiones por rectángulos, no contra malla (el empujador de Panda3D atascaba/expulsaba al personaje). Los NPCs aportan su propio rectángulo de bloqueo.
-- Roles jugables (§13 del documento): Ciudadano, Periodista, Influencer y **Alcalde** (id `alcalde`, modelo `assets/personajes/alcalde.glb`). La elección es entre los cuatro candidatos, que no son jugables.
+- Roles jugables (§13 del documento): Ciudadano, Periodista, Influencer y **Alcalde** (id `alcalde`, modelo `assets/personajes/alcalde.glb`). La elección es entre los cuatro candidatos, que no son jugables… **salvo Daniel Ospina en el capítulo 3** (rol `candidato`, fuera del reparto, comparte el árbol del Alcalde; modelo `candidato.glb` o, si no existe, `prueba.glb`). Cada capítulo jugado suelto desde el menú tiene su protagonista (`juego3d.ROL_CAPITULO`).
+- Capítulo 3 (`mundo` escenario `"campana"`): oficina en el piso 8 con la **ciudad de la intro debajo** (`_ciudad_abajo`, girada y desplazada para que la oficina quede en el origen); los ventanales miran al mitin de la avenida. El asesor usa el modelo del Alcalde y la ronda de `sigilo.Vigilante`.
 - Un único modelo base para los jugadores; se distinguen por la **luz de color**, no por la piel. Los NPCs sí tienen modelos propios.
 - El día 1 se **investiga**: las decisiones se ganan con pistas, y hablar cuesta tiempo (cada charla = 10 min; a las 8:30 se acaba la mañana).
 - Pantalla completa = la **nativa** de Panda3D a la resolución del monitor (`ajustes.geometria_ventana`); la de Ursina solo agranda la ventana y no deja volver, y una ventana sin bordes la encoge GNOME. En ventana: 80 % del monitor, centrada.

@@ -5,8 +5,10 @@ import random
 import simplepbr
 from direct.actor.Actor import Actor
 from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
-                          LColor, Material, PNMImage, PointLight, Texture,
-                          TextureAttrib, TransparencyAttrib)
+                          Geom, GeomLines, GeomNode, GeomVertexData,
+                          GeomVertexFormat, GeomVertexWriter, LColor, Material,
+                          PNMImage, PointLight, Texture, TextureAttrib,
+                          TransparencyAttrib)
 from ursina import Entity, Mesh, application, camera, color, destroy, Vec3
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1459,41 +1461,53 @@ PLACAS_COLEGIO = (
 )
 
 
+def _levantar_muros(o, muros, alto, mat_muro, mat_marco, zocalos=()):
+    """Muros con su colision y, en cada puerta, dintel y marco.
+
+    zocalos: (material, y0, y1) que se pegan a las dos caras del muro.
+    Sin dintel y marco los huecos llegaban hasta el techo y se leian
+    como un muro roto, no como una puerta.
+    """
+    g, e = GROSOR_MURO / 2, 0.015
+    for eje, plano, a0, a1, huecos in muros:
+        for x0, x1, z0, z1 in _muro(eje, plano, a0, a1, huecos):
+            o.caja(mat_muro, x0, x1, 0, alto, z0, z1, bloquea=True)
+            for mat, y0, y1 in zocalos:
+                o.caja(mat, x0 - e, x1 + e, y0, y1, z0 - e, z1 + e)
+        for h0, h1 in huecos:
+            if eje == "z":
+                o.caja(mat_muro, h0, h1, 2.25, alto, plano - g, plano + g)
+                o.caja(mat_marco, h0 - 0.08, h1 + 0.08, 2.2, 2.3,
+                       plano - g - 0.03, plano + g + 0.03)
+                for b in (h0 - 0.08, h1):
+                    o.caja(mat_marco, b, b + 0.08, 0, 2.25,
+                           plano - g - 0.03, plano + g + 0.03)
+            else:
+                o.caja(mat_muro, plano - g, plano + g, 2.25, alto, h0, h1)
+                o.caja(mat_marco, plano - g - 0.03, plano + g + 0.03, 2.2,
+                       2.3, h0 - 0.08, h1 + 0.08)
+                for b in (h0 - 0.08, h1):
+                    o.caja(mat_marco, plano - g - 0.03, plano + g + 0.03,
+                           0, 2.25, b, b + 0.08)
+
+
+def _placas(o, placas, mat="placa", tinta=(0.95, 0.92, 0.82)):
+    """El rotulo encima de cada puerta: (texto, eje, plano, signo, centro)."""
+    for texto, eje, plano, signo, centro in placas:
+        ancho = 0.12 * len(texto) + 0.3
+        o.pared(mat, eje, plano, signo, centro - ancho / 2, centro + ancho / 2,
+                2.38, 2.68, 0, 0.03)
+        o.letrero(texto, eje, plano, signo, centro, 2.53, 0.17, tinta)
+
+
 def _obra_colegio():
     o = _Obra()
     azar = random.Random(2)     # semilla fija: el colegio sale siempre igual
 
     # --- muros: zocalo verde azulado y franja, como un colegio publico ---
-    for eje, plano, a0, a1, huecos in MUROS_COLEGIO:
-        for x0, x1, z0, z1 in _muro(eje, plano, a0, a1, huecos):
-            o.caja("muro", x0, x1, 0, ALTO_COLEGIO, z0, z1, bloquea=True)
-            e = 0.015
-            o.caja("zocalo", x0 - e, x1 + e, 0, 1.0, z0 - e, z1 + e)
-            o.caja("franja", x0 - e, x1 + e, 1.0, 1.07, z0 - e, z1 + e)
-        # Cada puerta lleva dintel y marco: sin ellos los huecos llegaban
-        # hasta el techo y se leian como un muro roto, no como una puerta.
-        g = GROSOR_MURO / 2
-        for h0, h1 in huecos:
-            if eje == "z":
-                o.caja("muro", h0, h1, 2.25, ALTO_COLEGIO, plano - g, plano + g)
-                o.caja("marco_puerta", h0 - 0.08, h1 + 0.08, 2.2, 2.3,
-                       plano - g - 0.03, plano + g + 0.03)
-                for b in (h0 - 0.08, h1):
-                    o.caja("marco_puerta", b, b + 0.08, 0, 2.25,
-                           plano - g - 0.03, plano + g + 0.03)
-            else:
-                o.caja("muro", plano - g, plano + g, 2.25, ALTO_COLEGIO, h0, h1)
-                o.caja("marco_puerta", plano - g - 0.03, plano + g + 0.03, 2.2,
-                       2.3, h0 - 0.08, h1 + 0.08)
-                for b in (h0 - 0.08, h1):
-                    o.caja("marco_puerta", plano - g - 0.03, plano + g + 0.03,
-                           0, 2.25, b, b + 0.08)
-
-    for texto, eje, plano, signo, centro in PLACAS_COLEGIO:
-        ancho = 0.12 * len(texto) + 0.3
-        o.pared("placa", eje, plano, signo, centro - ancho / 2, centro + ancho / 2,
-                2.38, 2.68, 0, 0.03)
-        o.letrero(texto, eje, plano, signo, centro, 2.53, 0.17, (0.95, 0.92, 0.82))
+    _levantar_muros(o, MUROS_COLEGIO, ALTO_COLEGIO, "muro", "marco_puerta",
+                    (("zocalo", 0, 1.0), ("franja", 1.0, 1.07)))
+    _placas(o, PLACAS_COLEGIO)
 
     # --- suelos: baldosa clara en pasillo, aula y salida; damero en el hall ---
     for x0, x1, z0, z1 in ((X_OESTE, X_ESTE, 3.85, 6.15), (4.85, 12.65, -3.65, 3.65),
@@ -1561,12 +1575,18 @@ def _obra_colegio():
     _cuadro(o, "z", sur, 1, 11.5, 12.1, 1.45, 2.1)
     o.pared("extintor", "z", sur, 1, 6.2, 6.45, 0.8, 1.4, 0, 0.2)
     # Vitrina de trofeos: se ve que el colegio tiene historia.
+    # Abierta, con fondo y balda: de caja de vidrio maciza tapaba los
+    # trofeos y de cerca se leia como un bloque crema.
     o.pared("madera", "z", sur, 1, 16.6, 18.8, 0, 0.9, 0, 0.42, bloquea=True)
-    o.pared("vitrina", "z", sur, 1, 16.6, 18.8, 0.9, 2.0, 0.02, 0.42)
+    o.pared("madera_oscura", "z", sur, 1, 16.6, 18.8, 0.9, 2.0, 0, 0.04)
+    o.pared("madera", "z", sur, 1, 16.6, 18.8, 1.42, 1.45, 0, 0.42)
+    o.pared("madera", "z", sur, 1, 16.6, 18.8, 1.97, 2.02, 0, 0.42)
+    for b in (16.6, 18.74):
+        o.pared("madera", "z", sur, 1, b, b + 0.06, 0.9, 2.0, 0, 0.42)
     o.solido((16.6, 18.8, sur, sur + 0.42), 2.0)
     for a in (16.9, 17.5, 18.1):
-        o.pared("laton", "z", sur, 1, a, a + 0.18, 0.95, 1.3, 0.15, 0.3)
-        o.pared("laton", "z", sur, 1, a + 0.05, a + 0.13, 1.4, 1.62, 0.18, 0.27)
+        o.pared("laton", "z", sur, 1, a, a + 0.18, 0.9, 1.25, 0.15, 0.3)
+        o.pared("laton", "z", sur, 1, a + 0.05, a + 0.13, 1.45, 1.67, 0.18, 0.27)
     _planta(o, -4.7, 4.4)
 
     # ================= AULA 2B =================
@@ -1679,7 +1699,88 @@ def _obra_colegio():
     o.letrero("SALIDA", "x", X_ESTE - 0.1 - 0.03, -1, -7.3, 2.5, 0.17,
               (0.95, 1.0, 0.95))
     _corchera(o, azar, "x", 14.1, 1, -9.0, -6.6)
+    _exterior_colegio(o, azar)
     return o
+
+
+# Las patrullas, aparcadas al fondo de la calle, mas alla de la esquina
+# del colegio: entran en el plano de la fachada y en el de la llegada de
+# Valeria, que camina hacia ellas. (x, z) del centro de cada carro.
+PATRULLAS_COLEGIO = ((-12.5, Z_SUR - 5.0), (-19.0, Z_SUR - 6.6))
+
+
+def _exterior_colegio(o, azar):
+    """La fachada que ve la cinematica, la calle mojada y el barrio.
+
+    Solo la cara sur: es la unica que mira la camara. La planta alta es
+    una losa con ventanas pegada al muro: desde la calle se lee como un
+    edificio de dos plantas sin tener que construir la segunda. Nada de
+    esto bloquea: el jugador no sale del edificio.
+    """
+    zf = Z_SUR - GROSOR_MURO / 2                  # cara exterior del muro sur
+
+    def ventana(x0, x1, y0, y1, mat):
+        o.caja("marco_puerta", x0 - 0.06, x1 + 0.06, y0 - 0.06, y1 + 0.06, zf - 0.04, zf)
+        o.caja(mat, x0, x1, y0, y1, zf - 0.05, zf - 0.04)
+        # Montantes en cruz: sin ellos el vano iluminado era un
+        # rectangulo liso y no se leia como ventana.
+        xm, ym = (x0 + x1) / 2, y0 + (y1 - y0) * 0.62
+        o.caja("marco_puerta", xm - 0.03, xm + 0.03, y0, y1, zf - 0.07, zf - 0.05)
+        o.caja("marco_puerta", x0, x1, ym - 0.03, ym + 0.03, zf - 0.07, zf - 0.05)
+
+    o.caja("muro", X_OESTE - 0.1, X_ESTE + 0.1, ALTO_COLEGIO, 6.6, zf, Z_SUR + 0.6)
+    o.caja("franja", X_OESTE - 0.3, X_ESTE + 0.3, 6.6, 6.85, zf - 0.25, Z_SUR + 0.6)
+    o.caja("zocalo", X_OESTE - 0.12, X_ESTE + 0.12, 3.12, 3.32, zf - 0.12, Z_SUR + 0.6)
+    # Planta baja: el hall encendido, lo demas a oscuras.
+    for x in (-4.4, -2.2, 0.0, 2.2, 4.4):
+        ventana(x, x + 1.6, 1.1, 2.8, "ventana_calida")
+    for x in (9.0, 11.2, 15.0, 17.2, 19.4, 21.6):
+        ventana(x, x + 1.6, 1.1, 2.8, "ventana_oscura")
+    # Planta alta: casi todo apagado, alguna aula con la luz olvidada.
+    x = -4.4
+    while x < X_ESTE - 1.6:
+        ventana(x, x + 1.4, 4.35, 5.95, azar.choices(
+            ("ventana_oscura", "ventana_fria", "ventana_calida"), weights=(6, 2, 1))[0])
+        x += 2.2
+    # La entrada: puerta de vidrio encendida, escalon y farol encima.
+    o.caja("marco_puerta", 6.15, 7.85, 0, 2.6, zf - 0.08, zf)
+    o.caja("ventana_calida", 6.3, 7.7, 0.14, 2.45, zf - 0.09, zf - 0.08)
+    o.caja("metal", 6.97, 7.03, 0.14, 2.45, zf - 0.1, zf - 0.08)
+    o.caja("acera", 5.8, 8.2, 0, 0.26, zf - 1.0, zf)
+    o.caja("bombilla", 6.85, 7.15, 2.72, 2.92, zf - 0.38, zf - 0.12)
+    # El nombre del colegio, en una placa encima de la entrada.
+    o.caja("placa", -0.6, 10.2, 3.45, 4.15, zf - 0.07, zf)
+    o.letrero("COLEGIO TÉCNICO NOVA", "z", zf - 0.04, -1, 4.8, 3.8, 0.36,
+              (1.0, 0.92, 0.70))
+
+    # La calle: acera, bordillo y asfalto mojado (casi espejo: refleja las
+    # sirenas, que es de donde sale la mitad del ambiente).
+    o.caja("acera", -45.0, 60.0, 0, 0.12, zf - 3.2, zf)
+    o.caja("bordillo", -45.0, 60.0, 0, 0.14, zf - 3.35, zf - 3.2)
+    o.caja("asfalto_mojado", -45.0, 60.0, 0, 0.004, Z_SUR - 70.0, zf - 3.35)
+    for x in range(-44, 58, 6):
+        o.caja("raya", x, x + 3, 0, 0.008, Z_SUR - 9.6, Z_SUR - 9.45)
+    for x in (-9.0, 12.5, 26.0):                  # farolas, fuera del letrero
+        o.caja("metal", x - 0.08, x + 0.08, 0, 5.6, zf - 2.9, zf - 2.74)
+        o.caja("metal", x - 0.05, x + 0.05, 5.5, 5.58, zf - 2.9, zf - 1.9)
+        o.caja("bombilla", x - 0.18, x + 0.18, 5.38, 5.5, zf - 2.1, zf - 1.8)
+    for xc, zc in PATRULLAS_COLEGIO:              # las carrocerias
+        o.caja("carroceria", xc - 2.2, xc + 2.2, 0.32, 1.25, zc - 0.9, zc + 0.9)
+        o.caja("carroceria", xc - 1.2, xc + 1.0, 1.25, 1.75, zc - 0.8, zc + 0.8)
+        o.caja("ventana_oscura", xc - 1.15, xc + 0.95, 1.3, 1.7, zc - 0.82, zc + 0.82)
+        for dx in (-1.4, 1.4):
+            o.caja("rejilla", xc + dx - 0.35, xc + dx + 0.35, 0, 0.62, zc - 0.95, zc + 0.95)
+    # Dos bloques vecinos con alguna ventana: sin ellos, mas alla de la
+    # esquina del colegio solo habia niebla.
+    for x0, x1, alto in ((-34.0, -11.0, 10.0), (X_ESTE + 3.0, X_ESTE + 22.0, 8.0)):
+        o.caja("muro_vecino", x0, x1, 0, alto, Z_SUR + 0.5, Z_SUR + 16.0)
+        x = x0 + 1.0
+        while x < x1 - 1.2:
+            for y in range(2, int(alto) - 1, 3):
+                if azar.random() < 0.3:
+                    o.caja(azar.choice(("ventana_calida", "ventana_fria")),
+                           x, x + 1.0, y, y + 1.3, Z_SUR + 0.47, Z_SUR + 0.5)
+            x += 2.0
 
 
 OBRA_COLEGIO = _obra_colegio()
@@ -1701,7 +1802,19 @@ MATERIALES_COLEGIO = {
     "panel_apagado": ((0.35, 0.36, 0.38), 0.4, 0, None),
     "ventana": ((0.01, 0.01, 0.02), 0.1, 0, (0.05, 0.10, 0.22)),
     "folio": ((0.6, 0.58, 0.52), 0.8, 0, (0.35, 0.33, 0.28)),
-    "patrulla": ((0.02, 0.02, 0.02), 0.5, 0, (2.2, 0.15, 0.1)),
+    # Contenida: mas fuerte salia como un rectangulo crema plano, no como
+    # una sala encendida vista desde la calle.
+    "ventana_calida": ((0.05, 0.04, 0.02), 0.1, 0, (0.55, 0.34, 0.13)),
+    "ventana_fria": ((0.02, 0.03, 0.05), 0.1, 0, (0.22, 0.40, 0.75)),
+    "ventana_oscura": ((0.01, 0.012, 0.02), 0.08, 0.2, (0.006, 0.01, 0.022)),
+    "acera": ((0.10, 0.10, 0.11), 0.3, 0, None),
+    "bordillo": ((0.22, 0.22, 0.22), 0.4, 0, None),
+    # Casi espejo: con la lluvia el asfalto refleja sirenas y farolas.
+    "asfalto_mojado": ((0.010, 0.011, 0.014), 0.07, 0, None),
+    "raya": ((0.45, 0.45, 0.40), 0.35, 0, None),
+    "bombilla": ((0.2, 0.15, 0.05), 0.5, 0, (2.6, 1.5, 0.55)),
+    "carroceria": ((0.012, 0.014, 0.022), 0.22, 0.6, None),
+    "muro_vecino": ((0.06, 0.055, 0.06), 0.9, 0, None),
     "madera": ((0.16, 0.075, 0.035), 0.65, 0, None),
     "madera_oscura": ((0.07, 0.03, 0.015), 0.55, 0, None),
     "papel_tapiz": ((0.32, 0.20, 0.085), 0.85, 0, None),
@@ -1760,14 +1873,26 @@ MATERIALES_COLEGIO = {
 }
 
 
+def _volcar_obra(mundo, obra, materiales, caras):
+    """Funde las cajas de una _Obra (y las caras sueltas de `caras`) en una
+    malla por material, y pone plantas y letreros."""
+    for mat, *caja in obra.cajas:
+        caras.setdefault(mat, []).extend(_caras_caja(*caja))
+    for clave, lista in caras.items():
+        base, rug, met, emi = materiales[clave]
+        _pieza_malla(mundo, lista, _material((*base, 1), rug, met,
+                                             None if emi is None else (*emi, 1)))
+    for mat, x, y, z, d in obra.esferas:
+        base, rug, met, _ = materiales[mat]
+        _pieza(mundo, "sphere", _material((*base, 1), rug, met), d, (x, y, z))
+    _letreros(obra.letreros)
+
+
 def _rectoria(mundo):
     caras = {}
 
     def poner(mat, x0, x1, y0, y1, z0, z1):
         caras.setdefault(mat, []).extend(_caras_caja(x0, x1, y0, y1, z0, z1))
-
-    for caja in OBRA_COLEGIO.cajas:
-        poner(*caja)
 
     caras["suelo"] = [(((X_OESTE, 0.001, Z_SUR), (X_ESTE, 0.001, Z_SUR),
                         (X_ESTE, 0.001, Z_NORTE), (X_OESTE, 0.001, Z_NORTE)),
@@ -1788,18 +1913,73 @@ def _rectoria(mundo):
         poner("ventana", x, x + 1.4, 2.1, 2.9, Z_NORTE - g - 0.02, Z_NORTE - g)
     for x, alto, z in FOLIOS_COLEGIO:
         poner("folio", x - 0.15, x + 0.15, alto, alto + 0.01, z - 0.11, z + 0.11)
-    # Las patrullas, al otro lado del patio: solo dos destellos.
-    poner("patrulla", -1.5, -0.9, 0.9, 1.3, Z_SUR - 9.0, Z_SUR - 8.6)
-    poner("patrulla", 0.9, 1.5, 0.9, 1.3, Z_SUR - 9.0, Z_SUR - 8.6)
+    _volcar_obra(mundo, OBRA_COLEGIO, MATERIALES_COLEGIO, caras)
+    _sirenas(mundo)
+    _lluvia()
 
-    for clave, lista in caras.items():
-        base, rug, met, emi = MATERIALES_COLEGIO[clave]
-        _pieza_malla(mundo, lista, _material((*base, 1), rug, met,
-                                             None if emi is None else (*emi, 1)))
-    for mat, x, y, z, d in OBRA_COLEGIO.esferas:
-        base, rug, met, _ = MATERIALES_COLEGIO[mat]
-        _pieza(mundo, "sphere", _material((*base, 1), rug, met), d, (x, y, z))
-    _letreros(OBRA_COLEGIO.letreros)
+
+def _sirenas(mundo):
+    """Las barras de luz de las patrullas, que se alternan rojo y azul.
+
+    Van fuera de la malla fundida porque parpadean: se cambia el material
+    entero de cada barra (como en ciudad_alerta) en vez de tocar la
+    emision, que en un material ya aplicado no siempre se refleja.
+    """
+    mats = {(c, on): _material((0.02, 0.02, 0.02, 1), rugosidad=0.4,
+                               emision=(*(v if on else v * 0.06 for v in e), 1))
+            for c, e in (("roja", (2.6, 0.12, 0.08)), ("azul", (0.12, 0.35, 2.8)))
+            for on in (True, False)}
+    barras = []
+    for xc, zc in PATRULLAS_COLEGIO:
+        for c, dx in (("roja", -0.25), ("azul", 0.25)):
+            barras.append((c, _pieza(mundo, "cube", mats[(c, False)],
+                                     (0.42, 0.14, 0.6), (xc + dx, 1.82, zc))))
+    _ACTUAL["sirenas"] = (barras, mats)
+    _ACTUAL["fase_sirena"] = None
+
+
+# La lluvia: un volumen fijo sobre la calle (no sigue a la camara: asi
+# no llueve dentro del colegio). (x0, x1, z0, z1, alto)
+LLUVIA = (-34.0, 46.0, Z_SUR - 40.0, Z_SUR - 0.3, 14.0)
+VELOCIDAD_LLUVIA = 11.0
+
+
+def _lluvia():
+    """Dos capas de gotas en linea que caen y se relevan.
+
+    Lineas de un pixel y sin luz, fuera del PBR: de noche la lluvia solo
+    se ve donde le da algo, y aqui se resuelve con un gris azulado tenue.
+    """
+    x0, x1, z0, z1, alto = LLUVIA
+    azar = random.Random(11)
+    # GeomLines a mano y no un Mesh de Ursina: su modo «line» une todos
+    # los puntos en una sola tira (salia una telarana), y con segmentos
+    # sueltos crea una primitiva por gota: 2600 llamadas de dibujo.
+    datos = GeomVertexData("lluvia", GeomVertexFormat.getV3c4(), Geom.UHStatic)
+    pos = GeomVertexWriter(datos, "vertex")
+    col = GeomVertexWriter(datos, "color")
+    lineas = GeomLines(Geom.UHStatic)
+    for i in range(2600):
+        x, y, z = azar.uniform(x0, x1), azar.uniform(0, alto), azar.uniform(z0, z1)
+        pos.addData3(x, y, z)
+        pos.addData3(x + 0.05, y - 0.55, z)         # un poco de viento
+        for _ in range(2):
+            col.addData4(0.70, 0.76, 0.88, 0.30)
+        lineas.addVertices(2 * i, 2 * i + 1)
+    geom = Geom(datos)
+    geom.addPrimitive(lineas)
+    nodo = GeomNode("lluvia")
+    nodo.addGeom(geom)
+    capas = []
+    for k in (0, 1):
+        e = Entity(y=k * alto)
+        e.attachNewNode(nodo.makeCopy())
+        e.setTransparency(TransparencyAttrib.MAlpha)
+        e.setDepthWrite(False)
+        e.setRenderModeThickness(1)
+        _ENTIDADES.append(e)
+        capas.append(e)
+    _ACTUAL["lluvia"] = capas
 
 
 def _letreros(letreros):
@@ -1821,6 +2001,24 @@ def _letreros(letreros):
         _ENTIDADES.append(t)
 
 
+LUNA = (0.16, 0.22, 0.38)
+AMBIENTE_COLEGIO = (0.060, 0.068, 0.100)
+
+
+def relampago(fuerza):
+    """Ilumina el colegio de golpe (0 = noche normal, 1 = relampago).
+
+    Con la luz ambiente y no con la luna: la luna entra del norte y no
+    toca la fachada, y un relampago es un fogonazo de todo el cielo, que
+    es justo lo que hace el ambiente. La cinematica lo baja sola.
+    """
+    luz = _ACTUAL.get("luz_ambiente")
+    if luz is not None:
+        k = 1.0 + 12.0 * max(0.0, fuerza)
+        luz.node().setColor((AMBIENTE_COLEGIO[0] * k, AMBIENTE_COLEGIO[1] * k,
+                             AMBIENTE_COLEGIO[2] * k, 1))
+
+
 def _luces_rectoria(mundo):
     """Seis luces, el tope: luna fria, ambiente, la lampara calida del
     rector, el fluorescente del archivo, la lampara del restringido y el
@@ -1830,11 +2028,12 @@ def _luces_rectoria(mundo):
     minijuego y le quitaran el sitio al fluorescente.
     """
     ambiente = mundo.attachNewNode(AmbientLight("ambiente"))
-    ambiente.node().setColor((0.060, 0.068, 0.100, 1))
+    ambiente.node().setColor((*AMBIENTE_COLEGIO, 1))
     _encender(mundo, ambiente)
+    _ACTUAL["luz_ambiente"] = ambiente
 
     luna = mundo.attachNewNode(DirectionalLight("luna"))
-    luna.node().setColor((0.16, 0.22, 0.38, 1))
+    luna.node().setColor((*LUNA, 1))
     luna.setHpr(160, -35, 0)
     _encender(mundo, luna)
 
@@ -1842,12 +2041,18 @@ def _luces_rectoria(mundo):
             ("lampara_rector", (0.38, 1.15, 2.0), (2.0, 1.30, 0.62), (1, 0.18, 0.30)),
             ("fluorescente", (3.0, 2.9, 10.5), (0.55, 0.75, 0.95), (1, 0.10, 0.10)),
             ("lampara_restringido", (18.5, 1.6, 7.9), (1.6, 1.0, 0.5), (1, 0.18, 0.28)),
-            ("patrulla", (0.0, 1.6, Z_SUR - 2.0), (1.6, 0.20, 0.50), (1, 0.08, 0.06))):
+            # Junto a las patrullas: tine de rojo y azul la esquina oeste de
+            # la fachada y el asfalto mojado. fondo_vivo la alterna.
+            # Cae rapido con la distancia: el despacho no tiene ventanas y
+            # no debe tenirse de sirena a traves de los muros.
+            ("patrulla", (-14.0, 2.4, Z_SUR - 4.0), (2.0, 0.15, 0.10), (1, 0.05, 0.03))):
         luz = mundo.attachNewNode(PointLight(nombre))
         luz.node().setColor((*col, 1))
         luz.node().setAttenuation(att)
         luz.setPos(*pos)
         _encender(mundo, luz)
+        if nombre == "patrulla":
+            _ACTUAL["luz_sirena"] = luz
 
 
 # Planos medidos desde la marca, dentro del despacho (x -5.2..4.65,
@@ -1862,6 +2067,402 @@ PLANOS_RECTORIA = {
     "AFICHE":  (Vec3(0.30, 1.46, -2.30), 1.30, -11.0),
     "DOS":     (Vec3(-1.60, 1.78, -3.40), 1.22, 11.0),
 }
+
+
+# ===================================================================
+#  ESCENARIO 5: COMANDO DE CAMPANA (capitulo 3, «La primera jugada sucia»)
+# ===================================================================
+
+# Piso 8 de un edificio sobre el arranque de la avenida de la intro. La
+# oficina se queda en el origen (la marca de Daniel, en su despacho) y es
+# la CIUDAD la que se monta debajo, girada y desplazada: asi los planos
+# fijos y las colisiones siguen midiendose desde la marca, como en los
+# demas escenarios. Los ventanales estan en z = CZ_VENTANAL y miran a +z.
+CX0, CX1 = -4.3, 22.7
+CZ_VENTANAL, CZ_FONDO = 5.0, -14.6
+ALTO_CAMPANA = 3.2
+Z_SALAS, Z_SERVICIOS = -4.5, -11.25          # salas | voluntarios | servicios
+X_DESPACHO, X_CONFERENCIAS = 3.8, 14.6
+X_RECEPCION, X_COCINETA = 7.5, 13.8
+
+MUROS_CAMPANA = (
+    ("z", CZ_FONDO, CX0, CX1, ()),
+    ("x", CX0, CZ_FONDO, CZ_VENTANAL, ()),
+    ("x", CX1, CZ_FONDO, CZ_VENTANAL, ()),
+    # salas | voluntarios: despacho, sala de guerra y conferencias
+    ("z", Z_SALAS, CX0, CX1, ((-1.0, 0.4), (12.6, 14.0), (17.6, 19.0))),
+    # voluntarios | servicios: recepcion, cocineta e impresion
+    ("z", Z_SERVICIOS, CX0, CX1, ((1.0, 2.6), (9.6, 11.0), (17.0, 18.4))),
+    ("x", X_DESPACHO, Z_SALAS, CZ_VENTANAL, ((-3.9, -2.5),)),
+    # dos puertas: la de Daniel y la de la ronda del asesor
+    ("x", X_CONFERENCIAS, Z_SALAS, CZ_VENTANAL, ((-3.9, -2.5), (0.8, 2.4))),
+    ("x", X_RECEPCION, CZ_FONDO, Z_SERVICIOS, ()),
+    ("x", X_COCINETA, CZ_FONDO, Z_SERVICIOS, ()),
+)
+
+PLACAS_CAMPANA = (
+    ("DESPACHO", "z", Z_SALAS - 0.1, -1, -0.3),
+    ("SALA DE GUERRA", "z", Z_SALAS - 0.1, -1, 13.3),
+    ("CONFERENCIAS", "z", Z_SALAS - 0.1, -1, 18.3),
+    ("RECEPCIÓN", "z", Z_SERVICIOS + 0.1, 1, 1.8),
+    ("COCINETA", "z", Z_SERVICIOS + 0.1, 1, 10.3),
+    ("IMPRESIÓN", "z", Z_SERVICIOS + 0.1, 1, 17.7),
+)
+
+# Donde cae la marca de Daniel dentro de la ciudad de la intro, y cuanto
+# se gira la ciudad: los ventanales quedan mirando al mitin, con la
+# avenida, la pantalla gigante, las torres y el sol de frente. La oficina
+# queda ENCIMA de la avenida: puesta sobre la fila de edificios de la
+# derecha, sus tejados tapaban la calle y el mitin no se veia.
+OFICINA_EN_CIUDAD = (2.0, 22.0, -75.0)
+GIRO_CIUDAD = -12.0
+
+# La ronda del asesor, ida y vuelta (la recorre un sigilo.Vigilante): de
+# la mesa de luz de la sala de guerra a la mesa de conferencias.
+RUTA_ASESOR = [(7.0, 1.6), (20.4, 1.6)]
+
+BLANCO = (0.96, 0.95, 0.92)
+CREMA = (0.95, 0.85, 0.55)
+ROJO_TITULAR = (0.95, 0.20, 0.15)
+AZUL_OSPINA = (0.35, 0.60, 1.00)
+# La encuesta del muro de pantallas, en el orden de juego.CANDIDATOS. Es
+# la caida que cuenta el capitulo: Ospina pierde 10 puntos por el rumor.
+ENCUESTA_PANTALLA = (28, 34, 21, 17)
+
+
+def _obra_campana():
+    o = _Obra()
+    azar = random.Random(3)
+
+    _levantar_muros(o, MUROS_CAMPANA, ALTO_CAMPANA, "muro_oficina",
+                    "marco_metal", (("rodapie", 0, 0.12),))
+    _placas(o, PLACAS_CAMPANA, mat="placa_oscura")
+
+    # --- el ventanal: sin vidrio, solo montantes ---
+    # Un vidrio de verdad pediria transparencia en el PBR; los montantes
+    # ya dicen «ventana» y dejan la ciudad entera a la vista.
+    zv = CZ_VENTANAL
+    o.caja("marco_metal", CX0, CX1, 0, 0.35, zv - 0.12, zv + 0.06)
+    o.caja("marco_metal", CX0, CX1, ALTO_CAMPANA - 0.25, ALTO_CAMPANA,
+           zv - 0.12, zv + 0.06)
+    x = CX0
+    while x <= CX1 + 0.01:
+        o.caja("marco_metal", x - 0.04, x + 0.04, 0.35, ALTO_CAMPANA - 0.25,
+               zv - 0.06, zv + 0.02)
+        x += 1.5
+    o.solido((CX0, CX1, zv - 0.12, zv + 0.12), ALTO_CAMPANA)
+
+    # --- suelos ---
+    o.caja("moqueta", CX0, CX1, 0, 0.004, CZ_FONDO, CZ_VENTANAL)
+    o.caja("madera_clara", CX0, X_DESPACHO, 0, 0.007, Z_SALAS, CZ_VENTANAL)
+    o.caja("baldosa", CX0, X_COCINETA, 0, 0.007, CZ_FONDO, Z_SERVICIOS)
+
+    # ================= DESPACHO DE DANIEL =================
+    # El escritorio de espaldas al ventanal: Daniel trabaja con la ciudad
+    # detras, que es el fondo de todos los planos de decision.
+    o.caja("alfombra_azul", -2.6, 2.2, 0, 0.012, -3.4, 0.9)
+    o.caja("madera_oscura", -1.6, 1.2, 0, 0.74, 1.7, 2.5, bloquea=True)
+    o.caja("madera", -1.7, 1.3, 0.74, 0.79, 1.65, 2.55)
+    o.caja("monitor", -0.5, 0.3, 0.84, 1.26, 2.30, 2.34)
+    o.caja("metal", -0.15, -0.05, 0.79, 0.84, 2.28, 2.38)
+    o.caja("papel", 0.45, 0.8, 0.79, 0.795, 1.85, 2.1)
+    o.caja("laton", 0.95, 1.05, 0.79, 1.0, 2.2, 2.3)
+    o.caja("pantalla_ambar", 0.8, 1.2, 1.0, 1.08, 2.12, 2.38)
+    o.caja("cuero", -0.55, 0.15, 0, 0.5, 2.85, 3.4, bloquea=True)
+    o.caja("cuero", -0.55, 0.15, 0.5, 1.4, 3.35, 3.52)
+    # La bandera de campana en la esquina del ventanal.
+    o.caja("metal", 3.2, 3.26, 0, 2.5, 4.3, 4.36, bloquea=True)
+    o.caja("afiche_ospina", 2.35, 3.2, 1.45, 2.4, 4.31, 4.35)
+    _libreria(o, azar, "x", CX0 + 0.1, 1, -3.8, -0.4)
+    zs = Z_SALAS + 0.1
+    o.pared("tela_azul", "z", zs, 1, -3.9, -1.5, 0, 0.45, 0, 0.75, bloquea=True)
+    o.pared("tela_azul", "z", zs, 1, -3.9, -1.5, 0.45, 0.9, 0, 0.2)
+    o.caja("madera_oscura", -3.4, -2.0, 0, 0.42, -3.1, -2.5, bloquea=True)
+    o.pared("afiche_ospina", "z", zs, 1, 0.9, 3.3, 1.1, 2.7, 0, 0.02)
+    o.letrero("OSPINA", "z", zs, 1, 2.1, 2.2, 0.36, BLANCO)
+    o.letrero("ALCALDE", "z", zs, 1, 2.1, 1.6, 0.18, CREMA)
+    _planta(o, -3.8, 4.4)
+
+    # ================= SALA DE GUERRA =================
+    # Muro de pantallas en el fondo: noticias, la encuesta y las redes.
+    o.pared("rejilla", "z", zs, 1, 4.4, 12.2, 0.85, 2.8, 0, 0.04)
+    for a in (4.5, 7.1, 9.7):
+        for y0 in (0.9, 1.87):
+            o.pared("pantalla_azul", "z", zs, 1, a, a + 2.45, y0, y0 + 0.88,
+                    0.04, 0.05)
+    # El texto va delante de pantallas y barras (que llegan a 6 cm del
+    # muro): pegado a ellas parpadea. Este muro se mira hacia -z, asi que
+    # la x crece hacia la IZQUIERDA del que mira: lo que se lee primero
+    # (la ultima hora, la barra de Ospina) va en la x mas alta.
+    frente = zs + 0.035
+    o.pared("banner_rojo", "z", zs, 1, 9.7, 12.15, 2.4, 2.75, 0.05, 0.055)
+    o.letrero("ÚLTIMA HORA", "z", frente + 0.01, 1, 10.92, 2.57, 0.12, BLANCO)
+    o.letrero("OSPINA CAE 10 PUNTOS", "z", frente, 1, 10.92, 2.15, 0.085, BLANCO)
+    o.letrero("#CierreDeColegios", "z", frente, 1, 10.92, 1.35, 0.1, ROJO_TITULAR)
+    o.letrero("tendencia en Civitas", "z", frente, 1, 10.92, 1.15, 0.06, BLANCO)
+    o.letrero("INTENCIÓN DE VOTO", "z", frente, 1, 8.32, 2.55, 0.1, BLANCO)
+    from juego import NOMBRES_CANDIDATOS
+    barras = ("barra_azul", "barra_roja", "barra_amarilla", "barra_verde")
+    for i, (nombre, votos, barra) in enumerate(zip(NOMBRES_CANDIDATOS,
+                                                   ENCUESTA_PANTALLA, barras)):
+        a = 7.45 + (3 - i) * 0.5
+        o.pared(barra, "z", zs, 1, a, a + 0.34, 1.12, 1.12 + votos / 30.0,
+                0.05, 0.06)
+        o.letrero(nombre.split()[-1].upper(), "z", frente, 1, a + 0.17, 1.02,
+                  0.045, BLANCO)
+        o.letrero(f"{votos} %", "z", frente, 1, a + 0.17,
+                  1.18 + votos / 30.0, 0.05, BLANCO)
+    o.letrero("−10", "z", frente, 1, 9.12, 2.25, 0.11, ROJO_TITULAR)
+    o.letrero("CIVITAS", "z", frente, 1, 5.72, 2.55, 0.1, AZUL_OSPINA)
+    o.letrero("40 000 compartidos", "z", frente, 1, 5.72, 2.2, 0.07, BLANCO)
+    o.letrero("«Ospina quiere cerrar", "z", frente, 1, 5.72, 1.45, 0.06, BLANCO)
+    o.letrero("el colegio del barrio»", "z", frente, 1, 5.72, 1.32, 0.06, BLANCO)
+    # La mesa de luz con los distritos, cada uno en la tinta de quien lo
+    # gana hoy: despues del rumor manda el rojo.
+    o.caja("metal", 6.6, 10.8, 0, 0.86, -1.6, 0.8, bloquea=True)
+    o.caja("mesa_luz", 6.7, 10.7, 0.86, 0.9, -1.5, 0.7)
+    distritos = ("distrito_azul", "distrito_rojo", "distrito_amarillo",
+                 "distrito_verde")
+    for i in range(5):
+        for k in range(3):
+            x, z = 6.85 + i * 0.77, -1.35 + k * 0.67
+            o.caja(azar.choices(distritos, weights=(3, 5, 2, 2))[0],
+                   x, x + 0.69, 0.9, 0.906, z, z + 0.59)
+    _planta(o, 14.0, 4.4)
+
+    # ================= CONFERENCIAS =================
+    _mesa(o, 16.2, 21.2, -1.1, 0.5, mat="madera_oscura")
+    for x in (16.8, 17.9, 19.0, 20.1):
+        _silla(o, x, -1.45, "-z", "cuero")
+        _silla(o, x, 0.85, "+z", "cuero")
+    o.solido((16.2, 21.2, -1.7, 1.1), 0.9)
+    # El expediente que el asesor deja sobre la mesa.
+    o.caja("expediente", 18.4, 18.78, 0.76, 0.79, -0.45, -0.18)
+    for x in (16.7, 17.8, 20.3):
+        o.caja("agua", x, x + 0.07, 0.76, 0.98, -0.6, -0.53)
+    xf = CX1 - 0.1
+    o.pared("rejilla", "x", xf, -1, -2.2, 1.4, 1.0, 2.3, 0, 0.05)
+    o.pared("pantalla_azul", "x", xf, -1, -2.1, 1.3, 1.08, 2.22, 0.05, 0.06)
+    o.pared("banner_rojo", "x", xf, -1, -2.1, 1.3, 1.08, 1.32, 0.06, 0.065)
+    o.letrero("NOTICIAS NOVA", "x", xf - 0.04, -1, -0.4, 1.2, 0.09, BLANCO)
+    o.letrero("OSPINA Y EL COLEGIO", "x", xf - 0.04, -1, -0.4, 1.85, 0.15, BLANCO)
+    o.letrero("lo que no dijo", "x", xf - 0.04, -1, -0.4, 1.6, 0.09, CREMA)
+
+    # ================= VOLUNTARIOS =================
+    for x0 in (3.6, 5.4, 7.2, 14.8, 19.8):
+        for z0 in (-6.9, -9.3):
+            _mesa(o, x0, x0 + 1.6, z0, z0 + 0.8)
+            o.caja("monitor", x0 + 0.5, x0 + 1.1, 0.82, 1.15, z0 + 0.55, z0 + 0.6)
+            o.caja("metal", x0 + 0.75, x0 + 0.85, 0.76, 0.82, z0 + 0.55, z0 + 0.65)
+            o.caja("rejilla", x0 + 1.2, x0 + 1.45, 0.76, 0.82, z0 + 0.15, z0 + 0.35)
+            _silla(o, x0 + 0.8, z0 - 0.3, "-z", azar.choice(SILLAS))
+    # La pizarra con la cuenta atras hasta la eleccion.
+    o.pared("marco", "x", CX0 + 0.1, 1, -9.8, -6.2, 1.0, 2.2, 0, 0.03)
+    o.pared("pizarra_blanca", "x", CX0 + 0.1, 1, -9.7, -6.3, 1.08, 2.12, 0.03, 0.035)
+    o.letrero("FALTAN 5 DÍAS", "x", CX0 + 0.11, 1, -8.0, 1.85, 0.2, ROJO_TITULAR)
+    o.letrero("debate · encuesta · votación", "x", CX0 + 0.11, 1, -8.0, 1.45,
+              0.08, AZUL_OSPINA)
+    o.caja("volantes", -3.9, -3.45, 0, 0.7, -10.95, -10.55, bloquea=True)
+    o.caja("volantes", -3.35, -2.9, 0, 0.35, -10.95, -10.55, bloquea=True)
+    zb = Z_SERVICIOS + 0.1
+    for a in (4.2, 6.6):
+        o.pared("afiche_ospina", "z", zb, 1, a, a + 1.6, 1.1, 2.4, 0, 0.02)
+        o.letrero("OSPINA", "z", zb, 1, a + 0.8, 1.95, 0.22, BLANCO)
+        o.letrero("Un colegio mejor", "z", zb, 1, a + 0.8, 1.5, 0.08, CREMA)
+    o.caja("plastico_azul", 22.0, 22.45, 0, 1.1, -5.4, -4.95, bloquea=True)
+    o.caja("agua", 22.07, 22.38, 1.1, 1.5, -5.33, -5.02)
+    _planta(o, -3.8, -5.0)
+    _planta(o, 22.2, -10.7)
+
+    # ================= RECEPCION =================
+    zr = CZ_FONDO + 0.1
+    for a in (-3.6, -1.9):                  # dos ascensores, piso 8
+        o.pared("marco_metal", "z", zr, 1, a - 0.08, a + 1.28, 0, 2.3, 0, 0.05)
+        o.pared("ascensor", "z", zr, 1, a, a + 0.59, 0, 2.2, 0.05, 0.07)
+        o.pared("ascensor", "z", zr, 1, a + 0.61, a + 1.2, 0, 2.2, 0.05, 0.07)
+        o.pared("luz_ascensor", "z", zr, 1, a + 0.45, a + 0.75, 2.38, 2.55, 0, 0.03)
+        o.letrero("8", "z", zr + 0.01, 1, a + 0.6, 2.465, 0.12, BLANCO)
+    o.caja("madera_clara", 3.0, 6.6, 0, 1.05, -13.3, -12.6, bloquea=True)
+    o.caja("madera_oscura", 2.9, 6.7, 1.05, 1.1, -13.35, -12.55)
+    o.pared("afiche_ospina", "z", zr, 1, 3.0, 6.8, 1.3, 2.6, 0, 0.03)
+    o.letrero("OSPINA ALCALDE", "z", zr, 1, 4.9, 2.0, 0.26, BLANCO)
+
+    # ================= COCINETA =================
+    o.pared("madera_clara", "z", zr, 1, 7.9, 12.4, 0, 0.92, 0, 0.6, bloquea=True)
+    o.pared("piedra", "z", zr, 1, 7.85, 12.45, 0.92, 0.96, 0, 0.62)
+    o.pared("madera_clara", "z", zr, 1, 7.9, 12.4, 1.6, 2.3, 0, 0.35)
+    o.pared("nevera", "z", zr, 1, 12.6, 13.5, 0, 1.9, 0, 0.7, bloquea=True)
+    o.caja("metal", 8.3, 8.7, 0.96, 1.35, -14.4, -14.05)
+    o.caja("led", 8.45, 8.55, 1.2, 1.24, -14.06, -14.04)
+
+    # ================= IMPRESION =================
+    o.caja("impresora", 19.6, 21.6, 0, 1.2, -14.4, -13.4, bloquea=True)
+    o.caja("pantalla_azul", 20.9, 21.4, 1.0, 1.15, -13.39, -13.37)
+    o.caja("madera", 14.6, 17.0, 0, 0.9, -13.6, -12.6, bloquea=True)
+    for i in range(5):
+        x = 14.8 + i * 0.42
+        o.caja("volantes", x, x + 0.3, 0.9, 0.9 + 0.06 * (1 + i % 3), -13.3, -12.9)
+    o.caja("afiche_ospina", 14.8, 16.8, 0.9, 0.93, -12.85, -12.7)
+    o.pared("metal_estante", "z", zr, 1, 17.4, 19.2, 0, 1.9, 0, 0.45, bloquea=True)
+    for y in (0.3, 0.9, 1.5):
+        o.pared("papel", "z", zr, 1, 17.5, 19.1, y, y + 0.3, 0.05, 0.42)
+    return o
+
+
+OBRA_CAMPANA = _obra_campana()
+
+MATERIALES_CAMPANA = {
+    **MATERIALES_COLEGIO,
+    "muro_oficina": ((0.30, 0.30, 0.31), 0.85, 0, None),
+    "rodapie": ((0.05, 0.05, 0.06), 0.5, 0, None),
+    "marco_metal": ((0.06, 0.065, 0.075), 0.35, 0.8, None),
+    "placa_oscura": ((0.02, 0.025, 0.035), 0.4, 0.3, None),
+    "moqueta": ((0.07, 0.08, 0.10), 0.95, 0, None),
+    "madera_clara": ((0.30, 0.18, 0.09), 0.55, 0, None),
+    "alfombra_azul": ((0.02, 0.05, 0.16), 0.95, 0, None),
+    "tela_azul": ((0.03, 0.07, 0.20), 0.9, 0, None),
+    "afiche_ospina": ((0.012, 0.115, 0.390), 0.7, 0, (0.004, 0.04, 0.14)),
+    "pantalla_ambar": ((0.3, 0.2, 0.05), 0.4, 0, (1.4, 0.9, 0.4)),
+    "pantalla_azul": ((0.01, 0.02, 0.05), 0.2, 0, (0.03, 0.08, 0.22)),
+    "banner_rojo": ((0.3, 0.02, 0.02), 0.5, 0, (1.3, 0.06, 0.04)),
+    "barra_azul": ((0.0, 0.0, 0.0), 0.5, 0, (0.10, 0.35, 1.30)),
+    "barra_roja": ((0.0, 0.0, 0.0), 0.5, 0, (1.30, 0.10, 0.08)),
+    "barra_amarilla": ((0.0, 0.0, 0.0), 0.5, 0, (1.30, 0.80, 0.08)),
+    "barra_verde": ((0.0, 0.0, 0.0), 0.5, 0, (0.15, 1.00, 0.30)),
+    "mesa_luz": ((0.5, 0.5, 0.5), 0.3, 0, (0.35, 0.38, 0.42)),
+    "distrito_azul": ((0.0, 0.0, 0.0), 0.5, 0, (0.06, 0.22, 0.85)),
+    "distrito_rojo": ((0.0, 0.0, 0.0), 0.5, 0, (0.85, 0.06, 0.05)),
+    "distrito_amarillo": ((0.0, 0.0, 0.0), 0.5, 0, (0.85, 0.52, 0.05)),
+    "distrito_verde": ((0.0, 0.0, 0.0), 0.5, 0, (0.08, 0.60, 0.18)),
+    "expediente": ((0.55, 0.40, 0.18), 0.85, 0, None),
+    "pizarra_blanca": ((0.80, 0.80, 0.78), 0.3, 0, None),
+    "volantes": ((0.02, 0.10, 0.36), 0.8, 0, None),
+    "ascensor": ((0.40, 0.40, 0.42), 0.25, 1.0, None),
+    "luz_ascensor": ((0.1, 0.05, 0.0), 0.5, 0, (1.4, 0.7, 0.15)),
+    "piedra": ((0.12, 0.12, 0.13), 0.3, 0, None),
+    "nevera": ((0.55, 0.56, 0.58), 0.3, 0.6, None),
+    "impresora": ((0.20, 0.21, 0.23), 0.5, 0.2, None),
+    "panel_calido": ((0.6, 0.6, 0.6), 0.5, 0, (1.5, 1.35, 1.1)),
+}
+
+
+def _campana(mundo):
+    caras = {}
+
+    def poner(mat, x0, x1, y0, y1, z0, z1):
+        caras.setdefault(mat, []).extend(_caras_caja(x0, x1, y0, y1, z0, z1))
+
+    y = ALTO_CAMPANA
+    caras["techo"] = [(((CX0, y, CZ_VENTANAL), (CX1, y, CZ_VENTANAL),
+                        (CX1, y, CZ_FONDO), (CX0, y, CZ_FONDO)), (0, -1, 0))]
+    # Paneles encendidos: de noche el comando de campana no duerme.
+    for x in range(-3, 22, 3):
+        for z in (-8.0, 0.5):
+            poner("panel_calido", x, x + 1.2, y - 0.03, y - 0.005, z - 0.3, z + 0.3)
+    _volcar_obra(mundo, OBRA_CAMPANA, MATERIALES_CAMPANA, caras)
+    _ciudad_abajo(mundo)
+
+
+def _ciudad_abajo(mundo):
+    """La ciudad de la intro, ocho pisos por debajo de la oficina.
+
+    Las mismas piezas y la misma semilla que _ciudad(): es la misma Ciudad
+    Nova de la cinematica, con su mitin, sus carteles, su trafico y su
+    pantalla gigante. Sin los peatones de primer plano (desde aqui arriba
+    no se distinguen y cuestan once Actor) ni sus luces (las pone
+    _luces_campana, giradas igual que la ciudad).
+    """
+    giro = mundo.attachNewNode("ciudad_giro")
+    giro.setH(GIRO_CIUDAD)
+    ciudad = giro.attachNewNode("ciudad")
+    x, y, z = OFICINA_EN_CIUDAD
+    ciudad.setPos(-x, -y, -z)
+    azar = random.Random(7)
+    _cielo()
+    _ACTUAL["cielo"].setH(GIRO_CIUDAD)
+    _calles(ciudad)
+    _edificios_ciudad(ciudad, azar)
+    _carteles_y_murales(ciudad)
+    _pantallas(ciudad)
+    _multitud(ciudad, azar)
+    _trafico(ciudad, azar)
+    # Dos patrullas en la acera del mitin: la manifestacion ya tiene policia.
+    cuerpo = _material((0.02, 0.02, 0.025, 1), rugosidad=0.4, metalico=0.5)
+    rojo = _material((0.02, 0.0, 0.0, 1), emision=(2.4, 0.1, 0.08, 1))
+    azul = _material((0.0, 0.0, 0.02, 1), emision=(0.1, 0.3, 2.4, 1))
+    for zc in (-49.0, -9.0):
+        _pieza(ciudad, "cube", cuerpo, (1.8, 1.3, 4.2), (-8.0, 0.8, zc))
+        _pieza(ciudad, "cube", rojo, (0.7, 0.15, 0.3), (-8.4, 1.55, zc))
+        _pieza(ciudad, "cube", azul, (0.7, 0.15, 0.3), (-7.6, 1.55, zc))
+
+
+def _luces_campana(mundo):
+    """Seis luces: el sol bajo y el cielo de la ciudad (girados con ella),
+    un ambiente de oficina y tres puntos: la lampara de Daniel, el muro de
+    pantallas y la mesa de conferencias."""
+    ambiente = mundo.attachNewNode(AmbientLight("ambiente"))
+    ambiente.node().setColor((0.085, 0.082, 0.080, 1))
+    _encender(mundo, ambiente)
+
+    sol = mundo.attachNewNode(DirectionalLight("sol"))
+    sol.node().setColor((1.30, 0.80, 0.45, 1))
+    sol.setHpr(200 + GIRO_CIUDAD, -14, 0)
+    _encender(mundo, sol)
+
+    cielo = mundo.attachNewNode(DirectionalLight("cielo"))
+    cielo.node().setColor((0.30, 0.36, 0.55, 1))
+    cielo.setHpr(20 + GIRO_CIUDAD, -35, 0)
+    _encender(mundo, cielo)
+
+    for nombre, pos, col, att in (
+            ("lampara_daniel", (1.0, 1.25, 2.25), (1.8, 1.2, 0.6), (1, 0.18, 0.30)),
+            ("pantallas", (8.3, 1.7, -3.3), (0.45, 0.65, 1.4), (1, 0.12, 0.12)),
+            ("lampara_conferencias", (18.7, 2.6, -0.3), (1.6, 1.1, 0.6),
+             (1, 0.10, 0.10))):
+        luz = mundo.attachNewNode(PointLight(nombre))
+        luz.node().setColor((*col, 1))
+        luz.node().setAttenuation(att)
+        luz.setPos(*pos)
+        _encender(mundo, luz)
+
+
+# Planos medidos desde la marca, dentro del despacho (x -4.2..3.7, z
+# -4.4..4.9). La camara mira hacia el ventanal: la ciudad es el fondo.
+PLANOS_CAMPANA = {
+    "PG":      (Vec3(2.80, 2.40, -3.90), 1.10, 0.0, 66),
+    "PM":      (Vec3(0.65, 1.52, -2.85), 1.26, 7.5),
+    "PP":      (Vec3(0.34, 1.60, -1.25), 1.57, 6.0),
+    "LATERAL": (Vec3(-2.30, 1.48, -2.10), 1.28, -6.0),
+    "AFICHE":  (Vec3(0.30, 1.46, -2.30), 1.30, -11.0),
+    "DOS":     (Vec3(-1.60, 1.78, -3.40), 1.22, 11.0),
+}
+
+
+def fondo_vivo(dt):
+    """Lo que se mueve solo en el fondo: la ciudad tras los ventanales
+    del capitulo 3; la lluvia y las sirenas del colegio del 2."""
+    if _ACTUAL["nombre"] == "campana":
+        seguir_cielo()
+        mover_trafico(dt)
+    elif _ACTUAL["nombre"] == "rectoria" and "lluvia" in _ACTUAL:
+        t = _ACTUAL["reloj"] = _ACTUAL.get("reloj", 0.0) + dt
+        caida = (t * VELOCIDAD_LLUVIA) % LLUVIA[4]
+        for k, capa in enumerate(_ACTUAL["lluvia"]):
+            capa.y = k * LLUVIA[4] - caida
+        # Rojo y azul a 1,4 Hz cada uno; solo se toca algo al cambiar.
+        fase = int(t / 0.36) % 2
+        if fase != _ACTUAL["fase_sirena"]:
+            _ACTUAL["fase_sirena"] = fase
+            barras, mats = _ACTUAL["sirenas"]
+            for c, pieza in barras:
+                pieza.setMaterial(mats[(c, (c == "roja") == (fase == 0))], 1)
+            _ACTUAL["luz_sirena"].node().setColor(
+                (2.0, 0.15, 0.10, 1) if fase == 0 else (0.15, 0.35, 2.4, 1))
+
+
+def escenario():
+    """El nombre del escenario montado ("cafeteria", "rectoria"...)."""
+    return _ACTUAL["nombre"]
 
 
 # ===================================================================
@@ -1963,6 +2564,15 @@ def _montar(mundo, escenario):
         _luces_rectoria(cont)
         # El pasillo mide 30 m: la niebla hace que el fondo se pierda.
         _niebla(mundo, 0.03)
+    elif escenario == "campana":
+        PLANOS = PLANOS_CAMPANA
+        _campana(cont)
+        _luces_campana(cont)
+        # La bruma ambar de la intro: la ciudad se funde en el atardecer.
+        f = Fog("niebla")
+        f.setColor(NIEBLA_CIUDAD)
+        f.setExpDensity(DENSIDAD_CIUDAD)
+        mundo.setFog(f)
     else:
         escenario = "cafeteria"
         PLANOS = PLANOS_CAFETERIA
@@ -1986,6 +2596,7 @@ LIMITES = {
     "plaza": (-9.0, 9.0, -9.0, 9.0),
     "ciudad": (-6.0, 6.0, -60.0, 200.0),
     "rectoria": (X_OESTE + 0.3, X_ESTE - 0.3, Z_SUR + 0.3, Z_NORTE - 0.3),
+    "campana": (CX0 + 0.3, CX1 - 0.3, CZ_FONDO + 0.3, CZ_VENTANAL - 0.3),
 }
 BLOQUEOS = {
     "cafeteria": (
@@ -1994,18 +2605,29 @@ BLOQUEOS = {
     ),
     "plaza": (),
     "rectoria": tuple(OBRA_COLEGIO.paso),
+    "campana": tuple(OBRA_CAMPANA.paso),
 }
 
 
 # Lo que ademas tapa la camara: solo lo que pasa de la altura de los ojos.
 MUROS_CAMARA = {
     "rectoria": tuple(OBRA_COLEGIO.vista),
+    "campana": tuple(OBRA_CAMPANA.vista),
 }
 
 
 def muros():
     """Rectangulos que la camara no puede atravesar."""
     return MUROS_CAMARA.get(_ACTUAL["nombre"], ())
+
+
+# Hasta donde sube la camara de exploracion: el techo menos un dedo. La
+# cafeteria (el .glb) mide 2,5 m; colegio y oficina, 3,2.
+TECHOS = {"rectoria": ALTO_COLEGIO - 0.25, "campana": ALTO_CAMPANA - 0.25}
+
+
+def techo():
+    return TECHOS.get(_ACTUAL["nombre"], 2.45)
 
 
 def coberturas():
@@ -2051,7 +2673,9 @@ def cambiar_escenario(mundo, escenario):
     # cleanup() las deja corriendo sobre un modelo que ya no existe.
     for actor in _ACTUAL.pop("actores", ()):
         actor.cleanup()
-    for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo"):
+    for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo", "lluvia",
+                  "sirenas", "fase_sirena", "luz_sirena", "reloj",
+                  "luz_ambiente"):
         _ACTUAL.pop(clave, None)
     if _ACTUAL["contenedor"] is not None:
         _ACTUAL["contenedor"].removeNode()
@@ -2553,11 +3177,7 @@ def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta):
     contra muros y estantes. alerta: te esta viendo; la luz vira a rojo.
     """
     actor, abanico, _ = par
-    actor.setPos(x, 0, z)
-    actor.setH(180.0 - rumbo)            # el convenio de jugador.py
-    clip = "caminar" if andando else "idle"
-    if actor.getCurrentAnim() != clip:
-        actor.loop(clip)
+    mover_actor(actor, x, z, rumbo, andando)
     r, g, b = LINTERNA_ALERTA if alerta else LINTERNA
     y = 0.03                             # encima de la baldosa y del damero
     malla = abanico.model
@@ -2567,6 +3187,29 @@ def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta):
                     + [color.Color(r, g, b, 0.05)] * len(rayos))
     malla.triangles = [i for k in range(1, len(rayos)) for i in (0, k, k + 1)]
     malla.generate()
+
+
+def mover_actor(actor, x, z, rumbo, andando):
+    """Pone a alguien que hace una ronda donde le toca, andando o parado."""
+    actor.setPos(x, 0, z)
+    actor.setH(180.0 - rumbo)            # el convenio de jugador.py
+    clip = "caminar" if andando else "idle"
+    if actor.getCurrentAnim() != clip:
+        actor.loop(clip)
+
+
+def asesor(mundo):
+    """El asesor de Daniel (capitulo 3), que va y viene preocupado.
+
+    Lleva el modelo del Alcalde: el de prueba ya es Daniel, y dos iguales
+    en el mismo plano se leerian como gemelos. Sin luces propias, como
+    cualquier NPC.
+    """
+    actor = Actor(Filename.from_os_specific(ruta_personaje("alcalde")).getFullpath())
+    actor.reparentTo(mundo)
+    _quitar_mapa_de_brillo(actor)
+    actor.setPlayRate(RITMO_RONDA, "caminar")
+    return actor
 
 
 def quitar_vigilantes(pares):
@@ -2591,6 +3234,19 @@ NPCS_CAFETERIA = {
 }
 # Medio lado del rectangulo que no se deja pisar alrededor de cada uno.
 RADIO_NPC = 0.28
+
+
+# Gente que esta en un escenario sin nada que preguntarle (no son NPCs de
+# pistas): el rector, sentado en el sillon de su despacho, de cara a la
+# marca de Valeria. Mismo formato que NPCS_CAFETERIA.
+FIGURANTES = {
+    "rectoria": {"rector": ("npc4", (-0.5, 0.0, 2.82), 0.0, "sentado")},
+}
+
+
+def figurantes(mundo):
+    """Planta a los figurantes del escenario montado: ({id: actor}, rects)."""
+    return poner_npcs(mundo, FIGURANTES.get(_ACTUAL["nombre"], {}))
 
 
 def poner_npcs(mundo, specs=NPCS_CAFETERIA):

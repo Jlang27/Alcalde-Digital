@@ -230,7 +230,21 @@ ROLES = {
             ("promesa", "Rendición de cuentas", "Comprometerte en firme", 2, "^", "confianza_cand"),
         ],
     },
+    # Daniel Ospina, candidato a alcalde: solo se juega en el capitulo 3
+    # («La primera jugada sucia»), no aparece en el reparto. Comparte el
+    # arbol del Alcalde: sus ramas (comunicado, debate, gabinete...) ya
+    # estan conectadas al arbol de decision y son las de un politico.
+    "candidato": {
+        "nombre": "Candidato",
+        "personaje": "Daniel Ospina",
+        "simbolo": "D",
+        "lema": "Ganar la alcaldía sin perder lo que prometiste.",
+        "descripcion": "Va primero en las encuestas hasta que el rumor del\n"
+                       "colegio lo tumba. Ahora tiene que decidir cómo responder.",
+        "arbol": None,             # se rellena abajo con el del Alcalde
+    },
 }
+ROLES["candidato"]["arbol"] = ROLES["alcalde"]["arbol"]
 
 
 def construir_arbol_habilidades(id_rol):

@@ -16,6 +16,7 @@ Si no se separan, o no puedes mirar o no puedes hacer clic.
 
 import math
 
+from panda3d.core import TransparencyAttrib
 from ursina import Vec3, camera, held_keys, mouse
 
 RADIO = 0.34                 # el bulto del personaje visto desde arriba
@@ -33,6 +34,20 @@ DISTANCIA_MINIMA = 1.25      # mas cerca que esto se le ve por dentro
 # Contra un muro interior se acepta acercarse mas: ver un poco del
 # personaje por dentro es menos grave que ver a traves de la pared.
 DISTANCIA_MINIMA_MURO = 0.55
+# De cerca (un pasillo de lado, un rincon, agachado contra una mesa) el
+# personaje tapaba media pantalla y no se veia a donde ibas. Por debajo de
+# DISTANCIA_CERCA la camara sube como una grua y mira mas hacia abajo, y el
+# personaje se vuelve translucido. A la distancia minima, del todo.
+DISTANCIA_CERCA = 2.3
+GRUA = 0.85                  # metros que sube la camara
+PICADO = 24.0                # grados que mira de mas hacia abajo
+ALFA_CERCA = 0.3             # lo que queda del personaje: se sabe donde esta
+# La transparencia empieza mas cerca que la grua: un modelo transparente
+# deja ver sus caras de dentro, y a media distancia eso son manchas.
+DISTANCIA_TRANSPARENTE = 1.4
+# La lente cerrada es la de cine, pero en un rincon deja ver solo una
+# espalda: de cerca se abre un poco para que quepa la sala.
+ABRIR_CERCA = 12.0
 ALTURA_OBJETIVO = 1.30       # a la altura del pecho, no de los pies
 ALTURA_AGACHADO = 0.85       # la camara baja con el cuerpo: se siente el sigilo
 HOMBRO = 0.62                # descentra al personaje y deja aire a la derecha
@@ -126,6 +141,11 @@ class Jugador:
 
         self.pivote = None              # lo que sigue la camara, con retardo
         self.distancia = DISTANCIA
+        self.cerca = 0.0                # 0 lejos .. 1 pegada (grua y transparencia)
+        self.alfa = 1.0
+        # Hasta donde puede subir la camara: el techo de la sala menos un
+        # dedo. La cafeteria mide 2,5 m; el colegio y la oficina, 3,2.
+        self.techo = ALTURA_TECHO
 
     def _bloqueado(self, x, z):
         """True si el personaje no cabe ahi.
@@ -156,6 +176,23 @@ class Jugador:
         self.agachado = self.corriendo = False
         _raton(False)
         self._animar("quieto")
+        # Los planos fijos de decision necesitan al personaje entero.
+        self.cerca = 0.0
+        self._poner_alfa(1.0)
+
+    def _poner_alfa(self, alfa):
+        """Transparenta al personaje. Solo toca el nodo cuando cambia: un
+        actor transparente se ordena aparte y cuesta mas pintarlo."""
+        alfa = round(alfa, 2)
+        if alfa == self.alfa:
+            return
+        self.alfa = alfa
+        if alfa >= 1.0:
+            self.actor.clearTransparency()
+            self.actor.setAlphaScale(1.0)
+        else:
+            self.actor.setTransparency(TransparencyAttrib.MAlpha)
+            self.actor.setAlphaScale(alfa)
 
     # ----------------------------------------------------------------
     #  bucle
@@ -277,7 +314,7 @@ class Jugador:
 
         util = DISTANCIA
         if dy > 1e-6:
-            util = min(util, (ALTURA_TECHO - origen.y) / dy)
+            util = min(util, (self.techo - origen.y) / dy)
         if self.limites is not None:
             x0, x1, z0, z1 = self.limites
             for d, valor, menor, mayor in ((dx, origen.x, x0, x1),
@@ -334,19 +371,28 @@ class Jugador:
             origen.y + distancia * math.sin(rad_p),
             origen.z - math.cos(rad) * plano,
         )
+        # De cerca, grua: sube y pica, y el personaje se transparenta. Se
+        # suaviza aparte de la distancia, que entra de golpe contra el muro.
+        cerca = (DISTANCIA_CERCA - distancia) / (DISTANCIA_CERCA - DISTANCIA_MINIMA_MURO)
+        cerca = max(0.0, min(1.0, cerca))
+        self.cerca = cerca if inmediato else _acercar(self.cerca, cerca, factor)
+        pos.y += GRUA * self.cerca
+        tapa = ((DISTANCIA_TRANSPARENTE - distancia)
+                / (DISTANCIA_TRANSPARENTE - DISTANCIA_MINIMA_MURO))
+        self._poner_alfa(1.0 - (1.0 - ALFA_CERCA) * max(0.0, min(1.0, tapa)))
         # Ultimo recurso: en un rincon muy cerrado ni la distancia
         # minima cabe. Se traslada sin girar, asi el encuadre no bascula.
-        pos.y = min(pos.y, ALTURA_TECHO)
+        pos.y = min(pos.y, self.techo)
         if self.limites is not None:
             x0, x1, z0, z1 = self.limites
             pos.x = max(x0, min(x1, pos.x))
             pos.z = max(z0, min(z1, pos.z))
 
         camera.position = pos
-        camera.rotation = Vec3(self.pitch, self.yaw, 0)
-        if not inmediato:
-            lente = FOV_CORRER if self.corriendo else FOV_EXPLORACION
-            camera.fov = _acercar(camera.fov, lente, factor * 0.6)
+        camera.rotation = Vec3(self.pitch + PICADO * self.cerca, self.yaw, 0)
+        lente = ((FOV_CORRER if self.corriendo else FOV_EXPLORACION)
+                 + ABRIR_CERCA * self.cerca)
+        camera.fov = lente if inmediato else _acercar(camera.fov, lente, factor * 0.6)
 
     def encuadrar(self):
         """Coloca la camara sin retardo. Para entrar a una escena.

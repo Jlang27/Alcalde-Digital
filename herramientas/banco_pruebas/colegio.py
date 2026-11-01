@@ -48,7 +48,13 @@ assert J.cl.capitulo_sel == 1
 foto("colegio_menu_capitulos")
 tecla("enter", 0.5)
 assert estado() == "carga", estado()
-assert hasta_estado("rotulo", 15), estado()       # sin la cinematica del 1
+# Sin la cinematica del 1, pero con la suya: la noche en el colegio.
+assert hasta_estado("cinematica", 15), estado()
+assert J.cl.figurantes.get("rector") is not None, "el rector en su despacho"
+pasar(2.0)
+tecla("enter", 1.0)                                # se puede saltar
+assert hasta_estado("rotulo", 5), estado()
+assert J.cl.cine is None and J.cl.actor.getPos().length() < 0.01
 p = J.cl.partida
 assert p.dia_actual == 1 and p.protagonista.nombre == "Valeria Samper", (
     p.dia_actual, p.protagonista.nombre)
