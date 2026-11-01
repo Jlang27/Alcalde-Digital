@@ -21,6 +21,8 @@ from ursina import Vec3, camera, held_keys, mouse
 RADIO = 0.34                 # el bulto del personaje visto desde arriba
 
 VELOCIDAD = 2.7              # metros por segundo
+VELOCIDAD_CORRER = 5.2       # Shift
+VELOCIDAD_AGACHADO = 1.3     # Ctrl: lento a proposito, es el precio del sigilo
 VELOCIDAD_GIRO = 10.0        # suavizado del giro del personaje
 SENSIBILIDAD = 42.0
 
@@ -32,11 +34,25 @@ DISTANCIA_MINIMA = 1.25      # mas cerca que esto se le ve por dentro
 # personaje por dentro es menos grave que ver a traves de la pared.
 DISTANCIA_MINIMA_MURO = 0.55
 ALTURA_OBJETIVO = 1.30       # a la altura del pecho, no de los pies
+ALTURA_AGACHADO = 0.85       # la camara baja con el cuerpo: se siente el sigilo
 HOMBRO = 0.62                # descentra al personaje y deja aire a la derecha
 SUAVIDAD = 7.0               # retardo de la camara; 0 seria rigido
 
 PITCH_MIN, PITCH_MAX = -6.0, 32.0
 FOV_EXPLORACION = 40         # igual que mundo.FOV_BASE: horizontal, cerrada
+FOV_CORRER = 46              # abrir un poco la lente al correr da sensacion de velocidad
+
+# Animacion de cada estado, por orden de preferencia: si el modelo no trae
+# la primera se usa la siguiente. Los nombres de la izquierda son contrato
+# con el .glb (ver CLAUDE.md). Mientras no esten «correr» y los de
+# agacharse, se tira de «caminar» mas rapido o mas lento.
+CLIPS = {
+    "quieto": (("idle", 1.0),),
+    "andar": (("caminar", 1.0),),
+    "correr": (("correr", 1.0), ("caminar", 1.7)),
+    "agachado": (("agachado", 1.0), ("idle", 1.0)),
+    "agachado_andar": (("agachado_caminar", 1.0), ("caminar", 0.55)),
+}
 
 
 def _acercar(actual, objetivo, factor):
@@ -102,7 +118,11 @@ class Jugador:
         self.pitch = 15.0
         self.rumbo = 0.0                # hacia donde mira el personaje
         self.explorando = False
-        self.caminando = False
+        self.estado = "quieto"          # una clave de CLIPS
+        # Lo leera el minijuego de sigilo: agachado se ve menos, corriendo
+        # se oye mas. Aqui solo se mueve; las reglas iran en Partida.
+        self.agachado = False
+        self.corriendo = False
 
         self.pivote = None              # lo que sigue la camara, con retardo
         self.distancia = DISTANCIA
@@ -133,8 +153,9 @@ class Jugador:
     def desactivar(self):
         """Modo decision: el raton vuelve a ser cursor."""
         self.explorando = False
+        self.agachado = self.corriendo = False
         _raton(False)
-        self._animar(False)
+        self._animar("quieto")
 
     # ----------------------------------------------------------------
     #  bucle
@@ -145,6 +166,10 @@ class Jugador:
             self._mirar(mouse.velocity[0], mouse.velocity[1])
             avance = held_keys["w"] - held_keys["s"]
             lado = held_keys["d"] - held_keys["a"]
+            # Ursina junta izquierda y derecha en «control» y «shift».
+            # Agachado gana: con Ctrl pulsado no se puede correr.
+            self.agachado = bool(held_keys["control"])
+            self.corriendo = bool(held_keys["shift"]) and not self.agachado
             self._caminar(avance, lado, dt)
         # La camara la mueve quien llama a seguir() una vez por fotograma.
         # Antes tambien se llamaba aqui y el retardo corria al doble.
@@ -154,8 +179,10 @@ class Jugador:
         self.pitch = max(PITCH_MIN, min(PITCH_MAX, self.pitch - dy * SENSIBILIDAD))
 
     def _caminar(self, avance, lado, dt):
+        quieto = "agachado" if self.agachado else "quieto"
         if avance == 0 and lado == 0:
-            self._animar(False)
+            self.corriendo = False      # correr sin moverse no hace ruido
+            self._animar(quieto)
             return
 
         # Direccion relativa a la camara: W va hacia donde miras.
@@ -165,12 +192,19 @@ class Jugador:
         d = frente * avance + derecha * lado
         largo = math.hypot(d.x, d.z)
         if largo < 1e-6:
-            self._animar(False)
+            self.corriendo = False
+            self._animar(quieto)
             return
         d = Vec3(d.x / largo, 0, d.z / largo)
 
+        if self.agachado:
+            velocidad, estado = VELOCIDAD_AGACHADO, "agachado_andar"
+        elif self.corriendo:
+            velocidad, estado = VELOCIDAD_CORRER, "correr"
+        else:
+            velocidad, estado = VELOCIDAD, "andar"
         x, _, z = self.actor.getPos()
-        paso = VELOCIDAD * dt
+        paso = velocidad * dt
         # Un eje cada vez: al chocar de lado con un mueble se desliza a lo
         # largo en vez de clavarse.
         nx = x + d.x * paso
@@ -193,18 +227,22 @@ class Jugador:
         self.rumbo += _angulo_corto(self.rumbo, objetivo) * min(
             1.0, VELOCIDAD_GIRO * dt)
         self.actor.setH(self.rumbo)
-        self._animar(True)
+        self._animar(estado)
 
-    def _animar(self, andando):
-        if andando == self.caminando:
+    def _animar(self, estado):
+        if estado == self.estado:
             return
-        self.caminando = andando
+        self.estado = estado
         nombres = self.actor.getAnimNames()
-        # Si el modelo no trae 'caminar' se queda en idle y se desliza.
-        # Es visible y a proposito: asi se nota que falta la animacion.
-        clip = "caminar" if andando and "caminar" in nombres else "idle"
-        if clip in nombres:
-            self.actor.loop(clip)
+        # Si el modelo no trae ninguno se queda en idle y se desliza. Es
+        # visible y a proposito: asi se nota que falta la animacion.
+        for clip, ritmo in CLIPS[estado] + (("idle", 1.0),):
+            if clip in nombres:
+                # El ritmo se pone siempre: se guarda por clip, y «caminar»
+                # se queda acelerado si se vuelve a el despues de correr.
+                self.actor.setPlayRate(ritmo, clip)
+                self.actor.loop(clip)
+                return
 
     # ----------------------------------------------------------------
     #  camara
@@ -212,7 +250,8 @@ class Jugador:
 
     def objetivo(self):
         x, _, z = self.actor.getPos()
-        return Vec3(x, self.altura_suelo + ALTURA_OBJETIVO, z)
+        alto = ALTURA_AGACHADO if self.agachado else ALTURA_OBJETIVO
+        return Vec3(x, self.altura_suelo + alto, z)
 
     def _distancia_util(self, origen, rad, rad_p):
         """Cuanto puede alejarse la camara sin salirse del cuarto.
@@ -305,6 +344,9 @@ class Jugador:
 
         camera.position = pos
         camera.rotation = Vec3(self.pitch, self.yaw, 0)
+        if not inmediato:
+            lente = FOV_CORRER if self.corriendo else FOV_EXPLORACION
+            camera.fov = _acercar(camera.fov, lente, factor * 0.6)
 
     def encuadrar(self):
         """Coloca la camara sin retardo. Para entrar a una escena.
