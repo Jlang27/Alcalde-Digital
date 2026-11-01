@@ -25,6 +25,7 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 | — animación `idle` | Breathing Idle | Mixamo | Licencia Mixamo | Por confirmar | A · 2026-09-17 |
 | — animación `hablar` | Talking | Mixamo | Licencia Mixamo | Por confirmar | A · 2026-09-17 |
 | — animación `celular` | Texting | Mixamo | Licencia Mixamo | Por confirmar | A · 2026-09-17 |
+| — animaciones `correr`, `agachado`, `agachado_caminar` (en los cinco `.glb` de `assets/personajes/`) | Derivadas por cinemática inversa de `caminar` e `idle` de cada modelo; no se descargó nada | Generadas por el proyecto (`herramientas/sintetizar_animaciones.py`) | La de `caminar`/`idle` de origen (Mixamo) | Igual que su origen | A · 2026-10-31 |
 
 ## Escenarios y props
 
