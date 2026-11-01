@@ -25,6 +25,10 @@ CREDITOS.md. El mapa de que suena en cada momento del dia 1:
   entra otro jugador ........... campanita de puerta
   elegir ....................... golpe seco; se acaba el tiempo: zumbador
   cierre del dia ............... teclas, sello, hoja de periodico
+
+Y del dia 2, en el colegio: lluvia con sirena lejana todo el dia (y en
+su cinematica, un trueno). Lluvia y trueno los compone
+herramientas/componer_lluvia.py.
 """
 
 import os
@@ -52,6 +56,7 @@ MUSICA_TENSION = "musica_tension.ogg"
 # vez, y en la alerta de la intro se corta uno solo.
 AMBIENTE_CALLE = "ambiente.ogg"
 AMBIENTE_CAFETERIA = "ambiente_cafeteria.ogg"
+AMBIENTE_LLUVIA = "ambiente_lluvia.wav"
 
 # (archivo, peso, variacion de tono). El peso es relativo al ajuste de
 # efectos; la variacion evita que una tecla repetida suene a metralleta.
@@ -79,6 +84,8 @@ EFECTOS = {
     "pagina": ("fx_pagina.ogg", 0.8, 0.05),
     "barrido": ("fx_barrido.ogg", 0.6, 0.0),
     "rumor_llega": ("fx_rumor_llega.ogg", 0.35, 0.08),
+    # el colegio de noche
+    "trueno": ("fx_trueno.wav", 1.0, 0.05),
 }
 
 # Los efectos de interfaz suenan MUCHAS veces seguidas. A volumen de
