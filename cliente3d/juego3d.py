@@ -88,6 +88,7 @@ class Cliente:
         self.al_cerrar_aviso = None   # lo que sigue al cerrar la tarjeta
         self.libreta = None
         self.antes_de_libreta = None  # "libre" o "juego"
+        self.pagina_libreta = 0       # se vuelve a abrir donde la dejaste
         self.tapados = []             # lo que la libreta apago por debajo
         self.preguntas_menu = []
         self.cola_avisos = []         # (texto, rotulo, titulo, tinta)
@@ -715,8 +716,8 @@ def refrescar_opciones():
 
         # El numero es la tecla: se decide con 1-9, como en las charlas.
         texto = E.etiqueta(f"{i + 1}   {nodo.texto}", (0.14, y), 1.05, col)
-        zona = Button(parent=camera.ui, color=color.rgba(255, 255, 255, 0),
-                      highlight_color=color.rgba(255, 255, 255, 30),
+        zona = Button(parent=camera.ui, color=color.clear,
+                      highlight_color=E.luz(30),
                       scale=(0.70, min(0.060, paso - 0.004)),
                       position=(0.49, y - 0.018),
                       on_click=Func(al_elegir, nodo.id))
@@ -801,6 +802,9 @@ def capitulo_de(indice):
     return titulo, pantallas.dias_que_faltan(indice), lugar
 
 
+ESCENARIO_DIA = {1: "rectoria"}   # indice de dia -> escenario de mundo.py
+
+
 def iniciar_dia(indice):
     """Arranca la jornada como una escena, no como una pantalla de HUD.
 
@@ -819,6 +823,9 @@ def iniciar_dia(indice):
     # pasaba del 100 % y se salia de la pantalla.
     cl.partida.factor_tiempo = A.factor_tiempo()
     cl.partida.iniciar_dia(indice)
+    # Solo el capitulo 2 tiene escenario propio; los demas siguen en la
+    # cafeteria hasta que se construya el suyo.
+    mundo.cambiar_escenario(cl.mundo, ESCENARIO_DIA.get(indice, "cafeteria"))
     # Aqui y no al soltar al personaje: cargar los .glb da un tiron, y
     # detras del rotulo opaco no se ve.
     preparar_npcs()
@@ -905,11 +912,12 @@ def abrir_libre():
     bloqueos = list(mundo.bloqueos()) + cl.bloqueos_npc
     if cl.jugador is None:
         cl.jugador = Jugador(cl.actor, limites=mundo.limites(),
-                             bloqueos=bloqueos)
+                             bloqueos=bloqueos, muros=mundo.muros())
     else:
         cl.jugador.actor = cl.actor
         cl.jugador.limites = mundo.limites()
         cl.jugador.bloqueos = bloqueos
+        cl.jugador.muros = list(mundo.muros())
     cl.jugador.encuadrar()
     cl.jugador.activar()
     cl.aviso = pantallas.AvisoLibre()
@@ -1137,11 +1145,12 @@ def datos_libreta(p):
             if n.desbloqueada:
                 pistas.append((n.profundidad - 1, True, spec["texto"], tinta))
             elif n.id in frontera:
+                # Un cabo suelto, no la pregunta: la libreta dice A QUIEN
+                # volver, y la pregunta exacta se descubre hablandole.
                 if spec["npc"]:
-                    quien = NPCS_CAPITULO_1[spec["npc"]][0]
-                    texto = f"Preguntar a {quien}: «{spec['pregunta']}»"
+                    texto = f"{NPCS_CAPITULO_1[spec['npc']][0]} sabe algo más."
                 else:
-                    texto = f"En el teléfono: {spec['accion']}"
+                    texto = "Algo en el teléfono no cuadra."
                 pistas.append((n.profundidad - 1, False, texto, tinta))
             else:
                 ocultas += 1
@@ -1186,10 +1195,11 @@ def abrir_libreta():
     # en el celular, el reloj no corre: update() solo lo avanza en "juego"
     cl.estado = "libreta"
     audio.efecto("confirmar")
-    cl.libreta = pantallas.Libreta(*datos_libreta(p))
+    cl.libreta = pantallas.Libreta(*datos_libreta(p), pagina=cl.pagina_libreta)
 
 
 def cerrar_libreta():
+    cl.pagina_libreta = cl.libreta.actual
     cl.libreta.cerrar()
     cl.libreta = None
     for e in cl.tapados:
@@ -1294,8 +1304,8 @@ def abrir_modal():
         cl.modal.append(E.etiqueta(f"{i + 1}   {texto}", (0.14, y), 1.05,
                                    col if acepta else E.TEXTO_TENUE))
         cl.modal.append(Button(parent=camera.ui,
-                               color=color.rgba(255, 255, 255, 0),
-                               highlight_color=color.rgba(255, 255, 255, 30),
+                               color=color.clear,
+                               highlight_color=E.luz(30),
                                scale=(0.70, 0.060), position=(0.49, y - 0.018),
                                on_click=Func(cerrar_modal, acepta)))
     colocar_reloj(4)
@@ -2003,6 +2013,14 @@ def input(tecla):
     elif cl.estado == "libreta":
         if tecla in ("tab", "escape", "enter", "space"):
             cerrar_libreta()
+        elif tecla in ("left arrow", "a", "right arrow", "d", "1", "2", "3"):
+            antes = cl.libreta.actual
+            if tecla in ("1", "2", "3"):
+                cl.libreta.pagina(int(tecla) - 1)
+            else:
+                cl.libreta.mover(-1 if tecla in ("left arrow", "a") else 1)
+            if cl.libreta.actual != antes:
+                audio.efecto("pagina")
         return
 
     elif (cl.estado == "juego" and tecla == "tab" and not cl.dia_cerrado

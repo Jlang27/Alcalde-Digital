@@ -28,6 +28,9 @@ DISTANCIA = 4.3
 ALTURA_TECHO = 2.45          # el techo de la cafeteria, menos un dedo
 MARGEN_PARED = 0.15          # la camara puede rozar la pared, no atravesarla
 DISTANCIA_MINIMA = 1.25      # mas cerca que esto se le ve por dentro
+# Contra un muro interior se acepta acercarse mas: ver un poco del
+# personaje por dentro es menos grave que ver a traves de la pared.
+DISTANCIA_MINIMA_MURO = 0.55
 ALTURA_OBJETIVO = 1.30       # a la altura del pecho, no de los pies
 HOMBRO = 0.62                # descentra al personaje y deja aire a la derecha
 SUAVIDAD = 7.0               # retardo de la camara; 0 seria rigido
@@ -43,6 +46,30 @@ def _acercar(actual, objetivo, factor):
 def _angulo_corto(desde, hasta):
     """Diferencia de angulos por el camino corto, en grados."""
     return (hasta - desde + 180.0) % 360.0 - 180.0
+
+
+def _choque(ox, oz, dx, dz, rect):
+    """Distancia por el rayo (o + t*d) hasta entrar en el rectangulo, o None.
+
+    Metodo de las franjas: el rayo esta dentro del rectangulo mientras
+    este dentro de la franja de x Y de la de z a la vez.
+    """
+    x0, x1, z0, z1 = rect
+    t0, t1 = 0.0, math.inf
+    for o, d, lo, hi in ((ox, dx, x0 - MARGEN_PARED, x1 + MARGEN_PARED),
+                         (oz, dz, z0 - MARGEN_PARED, z1 + MARGEN_PARED)):
+        if abs(d) < 1e-9:
+            if not lo < o < hi:
+                return None
+            continue
+        a, b = sorted(((lo - o) / d, (hi - o) / d))
+        t0, t1 = max(t0, a), min(t1, b)
+    # t0 == 0: el pivote ya esta dentro (no pasa, RADIO > MARGEN_PARED).
+    return t0 if 0.0 < t0 <= t1 else None
+
+
+assert _choque(0, 0, 0, -1, (-1, 1, -3, -2)) == 2 - MARGEN_PARED
+assert _choque(0, 0, 0, 1, (-1, 1, -3, -2)) is None
 
 
 def _raton(bloqueado):
@@ -62,10 +89,13 @@ class Jugador:
     """Mueve al personaje y lleva la camara detras de el."""
 
     def __init__(self, actor, limites=None, altura_suelo=0.0,
-                 bloqueos=()):
+                 bloqueos=(), muros=()):
         self.actor = actor
         self.limites = limites          # (x_min, x_max, z_min, z_max)
         self.bloqueos = list(bloqueos)  # rectangulos (x0, x1, z0, z1)
+        # Lo que ademas tapa a la camara: solo lo alto (muros, estantes).
+        # Una mesa bloquea el paso pero la camara la ve por encima.
+        self.muros = list(muros)
         self.altura_suelo = altura_suelo
 
         self.yaw = 0.0                  # hacia donde mira la camara
@@ -197,9 +227,14 @@ class Jugador:
         por su propio eje hasta caber. El personaje sigue centrado, el
         plano no gira y lo unico que cambia es cuanto aire queda detras.
         """
-        dx = -math.sin(rad) * math.cos(rad_p)
+        # El desvio de hombro crece con la distancia (ver seguir()), asi
+        # que la camara de verdad va por una recta que sale del pivote un
+        # poco ladeada. Se mide esa recta, no la del eje: si no, al pasar
+        # por una puerta el hombro asoma por detras del marco.
+        k = HOMBRO / DISTANCIA
+        dx = -math.sin(rad) * math.cos(rad_p) + math.cos(rad) * k
         dy = math.sin(rad_p)
-        dz = -math.cos(rad) * math.cos(rad_p)
+        dz = -math.cos(rad) * math.cos(rad_p) - math.sin(rad) * k
 
         util = DISTANCIA
         if dy > 1e-6:
@@ -212,7 +247,12 @@ class Jugador:
                     util = min(util, (mayor - MARGEN_PARED - valor) / d)
                 elif d < -1e-6:
                     util = min(util, (menor + MARGEN_PARED - valor) / d)
-        return max(DISTANCIA_MINIMA, min(DISTANCIA, util))
+        util = max(DISTANCIA_MINIMA, min(DISTANCIA, util))
+        for rect in self.muros:
+            t = _choque(origen.x, origen.z, dx, dz, rect)
+            if t is not None:
+                util = min(util, max(DISTANCIA_MINIMA_MURO, t))
+        return util
 
     def seguir(self, dt, inmediato=False):
         # El retardo va en el PIVOTE, nunca en la orientacion. Antes se
