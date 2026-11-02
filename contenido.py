@@ -596,6 +596,17 @@ RONDAS_CAPITULO_2 = {
 }
 # A donde te llevan cuando te pillan: el pasillo, frente a la rectoria.
 REGRESO_CAPITULO_2 = (3.9, 5.6, 90.0)
+# Lo que se puede agarrar con E, cada cosa donde tendria sentido
+# encontrarla. pos = (x, alto, z) del plano de mundo.py: el alto es el de
+# la mesa o el mostrador sobre el que esta.
+OBJETOS_CAPITULO_2 = {
+    # requisadas en clase: en la mesa de la profesora del aula 2B
+    "canicas": {"nombre": "canicas", "cantidad": 5, "pos": (6.3, 0.76, 0.85)},
+    # el de la sala de profesores, junto al monitor
+    "despertador": {"nombre": "despertador", "cantidad": 1, "pos": (19.85, 0.76, 2.85)},
+    # junto a la caja de requisados del mostrador del hall
+    "petardo": {"nombre": "petardo", "cantidad": 1, "pos": (5.35, 1.1, -5.6)},
+}
 
 
 # ===================================================================

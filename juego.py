@@ -39,6 +39,7 @@ from contenido import (
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
     OPCIONES_QUE_PROTEGEN, DIA_SIGILO, RONDAS_CAPITULO_2, REGRESO_CAPITULO_2,
+    OBJETOS_CAPITULO_2,
     construir_arbol_habilidades, construir_arbol_decision,
     aplicar_habilidades, aplicar_banderas,
 )
@@ -335,7 +336,8 @@ class Partida:
         #     para que las ramas de habilidades viajen con su subarbol)
         self.compartidos = self.publicacion["compartidos"]
         self._preparar_investigacion()
-        self.sigilo = (Sigilo(RONDAS_CAPITULO_2, REGRESO_CAPITULO_2)
+        self.sigilo = (Sigilo(RONDAS_CAPITULO_2, REGRESO_CAPITULO_2,
+                              OBJETOS_CAPITULO_2)
                        if indice == DIA_SIGILO else None)
         # El reloj del dia se fija antes de repartir: las cartas se
         # programan contra el, no contra el de serie.

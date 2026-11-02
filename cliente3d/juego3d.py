@@ -35,7 +35,7 @@ from jugador import Jugador
 from contenido import INDICADORES_META
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
-                       HECHOS, TEXTO_BANDERA)
+                       HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2)
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
 from sigilo import AVISOS_MAXIMOS, Vigilante
@@ -107,6 +107,9 @@ class Cliente:
         self.rondas_pintadas = 0
         self.cerca = None             # id del NPC al alcance, si hay
         self.marca_hablar = []        # el «E  hablar» de abajo
+        self.objeto_cerca = None      # id del objeto al alcance (capitulo 2)
+        self.marca_objeto = []        # el «E  agarrar» de abajo
+        self.inventario = None        # lo que llevas, abajo a la derecha
         self.dialogo = None
         self.con_quien = None
         self.pagina_cierre = None     # "arbol", "red" o "encuesta"
@@ -1038,6 +1041,8 @@ def cerrar_libre():
     cl.mapa.mostrar(False)
     limpiar(cl.marca_hablar)
     cl.cerca = None
+    limpiar(cl.marca_objeto)
+    cl.objeto_cerca = None
     if cl.sospecha is not None:
         cl.sospecha.poner(0.0, 0, 0)      # fuera de la ronda no se avisa
     if cl.jugador is not None:
@@ -1145,7 +1150,8 @@ TEXTO_EXPULSADA = (
 
 
 def preparar_vigilantes():
-    """El dia con ronda monta a sus vigilantes; los demas, ninguno."""
+    """El dia con ronda monta a sus vigilantes y lo que hay por agarrar;
+    los demas, nada."""
     quitar_vigilantes()
     s = cl.partida.sigilo
     if s is None:
@@ -1154,6 +1160,10 @@ def preparar_vigilantes():
     for v in s.vigilantes:
         cl.vigilantes[v.id] = mundo.vigilante(cl.mundo)
     cl.sospecha = pantallas.Sospecha()
+    mundo.objetos_sueltos(cl.mundo, {i: OBJETOS_CAPITULO_2[i]["pos"]
+                                     for i in s.sueltos})
+    cl.inventario = pantallas.Inventario()
+    pintar_inventario()
     dibujar_ronda()
 
 
@@ -1188,6 +1198,12 @@ def quitar_vigilantes():
     if cl.sospecha is not None:
         cl.sospecha.cerrar()
         cl.sospecha = None
+    mundo.quitar_objetos()
+    limpiar(cl.marca_objeto)
+    cl.objeto_cerca = None
+    if cl.inventario is not None:
+        cl.inventario.cerrar()
+        cl.inventario = None
 
 
 def dibujar_ronda():
@@ -1251,6 +1267,39 @@ def senalar_cercano():
         nombre = NPCS_CAPITULO_1[cerca][0]
         piezas, _ = E.tecla("e", f"hablar con {nombre}", -0.12, -0.36)
         cl.marca_hablar += piezas
+
+
+def senalar_objeto():
+    """Pone «E  agarrar …» si hay algo al alcance, y lo hace brillar."""
+    cerca = cl.partida.sigilo.al_alcance(cl.actor.getX(), cl.actor.getZ())
+    mundo.brillar_objetos(cerca, time.time())
+    if cerca == cl.objeto_cerca:
+        return
+    cl.objeto_cerca = cerca
+    limpiar(cl.marca_objeto)
+    if cerca is not None:
+        nombre = OBJETOS_CAPITULO_2[cerca]["nombre"]
+        piezas, _ = E.tecla("e", f"agarrar {nombre}", -0.12, -0.36)
+        cl.marca_objeto += piezas
+
+
+def agarrar():
+    s = cl.partida.sigilo
+    id_objeto = s.agarrar(cl.actor.getX(), cl.actor.getZ())
+    if id_objeto is None:
+        return
+    audio.efecto("pista")
+    mundo.quitar_objeto(id_objeto)
+    limpiar(cl.marca_objeto)
+    cl.objeto_cerca = None
+    pintar_inventario()
+
+
+def pintar_inventario():
+    s = cl.partida.sigilo
+    cl.inventario.poner(
+        [(OBJETOS_CAPITULO_2[i]["nombre"], s.cantidades[i]) for i in s.inventario],
+        s.inventario.index(s.en_mano) if s.en_mano else None)
 
 
 def pintar_reloj_manana():
@@ -2026,12 +2075,15 @@ def gente_del_mapa():
     return gente
 
 def actualizar_mapa():
-    """El minimapa solo se ve mientras caminas, sin nada encima."""
+    """El minimapa y lo que llevas solo se ven mientras caminas, sin nada
+    encima."""
     visible = (cl.estado == "libre" and cl.jugador is not None
                and cl.partida is not None and not cl.dia_cerrado
                and cl.libreta is None and cl.aviso_papel is None
                and not cl.confirmando)
     cl.mapa.mostrar(visible)
+    if cl.inventario is not None:
+        cl.inventario.mostrar(visible)
     if visible:
         cl.mapa.actualizar(cl.actor.getX(), cl.actor.getZ(),
                            cl.jugador.yaw, gente_del_mapa())
@@ -2086,6 +2138,7 @@ def update():
         cl.jugador.seguir(time.dt)
         if cl.partida.sigilo is not None and not cl.confirmando:
             ronda(time.dt)
+            senalar_objeto()
         if cl.npcs:
             senalar_cercano()
         return
@@ -2325,6 +2378,13 @@ def input(tecla):
         if tecla == "e" and cl.cerca is not None:
             audio.efecto("confirmar")
             abrir_dialogo(cl.cerca)
+        elif tecla == "e" and cl.objeto_cerca is not None:
+            agarrar()
+        elif (tecla.isdigit() and tecla != "0" and cl.partida.sigilo is not None
+              and cl.partida.sigilo.elegir(int(tecla))):
+            # 1-9 ponen en la mano lo que llevas, en el orden en que lo agarraste
+            audio.efecto("mover")
+            pintar_inventario()
         elif tecla in ("enter", "space"):
             p = cl.partida
             # el dia que se investiga, sacar el telefono es irreversible:

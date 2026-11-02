@@ -25,6 +25,7 @@ AVISOS_MAXIMOS = 3         # al tercero te sacan del colegio
 VELOCIDAD = 1.1            # paso de ronda, mas lento que el tuyo
 ESPERA = 1.8               # parada en cada punto de la ronda
 BARRIDO = 45.0             # en la parada barre con la linterna a cada lado
+AGARRE = 1.2               # a cuanto hay que estar de algo para agarrarlo (E)
 
 
 def _entrada(p, q, rect):
@@ -116,6 +117,10 @@ class Vigilante:
         Es el abanico que dibuja el cliente: se corta contra lo mismo que
         corta la vista, asi que lo que se ve iluminado es lo que vigila.
         """
+        # Solo lo que queda al alcance: el colegio son ~1000 rectangulos y
+        # el abanico se recalcula en cada fotograma, para cada vigilante.
+        x, z, a = self.x, self.z, ALCANCE
+        tapan = [r for r in tapan if r[0] - a < x < r[1] + a and r[2] - a < z < r[3] + a]
         puntos = []
         for i in range(n + 1):
             a = math.radians(self.rumbo - MEDIO_ANGULO + 2 * MEDIO_ANGULO * i / n)
@@ -128,14 +133,21 @@ class Vigilante:
 
 
 class Sigilo:
-    """La ronda entera y lo que sabe de ti: sospecha y avisos."""
+    """La ronda entera y lo que sabe de ti: sospecha, avisos y lo que llevas."""
 
-    def __init__(self, rutas, regreso):
+    def __init__(self, rutas, regreso, objetos=None):
         self.vigilantes = [Vigilante(i, r) for i, r in rutas.items()]
         self.regreso = regreso        # (x, z, rumbo): a donde te llevan al pillarte
         self.sospecha = 0.0           # 0..1
         self.avisos = 0
         self.quien = None             # el que te esta viendo ahora
+        # Lo que sigue por el colegio (id -> (x, z)) y lo que llevas, en el
+        # orden en que lo agarraste: ese orden es el de las teclas 1-9.
+        objetos = objetos or {}
+        self.sueltos = {i: (o["pos"][0], o["pos"][2]) for i, o in objetos.items()}
+        self.cantidades = {i: o.get("cantidad", 1) for i, o in objetos.items()}
+        self.inventario = []
+        self.en_mano = None
         # Lo que corta la vista, de pie y agachada. Es la geometria del
         # mapa y la pone el cliente al montar el escenario.
         # shortcut: viene de mundo.py; con servidor, el mapa pasara a datos compartidos.
@@ -174,6 +186,28 @@ class Sigilo:
 
     def rayos(self, vigilante):
         return vigilante.rayos(self.tapan_de_pie)
+
+    def al_alcance(self, x, z):
+        """El objeto suelto mas cercano que se puede agarrar desde (x, z)."""
+        d, i = min(((math.hypot(ox - x, oz - z), i)
+                    for i, (ox, oz) in self.sueltos.items()), default=(None, None))
+        return i if d is not None and d <= AGARRE else None
+
+    def agarrar(self, x, z):
+        """Agarra lo que haya al alcance y lo pone en la mano. Devuelve su id."""
+        i = self.al_alcance(x, z)
+        if i is not None:
+            del self.sueltos[i]
+            self.inventario.append(i)
+            self.en_mano = i
+        return i
+
+    def elegir(self, n):
+        """Tecla n (1-9): pone en la mano el n-esimo objeto que llevas."""
+        if not 1 <= n <= len(self.inventario):
+            return False
+        self.en_mano = self.inventario[n - 1]
+        return True
 
 
 # ===================================================================
@@ -223,4 +257,14 @@ if __name__ == "__main__":
     assert s.sospecha == 0.0
     s.actualizar(0.5, -3.0, 0.0, False, True)
     assert s.sospecha > 0.0 and s.quien == "g"
+
+    # Se agarra de cerca, se lleva en orden y se elige con el numero.
+    s = Sigilo({}, (0, 0, 0), {"canicas": {"pos": (1.0, 0.8, 0.0), "cantidad": 5},
+                               "petardo": {"pos": (6.0, 1.1, 0.0)}})
+    assert s.al_alcance(3.0, 0.0) is None and s.agarrar(3.0, 0.0) is None
+    assert s.agarrar(0.2, 0.0) == "canicas" and s.en_mano == "canicas"
+    assert s.al_alcance(0.2, 0.0) is None, "no se agarra dos veces"
+    assert not s.elegir(2)
+    assert s.agarrar(5.5, 0.5) == "petardo" and s.inventario == ["canicas", "petardo"]
+    assert s.elegir(1) and s.en_mano == "canicas" and s.cantidades["canicas"] == 5
     print("sigilo: todo bien")

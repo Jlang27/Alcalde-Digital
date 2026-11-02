@@ -397,6 +397,50 @@ class Sospecha:
         _limpiar(self.piezas)
 
 
+class Inventario:
+    """Lo que llevas (capitulo 2), abajo a la derecha.
+
+    Cada objeto con la tecla que lo pone en la mano y cuantos quedan. El
+    de la mano va en tinta clara con el filo ambar; los demas, tenues.
+    Sin nada encima no se dibuja.
+    """
+
+    X, Y, PASO = 0.60, -0.17, 0.05
+
+    def __init__(self):
+        self.piezas = []
+        self.visible = True
+
+    def poner(self, objetos, en_mano):
+        """objetos: [(nombre, cantidad)] en el orden de las teclas 1-9."""
+        _limpiar(self.piezas)
+        if not objetos:
+            return
+        a = self.piezas.append
+        a(E.pequena("LLEVAS", (self.X, self.Y), E.TEXTO_TENUE, escala=0.5))
+        for k, (nombre, cantidad) in enumerate(objetos):
+            y = self.Y - 0.05 - k * self.PASO
+            piezas, ancho = E.tecla(str(k + 1), "", self.X, y, escala=0.8)
+            self.piezas += piezas
+            texto = nombre if cantidad == 1 else f"{nombre}  ×{cantidad}"
+            a(E.pequena(texto, (self.X + ancho - 0.014, y),
+                        E.TEXTO if k == en_mano else E.TEXTO_TENUE,
+                        escala=0.66, origen=(-0.5, 0)))
+            if k == en_mano:
+                a(E.banda(0.006, 0.042, (self.X - 0.014, y), E.LLERAS))
+        for p in self.piezas:
+            p.enabled = self.visible
+
+    def mostrar(self, visible):
+        if visible != self.visible:
+            self.visible = visible
+            for p in self.piezas:
+                p.enabled = visible
+
+    def cerrar(self):
+        _limpiar(self.piezas)
+
+
 class Dialogo:
     """La charla con un vecino de la cafeteria.
 

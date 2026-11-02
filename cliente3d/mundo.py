@@ -7,9 +7,10 @@ from direct.actor.Actor import Actor
 from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
                           Geom, GeomLines, GeomNode, GeomVertexData,
                           GeomVertexFormat, GeomVertexWriter, LColor, Material,
-                          PNMImage, PointLight, Texture, TextureAttrib,
-                          TransparencyAttrib)
-from ursina import Entity, Mesh, application, camera, color, destroy, Vec3
+                          PNMImage, PointLight, SamplerState, Texture,
+                          TextureAttrib, TransparencyAttrib)
+from PIL import Image, ImageDraw, ImageFont
+from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec3
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUTA_PERSONAJE = os.path.join(RAIZ, "assets", "personajes", "prueba.glb")
@@ -2730,7 +2731,7 @@ def cambiar_escenario(mundo, escenario):
         actor.cleanup()
     for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo", "lluvia",
                   "sirenas", "fase_sirena", "luz_sirena", "reloj",
-                  "luz_ambiente"):
+                  "luz_ambiente", "objetos"):
         _ACTUAL.pop(clave, None)
     if _ACTUAL["contenedor"] is not None:
         _ACTUAL["contenedor"].removeNode()
@@ -2761,8 +2762,14 @@ def crear(escenario="cafeteria", rol=None):
     _montar(mundo, escenario)
     actor = protagonista(mundo, rol)
 
+    # Skinning en la GPU: simplepbr solo lo activa por su cuenta con GL 3.2+,
+    # y con el perfil por defecto de Panda deformaba los personajes en la CPU.
+    # En una grafica integrada eso era la mitad del fotograma con cinco
+    # personajes en pantalla. Nuestros esqueletos (~68 huesos) caben en las
+    # 100 matrices del shader.
     _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=4,
-                                        max_lights=8, enable_shadows=False)
+                                        max_lights=8, enable_shadows=False,
+                                        use_hardware_skinning=True)
     brillo(0.0)
     return mundo, actor
 
@@ -3289,6 +3296,304 @@ def quitar_vigilantes(pares):
         destroy(haz)
         actor.cleanup()
         actor.removeNode()
+
+
+# ===================================================================
+#  OBJETOS QUE SE AGARRAN (capitulo 2): las reglas estan en sigilo.py
+# ===================================================================
+
+# Las texturas se pintan al vuelo con PIL en vez de bajarse: son pocas,
+# pequenas y nuestras (nada que anotar en CREDITOS.md), y la letra sale de
+# las mismas fuentes que la interfaz.
+_TEXTURAS = {}
+
+# Las canicas son de las cuatro tintas de la campana y una lechosa.
+TINTES_CANICAS = ((40, 95, 190), (200, 50, 40), (230, 165, 40), (60, 150, 80),
+                  (235, 232, 220))
+
+
+def _textura(nombre, pintar, ancho, alto, srgb=True):
+    """Textura pintada por pintar(imagen) una sola vez.
+
+    En sRGB para el mundo PBR: simplepbr trabaja en lineal y asi la
+    convierte al leerla. Fuera del PBR (el destello) va tal cual.
+    """
+    if nombre not in _TEXTURAS:
+        img = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
+        pintar(img)
+        tex = Texture(nombre)
+        tex.setup2dTexture(ancho, alto, Texture.T_unsigned_byte,
+                           Texture.F_srgb_alpha if srgb else Texture.F_rgba)
+        # PIL guarda las filas de arriba abajo y Panda de abajo arriba.
+        tex.setRamImageAs(img.transpose(Image.FLIP_TOP_BOTTOM).tobytes(), "RGBA")
+        tex.setMinfilter(SamplerState.FT_linear_mipmap_linear)
+        tex.setAnisotropicDegree(4)
+        _TEXTURAS[nombre] = tex
+    return _TEXTURAS[nombre]
+
+
+def _letra(tam, titular=True):
+    archivo = "ArchivoBlack.ttf" if titular else "SpaceGrotesk.ttf"
+    return ImageFont.truetype(os.path.join(RAIZ, "assets", "fuentes", archivo), tam)
+
+
+def _pintar_canica(tinte):
+    def pintar(img):
+        d, (w, h) = ImageDraw.Draw(img), img.size
+        claro = tuple(int(c * 0.35 + 255 * 0.55) for c in tinte)
+        d.rectangle((0, 0, w, h), fill=(*claro, 255))
+        # Dos cintas retorcidas por dentro: la canica de toda la vida.
+        for fase in (0.0, math.pi):
+            d.line([(x, h / 2 + math.sin(x / w * 4 * math.pi + fase) * h * 0.28)
+                    for x in range(0, w + 1, 2)], fill=(*tinte, 255), width=max(2, h // 6))
+    return pintar
+
+
+def _pintar_tela(img):
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(110, 28, 30, 255))
+    for i in range(0, w, 4):                       # la trama
+        d.line((i, 0, i, h), fill=(132, 38, 38, 255))
+    for j in range(0, h, 4):
+        d.line((0, j, w, j), fill=(88, 20, 24, 255))
+    for x in range(0, w, 8):                       # la costura
+        d.line((x, h * 0.78, x + 4, h * 0.78), fill=(226, 200, 150, 255), width=2)
+
+
+def _pintar_esfera(img):
+    """La cara del despertador: numeros, rayas y las agujas a las 4:42."""
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    c = w / 2
+    d.rectangle((0, 0, w, h), fill=(30, 26, 24, 255))
+    d.ellipse((4, 4, w - 4, h - 4), fill=(238, 230, 208, 255),
+              outline=(42, 36, 32, 255), width=7)
+    for k in range(60):
+        a = 2 * math.pi * k / 60
+        r0, grosor = (c * 0.70, 6) if k % 5 == 0 else (c * 0.80, 2)
+        d.line((c + math.sin(a) * r0, c - math.cos(a) * r0,
+                c + math.sin(a) * c * 0.86, c - math.cos(a) * c * 0.86),
+               fill=(36, 32, 30, 255), width=grosor)
+    letra = _letra(int(w * 0.15))
+    for k, cifra in ((0, "12"), (3, "3"), (6, "6"), (9, "9")):
+        a = 2 * math.pi * k / 12
+        d.text((c + math.sin(a) * c * 0.52, c - math.cos(a) * c * 0.52), cifra,
+               font=letra, fill=(30, 28, 26, 255), anchor="mm")
+    d.text((c, c * 1.32), "NOVA", font=_letra(int(w * 0.06)),
+           fill=(150, 40, 32, 255), anchor="mm")
+    for vuelta, largo, grosor, tinta in ((4.7 / 12, 0.40, 9, (24, 22, 20)),
+                                         (42 / 60, 0.64, 6, (24, 22, 20)),
+                                         (17 / 60, 0.70, 2, (190, 40, 30))):
+        a = 2 * math.pi * vuelta
+        d.line((c, c, c + math.sin(a) * c * largo, c - math.cos(a) * c * largo),
+               fill=(*tinta, 255), width=grosor)
+    d.ellipse((c - 9, c - 9, c + 9, c + 9), fill=(24, 22, 20, 255))
+
+
+def _pintar_esmalte(img):
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(176, 32, 26, 255))
+    for x in range(0, w, 2):                       # cepillado del esmalte
+        k = (x * 37) % 13 - 6
+        d.line((x, 0, x, h), fill=(176 + k * 3, 32 + k, 26 + k, 255))
+
+
+def _pintar_petardo(img):
+    """Papel rojo con etiqueta amarilla. El ancho da la vuelta al tubo y el
+    alto va a lo largo, asi que el «PELIGRO» se escribe de lado."""
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(198, 36, 28, 255))
+    # Arriba y hacia delante con el tubo tumbado: u = 0,75 es lo mas alto.
+    d.rectangle((w * 0.48, h * 0.14, w * 0.86, h * 0.86), fill=(236, 182, 38, 255))
+    rotulo = Image.new("RGBA", (h, w), (0, 0, 0, 0))
+    ImageDraw.Draw(rotulo).text((h / 2, w * 0.66), "PELIGRO", font=_letra(int(w * 0.22)),
+                                fill=(26, 20, 18, 255), anchor="mm")
+    img.alpha_composite(rotulo.rotate(90, expand=True))
+    for y in (h * 0.06, h * 0.94):                 # ribete dorado
+        for x in range(4, w, 10):
+            d.ellipse((x - 2, y - 2, x + 2, y + 2), fill=(236, 182, 38, 255))
+
+
+def _pintar_carton(texto):
+    def pintar(img):
+        d, (w, h) = ImageDraw.Draw(img), img.size
+        d.rectangle((0, 0, w, h), fill=(150, 104, 58, 255))
+        for y in range(0, h, 6):                   # la onda del carton
+            d.line((0, y, w, y), fill=(140, 96, 52, 255))
+        if not texto:
+            # la tapa: cinta de embalar de lado a lado
+            d.rectangle((w * 0.38, 0, w * 0.62, h), fill=(196, 160, 104, 255))
+            return
+        # A rotulador y torcido, como lo escribiria una secretaria.
+        rotulo = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        ImageDraw.Draw(rotulo).text((w / 2, h / 2), texto, font=_letra(int(h * 0.14)),
+                                    fill=(22, 20, 22, 235), anchor="mm")
+        img.alpha_composite(rotulo.rotate(4, resample=Image.BICUBIC))
+    return pintar
+
+
+def _pintar_destello(img):
+    """Punto de luz con cruz: el brillo de algo que se puede agarrar."""
+    w, h = img.size
+    px = img.load()
+    for j in range(h):
+        for i in range(w):
+            dx, dy = abs(i - w / 2 + 0.5) / (w / 2), abs(j - h / 2 + 0.5) / (h / 2)
+            punto = max(0.0, 1.0 - math.hypot(dx, dy)) ** 2.2
+            cruz = max(0.0, 1.0 - dx) * math.exp(-dy * 18) + max(0.0, 1.0 - dy) * math.exp(-dx * 18)
+            px[i, j] = (255, 255, 255, int(255 * min(1.0, punto + 0.7 * cruz)))
+
+
+def _cilindro(radio, alto, lados=20):
+    """Tubo sin tapas a lo largo de y, centrado, con la textura dando la vuelta."""
+    v, t, n, uv = [], [], [], []
+    for k in range(lados + 1):
+        a = 2 * math.pi * k / lados
+        x, z = math.sin(a), math.cos(a)
+        v += [(x * radio, -alto / 2, z * radio), (x * radio, alto / 2, z * radio)]
+        n += [(x, 0, z)] * 2
+        uv += [(k / lados, 0), (k / lados, 1)]
+    for k in range(lados):
+        i = 2 * k
+        t += [i, i + 2, i + 1, i + 1, i + 2, i + 3]
+    return Mesh(vertices=v, triangles=t, normals=n, uvs=uv, mode="triangle")
+
+
+def _disco(radio, lados=28):
+    """Tapa redonda mirando a -z, con la textura recortada en circulo."""
+    v, uv = [(0, 0, 0)], [(0.5, 0.5)]
+    for k in range(lados + 1):
+        a = 2 * math.pi * k / lados
+        v.append((math.sin(a) * radio, math.cos(a) * radio, 0))
+        uv.append((0.5 + 0.5 * math.sin(a), 0.5 + 0.5 * math.cos(a)))
+    t = [i for k in range(1, lados + 1) for i in (0, k + 1, k)]
+    return Mesh(vertices=v, triangles=t, normals=[(0, 0, -1)] * len(v), uvs=uv,
+                mode="triangle")
+
+
+def _con_textura(e, tex):
+    e.setTexture(tex, 1)
+    e.setTwoSided(True)
+    return e
+
+
+def _canicas(mundo, x, y, z):
+    """La bolsita de tela con cinco canicas rodando fuera."""
+    tela = _material((1, 1, 1, 1), rugosidad=0.95)
+    tex = _textura("tela", _pintar_tela, 64, 64)
+    _con_textura(_pieza(mundo, "sphere", tela, (0.14, 0.09, 0.12), (x, y + 0.045, z)), tex)
+    _con_textura(_pieza(mundo, _cilindro(0.024, 0.04), tela, 1, (x, y + 0.095, z)), tex)
+    _pieza(mundo, "cube", _material((0.80, 0.70, 0.50, 1)), (0.06, 0.008, 0.008),
+           (x, y + 0.105, z))                    # el cordon
+    for k, (dx, dz) in enumerate(((0.10, 0.03), (0.14, -0.04), (0.09, -0.08),
+                                  (0.18, 0.04), (0.06, 0.09))):
+        tinte = TINTES_CANICAS[k]
+        # Un pelo de emision: en el aula a oscuras siguen leyendose de vidrio.
+        vidrio = _material((1, 1, 1, 1), rugosidad=0.08,
+                           emision=(*(c / 255 * 0.05 for c in tinte), 1))
+        _con_textura(_pieza(mundo, "sphere", vidrio, 0.032, (x + dx, y + 0.016, z + dz)),
+                     _textura(f"canica{k}", _pintar_canica(tinte), 64, 32))
+
+
+def _despertador(mundo, x, y, z):
+    """Despertador de campanas, con la esfera mirando a la sala (-z)."""
+    esmalte = _material((1, 1, 1, 1), rugosidad=0.35, metalico=0.3)
+    cromo = _material((0.75, 0.74, 0.70, 1), rugosidad=0.2, metalico=1.0)
+    tex_esmalte = _textura("esmalte", _pintar_esmalte, 64, 16)
+    r, fondo = 0.055, 0.045
+    cy = y + 0.018 + r
+    cuerpo = _con_textura(_pieza(mundo, _cilindro(r, fondo), esmalte, 1, (x, cy, z)), tex_esmalte)
+    cuerpo.rotation_x = 90                         # el tubo, de canto
+    aro = _pieza(mundo, _cilindro(r + 0.003, 0.008), cromo, 1, (x, cy, z - fondo / 2))
+    aro.rotation_x = 90
+    aro.setTwoSided(True)
+    _con_textura(_pieza(mundo, _disco(r * 0.92), _material((1, 1, 1, 1), rugosidad=0.25),
+                        1, (x, cy, z - fondo / 2 - 0.002)),
+                 _textura("esfera_reloj", _pintar_esfera, 256, 256))
+    trasera = _con_textura(_pieza(mundo, _disco(r), esmalte, 1, (x, cy, z + fondo / 2)),
+                           tex_esmalte)
+    trasera.rotation_y = 180
+    for s in (-1, 1):
+        _pieza(mundo, "sphere", cromo, 0.046, (x + s * 0.034, cy + r + 0.004, z))  # campanas
+        _pieza(mundo, "sphere", cromo, 0.02, (x + s * 0.032, y + 0.01, z))         # patas
+    _pieza(mundo, "cube", cromo, (0.012, 0.032, 0.012), (x, cy + r + 0.014, z))   # martillo
+
+
+def _petardo(mundo, x, y, z):
+    """Tres petardos atados, tumbados sobre el mostrador, con su mecha."""
+    papel = _material((1, 1, 1, 1), rugosidad=0.7)
+    tex = _textura("petardo", _pintar_petardo, 128, 256)
+    for dy, dz in ((0.022, -0.023), (0.022, 0.023), (0.060, 0.0)):
+        tubo = _con_textura(_pieza(mundo, _cilindro(0.022, 0.17), papel, 1,
+                                   (x, y + dy, z + dz)), tex)
+        tubo.rotation_z = 90
+    cordel = _material((0.30, 0.22, 0.12, 1), rugosidad=0.9)
+    for dx in (-0.06, 0.06):                       # atados por los dos extremos
+        _pieza(mundo, "cube", cordel, (0.008, 0.088, 0.094), (x + dx, y + 0.042, z))
+    mecha = _pieza(mundo, _cilindro(0.004, 0.07), _material((0.06, 0.05, 0.04, 1)), 1,
+                   (x + 0.115, y + 0.045, z))
+    mecha.rotation_z, mecha.rotation_y = 70, 25
+    mecha.setTwoSided(True)
+
+
+def _caja_requisados(mundo, x0, y0, z0):
+    """La caja de lo requisado en el mostrador del hall: de ahi sale el petardo."""
+    x1, y1, z1 = x0 + 0.34, y0 + 0.20, z0 + 0.26
+    carton = _material((1, 1, 1, 1), rugosidad=0.95)
+    caras = _caras_caja(x0, x1, y0, y1, z0, z1)
+    _con_textura(_pieza(mundo, _malla(caras[:4]), carton, 1, (0, 0, 0)),
+                 _textura("carton_requisados", _pintar_carton("REQUISADOS"), 256, 160))
+    _con_textura(_pieza(mundo, _malla(caras[4:]), carton, 1, (0, 0, 0)),
+                 _textura("carton_tapa", _pintar_carton(None), 128, 128))
+
+
+_OBJETOS = {"canicas": _canicas, "despertador": _despertador, "petardo": _petardo}
+
+
+def objetos_sueltos(mundo, objetos):
+    """Dibuja lo que queda por agarrar. objetos: id -> (x, alto, z).
+
+    Cada uno lleva un destello encima (fuera del PBR, sin luz): en un
+    colegio a oscuras una cosa de cinco centimetros no se encontraba.
+    """
+    _ACTUAL["objetos"] = {}
+    antes = len(_ENTIDADES)
+    _caja_requisados(mundo, 5.65, 1.1, -5.73)
+    _ACTUAL["objetos"]["requisados"] = (_ENTIDADES[antes:], None)
+    for id_objeto, (x, y, z) in objetos.items():
+        antes = len(_ENTIDADES)
+        _OBJETOS[id_objeto](mundo, x, y, z)
+        brillo = Entity(parent=scene, model="quad", position=(x, y + 0.2, z), scale=0.3,
+                        color=color.Color(1.0, 0.80, 0.45, 0.4))
+        # No con billboard=True: Ursina lo pasa como desplazamiento y acerca
+        # el destello un metro a la camara, por delante de quien lo tape.
+        brillo.setBillboardPointEye()
+        brillo.setTexture(_textura("destello", _pintar_destello, 64, 64, srgb=False), 1)
+        brillo.setTransparency(TransparencyAttrib.MAlpha)
+        brillo.setDepthWrite(False)
+        _ENTIDADES.append(brillo)
+        _ACTUAL["objetos"][id_objeto] = (_ENTIDADES[antes:], brillo)
+
+
+def brillar_objetos(cerca, t):
+    """Late despacio; el que esta al alcance de la mano brilla del todo."""
+    for i, (_piezas, brillo) in _ACTUAL.get("objetos", {}).items():
+        if brillo is None:
+            continue
+        pulso = 0.5 + 0.5 * math.sin(t * 2.6 + len(i))
+        brillo.alpha = 0.95 if i == cerca else 0.22 + 0.22 * pulso
+        brillo.scale = 0.42 if i == cerca else 0.26 + 0.04 * pulso
+
+
+def quitar_objeto(id_objeto):
+    piezas, _ = _ACTUAL.get("objetos", {}).pop(id_objeto, ((), None))
+    for e in piezas:
+        destroy(e)
+        _ENTIDADES.remove(e)
+
+
+def quitar_objetos():
+    for i in list(_ACTUAL.get("objetos", {})):
+        quitar_objeto(i)
 
 
 # Los que tienen algo que contar en la cafeteria (capitulo 1). Las sillas

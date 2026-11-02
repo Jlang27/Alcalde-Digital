@@ -1,8 +1,9 @@
 """Escenario: el sigilo del capitulo 2 en el Colegio Tecnico Nova.
 
-Salta al dia 2 y comprueba que la ronda anda y pinta su luz, que agachada
-detras de una mesa no te ven, que te pillan y te devuelven al pasillo, y
-que al tercer aviso te sacan del colegio y queda el telefono.
+Salta al dia 2 y comprueba que la ronda anda y pinta su luz, que los
+objetos se agarran con E y se eligen con 1-9, que agachada detras de una
+mesa no te ven, que te pillan y te devuelven al pasillo, y que al tercer
+aviso te sacan del colegio y queda el telefono.
 
     .venv/bin/python herramientas/banco_pruebas/colegio.py
 """
@@ -70,6 +71,31 @@ assert J.mundo._ACTUAL["nombre"] == "rectoria"
 antes = [(v.x, v.z) for v in s.vigilantes]
 pasar(2.0)
 assert [(v.x, v.z) for v in s.vigilantes] != antes, "la ronda no anda"
+
+# Los objetos: «E agarrar» al acercarse, E los quita de la mesa y 1-9 los
+# ponen en la mano. La ronda se queda quieta y lejos para no estorbar.
+for v in s.vigilantes:
+    v.avanzar = lambda dt: None
+vigilante("sala").x, vigilante("sala").z, vigilante("sala").rumbo = 20.8, -2.9, 180.0
+assert set(s.sueltos) == {"canicas", "despertador", "petardo"}
+for id_objeto, sitio, mesa in (("canicas", (7.3, 0.85), (6.3, 0.85)),
+                               ("despertador", (19.85, 2.1), (19.85, 2.85)),
+                               ("petardo", (5.35, -6.4), (5.35, -5.6))):
+    poner(*sitio, mesa)
+    pasar(0.4)
+    assert J.cl.objeto_cerca == id_objeto and J.cl.marca_objeto, (id_objeto, J.cl.objeto_cerca)
+    foto(f"colegio_objeto_{id_objeto}")
+    tecla("e", 0.3)
+    assert s.inventario[-1] == id_objeto and s.en_mano == id_objeto
+    assert id_objeto not in J.mundo._ACTUAL["objetos"], f"{id_objeto} sigue en la mesa"
+    assert J.cl.objeto_cerca is None and not J.cl.marca_objeto
+tecla("2", 0.2)
+assert s.en_mano == "despertador"
+tecla("5", 0.2)
+assert s.en_mano == "despertador", "un numero sin objeto no cambia nada"
+foto("colegio_inventario")
+for v in s.vigilantes:
+    del v.avanzar
 
 # La ronda vista desde la puerta del archivo, sin que te vean.
 v = vigilante("archivo")
