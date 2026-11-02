@@ -585,15 +585,17 @@ DIA_SIGILO = 1
 # La ronda de cada vigilante, ida y vuelta, en puntos (x, z) del plano de
 # mundo.py. Cada una pasa junto a un folio: no hay foto gratis.
 RONDAS_CAPITULO_2 = {
-    # el pasillo entre la mesa del folio 2 y los estantes, y el fondo
-    "archivo": [(3.6, 7.0), (3.6, 15.9), (-3.8, 15.9)],
-    # por delante del mostrador (folio 3) y junto a la mesa del folio 4
-    "restringido": [(13.2, 7.0), (22.0, 7.0), (22.0, 16.2)],
+    # sube junto a la zona de mesas (folio 2), cruza el fondo y baja por el
+    # pasillo central de los estantes, que pasa al lado del folio 1
+    "archivo": [(7.0, 11.5), (7.0, 28.5), (-1.0, 28.5), (-1.0, 11.5)],
+    # por delante del mostrador (folio 3), sube por el lado este y vuelve
+    # por el fondo, junto a la mesa del folio 4
+    "restringido": [(13.5, 8.5), (28.5, 8.5), (28.5, 28.8), (18.5, 28.8)],
     # cubre la puerta de la sala de profesores al pasillo de salida
     "sala": [(20.8, 1.9), (20.8, -2.9)],
 }
 # A donde te llevan cuando te pillan: el pasillo, frente a la rectoria.
-REGRESO_CAPITULO_2 = (3.9, 4.9, 90.0)
+REGRESO_CAPITULO_2 = (3.9, 5.6, 90.0)
 
 
 # ===================================================================

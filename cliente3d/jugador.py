@@ -32,8 +32,10 @@ ALTURA_TECHO = 2.45          # el techo de la cafeteria, menos un dedo
 MARGEN_PARED = 0.15          # la camara puede rozar la pared, no atravesarla
 DISTANCIA_MINIMA = 1.25      # mas cerca que esto se le ve por dentro
 # Contra un muro interior se acepta acercarse mas: ver un poco del
-# personaje por dentro es menos grave que ver a traves de la pared.
-DISTANCIA_MINIMA_MURO = 0.55
+# personaje por dentro es menos grave que ver a traves de la pared. Con
+# 0,55 un escondite estrecho (agachado entre una mesa y el muro) dejaba
+# la camara dentro de la pared y la pantalla en gris.
+DISTANCIA_MINIMA_MURO = 0.3
 # De cerca (un pasillo de lado, un rincon, agachado contra una mesa) el
 # personaje tapaba media pantalla y no se veia a donde ibas. Por debajo de
 # DISTANCIA_CERCA la camara sube como una grua y mira mas hacia abajo, y el
@@ -49,13 +51,20 @@ DISTANCIA_TRANSPARENTE = 1.4
 # espalda: de cerca se abre un poco para que quepa la sala.
 ABRIR_CERCA = 12.0
 ALTURA_OBJETIVO = 1.30       # a la altura del pecho, no de los pies
-ALTURA_AGACHADO = 0.85       # la camara baja con el cuerpo: se siente el sigilo
+ALTURA_AGACHADO = 0.80       # la camara baja con el cuerpo: se siente el sigilo
+# Agachado la camara tambien se acerca y mira mas a ras de suelo: de pie,
+# desde 4,3 m y picando, se veia el suelo y no la sala ni al vigilante.
+DISTANCIA_AGACHADO = 3.2
+PICADO_AGACHADO = -7.0       # grados: mas horizontal que de pie
+# Agachado detras de una mesa la grua casi no sube: si la camara se
+# quedara arriba, agacharse no se notaria en pantalla.
+GRUA_AGACHADO = 0.35         # fraccion de GRUA que queda agachado
 HOMBRO = 0.62                # descentra al personaje y deja aire a la derecha
 SUAVIDAD = 7.0               # retardo de la camara; 0 seria rigido
 
 PITCH_MIN, PITCH_MAX = -6.0, 32.0
 FOV_EXPLORACION = 40         # igual que mundo.FOV_BASE: horizontal, cerrada
-FOV_CORRER = 46              # abrir un poco la lente al correr da sensacion de velocidad
+ABRIR_CORRER = 6             # abrir un poco la lente al correr da sensacion de velocidad
 
 # Animacion de cada estado, por orden de preferencia: si el modelo no trae
 # la primera se usa la siguiente. Los nombres de la izquierda son contrato
@@ -142,7 +151,11 @@ class Jugador:
         self.pivote = None              # lo que sigue la camara, con retardo
         self.distancia = DISTANCIA
         self.cerca = 0.0                # 0 lejos .. 1 pegada (grua y transparencia)
+        self.agache = 0.0               # 0 de pie .. 1 agachado, suavizado
         self.alfa = 1.0
+        # La lente de exploracion de cada escenario (mundo.lente()): la
+        # cerrada de cine en la cafeteria, mas abierta donde hay que vigilar.
+        self.fov = FOV_EXPLORACION
         # Hasta donde puede subir la camara: el techo de la sala menos un
         # dedo. La cafeteria mide 2,5 m; el colegio y la oficina, 3,2.
         self.techo = ALTURA_TECHO
@@ -290,7 +303,7 @@ class Jugador:
         alto = ALTURA_AGACHADO if self.agachado else ALTURA_OBJETIVO
         return Vec3(x, self.altura_suelo + alto, z)
 
-    def _distancia_util(self, origen, rad, rad_p):
+    def _distancia_util(self, origen, rad, rad_p, maximo=DISTANCIA):
         """Cuanto puede alejarse la camara sin salirse del cuarto.
 
         Recortar la POSICION de la camara contra las paredes parece lo
@@ -312,7 +325,7 @@ class Jugador:
         dy = math.sin(rad_p)
         dz = -math.cos(rad) * math.cos(rad_p) - math.sin(rad) * k
 
-        util = DISTANCIA
+        util = maximo
         if dy > 1e-6:
             util = min(util, (self.techo - origen.y) / dy)
         if self.limites is not None:
@@ -323,7 +336,7 @@ class Jugador:
                     util = min(util, (mayor - MARGEN_PARED - valor) / d)
                 elif d < -1e-6:
                     util = min(util, (menor + MARGEN_PARED - valor) / d)
-        util = max(DISTANCIA_MINIMA, min(DISTANCIA, util))
+        util = max(DISTANCIA_MINIMA, min(maximo, util))
         for rect in self.muros:
             t = _choque(origen.x, origen.z, dx, dz, rect)
             if t is not None:
@@ -346,12 +359,19 @@ class Jugador:
                            _acercar(self.pivote.y, mira.y, factor),
                            _acercar(self.pivote.z, mira.z, factor))
 
+        # Agacharse acerca la camara y la pone mas horizontal, sin saltos:
+        # el tope de distancia baja poco a poco y la distancia lo sigue.
+        agache = 1.0 if self.agachado else 0.0
+        self.agache = agache if inmediato else _acercar(self.agache, agache, factor)
+        maximo = DISTANCIA + (DISTANCIA_AGACHADO - DISTANCIA) * self.agache
+        pitch = self.pitch + PICADO_AGACHADO * self.agache
+
         rad = math.radians(self.yaw)
-        rad_p = math.radians(self.pitch)
+        rad_p = math.radians(pitch)
 
         # Contra la pared se acerca de golpe (si no, se mete en el muro) y
         # al despejarse se aleja suave, para que no de saltos de zoom.
-        util = self._distancia_util(self.pivote, rad, rad_p)
+        util = self._distancia_util(self.pivote, rad, rad_p, maximo)
         if inmediato or util < self.distancia:
             self.distancia = util
         else:
@@ -376,21 +396,23 @@ class Jugador:
         cerca = (DISTANCIA_CERCA - distancia) / (DISTANCIA_CERCA - DISTANCIA_MINIMA_MURO)
         cerca = max(0.0, min(1.0, cerca))
         self.cerca = cerca if inmediato else _acercar(self.cerca, cerca, factor)
-        pos.y += GRUA * self.cerca
+        pos.y += GRUA * self.cerca * (1.0 - (1.0 - GRUA_AGACHADO) * self.agache)
         tapa = ((DISTANCIA_TRANSPARENTE - distancia)
                 / (DISTANCIA_TRANSPARENTE - DISTANCIA_MINIMA_MURO))
         self._poner_alfa(1.0 - (1.0 - ALFA_CERCA) * max(0.0, min(1.0, tapa)))
         # Ultimo recurso: en un rincon muy cerrado ni la distancia
         # minima cabe. Se traslada sin girar, asi el encuadre no bascula.
-        pos.y = min(pos.y, self.techo)
+        # Y nunca a ras de suelo: agachado y mirando hacia arriba se metia
+        # por debajo de las mesas.
+        pos.y = max(0.35, min(pos.y, self.techo))
         if self.limites is not None:
             x0, x1, z0, z1 = self.limites
             pos.x = max(x0, min(x1, pos.x))
             pos.z = max(z0, min(z1, pos.z))
 
         camera.position = pos
-        camera.rotation = Vec3(self.pitch + PICADO * self.cerca, self.yaw, 0)
-        lente = ((FOV_CORRER if self.corriendo else FOV_EXPLORACION)
+        camera.rotation = Vec3(pitch + PICADO * self.cerca, self.yaw, 0)
+        lente = (self.fov + (ABRIR_CORRER if self.corriendo else 0)
                  + ABRIR_CERCA * self.cerca)
         camera.fov = lente if inmediato else _acercar(camera.fov, lente, factor * 0.6)
 
@@ -401,5 +423,5 @@ class Jugador:
         pueden dejarla abierta (el plano general usa 66 grados) y con esa
         lente el local se estira por los bordes como un ojo de pez.
         """
-        camera.fov = FOV_EXPLORACION
+        camera.fov = self.fov
         self.seguir(0.0, inmediato=True)

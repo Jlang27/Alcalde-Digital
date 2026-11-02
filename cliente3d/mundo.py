@@ -1220,26 +1220,41 @@ def _ciudad(mundo):
 # Los muros son a la vez la geometria y los rectangulos de colision: lo
 # que se ve es exactamente lo que bloquea.
 X_OESTE, X_ESTE = -5.3, 24.7
-Z_SUR, Z_NORTE = -10.7, 17.3
+# El ala de los archivos sobresale 6 m por cada lado (planta en T): asi
+# crece sin mover el despacho, el aula ni el hall, cuyos planos fijos
+# estan medidos desde la marca. Y es mas alta que el resto: una sala de
+# archivo grande y oscura donde jugar al escondite con los vigilantes.
+XA_OESTE, XA_ESTE = X_OESTE - 6.0, X_ESTE + 6.0
+Z_SUR, Z_NORTE = -10.7, 30.8
 ALTO_COLEGIO = 3.2
+ALTO_ARCHIVOS = 5.0
 GROSOR_MURO = 0.2
-# Fila de cada muro horizontal (eje z) y columnas de los verticales.
-Z_ARCHIVO, Z_PASILLO, Z_ABAJO = 6.25, 3.75, -3.75
+# Fila de cada muro horizontal (eje z) y columnas de los verticales. El
+# pasillo mide 4 m y los archivos 13 de fondo: con 2,5 m y 11 la camara
+# de hombro se quedaba pegada a la espalda entre taquillas y estantes.
+Z_ARCHIVO, Z_PASILLO, Z_ABAJO = 7.75, 3.75, -3.75
+Z_MEDIO_PASILLO = (Z_PASILLO + Z_ARCHIVO) / 2
 
 # (eje, plano, desde, hasta, huecos de puerta). eje "z": muro que corre
 # a lo largo de x a la altura z=plano; eje "x": al reves.
-MUROS_COLEGIO = (
-    ("z", Z_NORTE, X_OESTE, X_ESTE, ()),
-    ("z", Z_SUR, X_OESTE, X_ESTE, ()),
-    ("x", X_OESTE, Z_SUR, Z_NORTE, ()),
-    ("x", X_ESTE, Z_SUR, Z_NORTE, ()),
+# Los del ala de archivos, que suben hasta ALTO_ARCHIVOS. Desde el pasillo
+# lo que pasa de 3,2 m lo tapa su techo.
+MUROS_ARCHIVOS = (
+    ("z", Z_NORTE, XA_OESTE, XA_ESTE, ()),
+    ("x", XA_OESTE, Z_ARCHIVO, Z_NORTE, ()),      # costados del ala
+    ("x", XA_ESTE, Z_ARCHIVO, Z_NORTE, ()),
     # archivos | pasillo: entrada al general y salida del restringido
-    ("z", Z_ARCHIVO, X_OESTE, X_ESTE, ((-3.5, -2.1), (22.4, 23.8))),
+    ("z", Z_ARCHIVO, XA_OESTE, XA_ESTE, ((-3.5, -2.1), (22.4, 23.8))),
+    ("x", 12.0, Z_ARCHIVO, Z_NORTE, ((11.8, 13.8),)),     # general | restringido
+)
+MUROS_COLEGIO = (
+    ("z", Z_SUR, X_OESTE, X_ESTE, ()),
+    ("x", X_OESTE, Z_SUR, Z_ARCHIVO, ()),
+    ("x", X_ESTE, Z_SUR, Z_ARCHIVO, ()),
     # pasillo | fila del medio: despacho, aula 2B y sala de profesores
     ("z", Z_PASILLO, X_OESTE, X_ESTE, ((3.2, 4.6), (8.0, 9.4), (22.4, 23.8))),
     # fila del medio | fila de abajo: despacho -> hall, sala -> salida
     ("z", Z_ABAJO, X_OESTE, X_ESTE, ((-1.0, 0.4), (22.4, 23.8))),
-    ("x", 12.0, Z_ARCHIVO, Z_NORTE, ((10.3, 12.3),)),     # general | restringido
     ("x", 4.75, Z_ABAJO, Z_PASILLO, ()),                  # despacho | aula
     ("x", 12.75, Z_ABAJO, Z_PASILLO, ()),                 # aula | sala
     ("x", 8.0, Z_SUR, Z_ABAJO, ((-8.0, -6.6),)),          # hall | escaleras
@@ -1248,8 +1263,8 @@ MUROS_COLEGIO = (
 
 # Los cuatro folios que Valeria fotografia (x, alto, z). Los lee el
 # minijuego; aqui solo se dibujan.
-FOLIOS_COLEGIO = ((-1.2, 0.80, 11.9), (8.9, 0.80, 7.9),
-                  (17.2, 0.97, 7.85), (23.6, 0.80, 15.3))
+FOLIOS_COLEGIO = ((-6.2, 0.80, 15.0), (8.9, 0.80, 9.9),
+                  (17.2, 0.97, 9.35), (23.2, 0.80, 27.1))
 
 
 def _tramos(a0, a1, huecos):
@@ -1505,15 +1520,17 @@ def _obra_colegio():
     azar = random.Random(2)     # semilla fija: el colegio sale siempre igual
 
     # --- muros: zocalo verde azulado y franja, como un colegio publico ---
-    _levantar_muros(o, MUROS_COLEGIO, ALTO_COLEGIO, "muro", "marco_puerta",
-                    (("zocalo", 0, 1.0), ("franja", 1.0, 1.07)))
+    zocalos = (("zocalo", 0, 1.0), ("franja", 1.0, 1.07))
+    _levantar_muros(o, MUROS_COLEGIO, ALTO_COLEGIO, "muro", "marco_puerta", zocalos)
+    _levantar_muros(o, MUROS_ARCHIVOS, ALTO_ARCHIVOS, "muro", "marco_puerta", zocalos)
     _placas(o, PLACAS_COLEGIO)
 
     # --- suelos: baldosa clara en pasillo, aula y salida; damero en el hall ---
-    for x0, x1, z0, z1 in ((X_OESTE, X_ESTE, 3.85, 6.15), (4.85, 12.65, -3.65, 3.65),
-                           (14.1, X_ESTE, Z_SUR, -3.85)):
+    zm = Z_MEDIO_PASILLO
+    for x0, x1, z0, z1 in ((X_OESTE, X_ESTE, Z_PASILLO + 0.1, Z_ARCHIVO - 0.1),
+                           (4.85, 12.65, -3.65, 3.65), (14.1, X_ESTE, Z_SUR, -3.85)):
         o.caja("baldosa", x0, x1, 0, 0.004, z0, z1)
-    o.caja("baldosa_franja", X_OESTE, X_ESTE, 0, 0.006, 4.75, 5.25)
+    o.caja("baldosa_franja", X_OESTE, X_ESTE, 0, 0.006, zm - 0.25, zm + 0.25)
     for i in range(14):
         for k in range(7):
             x0, z0 = X_OESTE + i, Z_SUR + k
@@ -1522,12 +1539,17 @@ def _obra_colegio():
 
     # --- techo: paneles fluorescentes; solo los del pasillo encendidos ---
     for x in range(-4, 24, 3):
-        o.caja("panel_luz", x, x + 1.2, 3.17, 3.195, 4.85, 5.15)
-    for x, z in ((-1, 9), (-1, 14), (6, 9), (6, 14), (15, 9), (15, 14),
-                 (21, 9), (21, 14), (7, -1), (10, -1), (16, 0), (21, 0),
-                 (-2, -7), (4, -7), (18, -7)):
-        o.caja("panel_luz" if (x, z) == (6, 9) else "panel_apagado",
-               x, x + 1.2, 3.17, 3.195, z - 0.3, z + 0.3)
+        o.caja("panel_luz", x, x + 1.2, 3.17, 3.195, zm - 0.15, zm + 0.15)
+    for x, z in ((7, -1), (10, -1), (16, 0), (21, 0), (-2, -7), (4, -7), (18, -7)):
+        o.caja("panel_apagado", x, x + 1.2, 3.17, 3.195, z - 0.3, z + 0.3)
+    # En los archivos, en su techo alto, solo estan encendidos los paneles
+    # que hay encima de las dos luces de verdad.
+    y = ALTO_ARCHIVOS
+    archivos = [(x, z) for x in (-9, -1.6, 4.5, 9.5) for z in (14, 19.5, 25)]
+    archivos += [(x, z) for x in (14.5, 20.5, 25.5) for z in (14, 20, 26)]
+    for x, z in archivos:
+        o.caja("panel_luz" if (x, z) in ((-1.6, 19.5), (20.5, 20)) else "panel_apagado",
+               x, x + 1.2, y - 0.03, y - 0.005, z - 0.3, z + 0.3)
 
     # ================= DESPACHO DEL RECTOR =================
     # Madera oscura hasta media altura y papel pintado calido: el unico
@@ -1636,23 +1658,35 @@ def _obra_colegio():
     _planta(o, 13.3, 3.1)
 
     # ================= ARCHIVOS =================
-    for x0, x1, z0, z1 in ((-3.0, 2.5, 13.2, 13.7), (-3.0, 2.5, 10.0, 10.5),
-                           (-3.0, 2.5, 7.3, 7.8), (6.0, 6.5, 10.3, 13.8),
-                           (14.7, 15.2, 10.3, 14.3), (19.7, 20.2, 10.3, 13.8)):
-        _estante_archivo(o, azar, x0, x1, z0, z1)
-    _archivador(o, "x", -5.2, 1, 14.0, 14.9)
-    _archivador(o, "x", -5.2, 1, 15.0, 15.9)
-    for a in (8.4, 9.3, 10.2, 11.1):
-        _archivador(o, "x", X_ESTE - 0.1, -1, a, a + 0.85)
-    _mesa(o, 4.2, 6.4, 8.0, 9.2)
-    _mesa(o, 7.7, 10.4, 7.2, 8.6)
-    _mesa(o, -2.0, -0.4, 11.4, 12.4)
-    _mesa(o, 22.8, 24.4, 14.8, 15.8)
-    o.caja("madera", 16.7, 20.2, 0, 0.95, 7.6, 8.1, bloquea=True)   # mostrador
-    for x, z, h in ((10.6, 15.6, 0.35), (10.6, 15.6 + 0.4, 0.3), (11.1, 16.4, 0.7),
-                    (3.4, 16.3, 0.35), (16.2, 16.4, 0.65), (12.4, 16.6, 0.35)):
+    # El general: cuatro filas de estantes partidas por un pasillo central
+    # de 3 m (x -2,5..0,5), con 4 m libres de una fila a otra, y al este
+    # la zona de mesas. Con pasillos estrechos la camara no cabia y no se
+    # veia ni el estante ni al vigilante.
+    # Ningun estante a menos de 3 m de un muro: se puede rodear cada fila,
+    # y esa vuelta es la que se juega al escondite con el vigilante.
+    for z0 in (12.5, 17.0, 21.5, 26.0):
+        for x0, x1 in ((-8.0, -2.5), (0.5, 5.5)):
+            _estante_archivo(o, azar, x0, x1, z0, z0 + 0.5)
+    _estante_archivo(o, azar, 8.5, 9.0, 13.5, 25.0)
+    # El restringido: tres hileras a lo largo, con 4,5 m entre ellas.
+    for x0 in (16.0, 21.0, 26.0):
+        _estante_archivo(o, azar, x0, x0 + 0.5, 13.0, 25.0)
+    _archivador(o, "x", XA_OESTE + 0.1, 1, 19.0, 19.9)
+    _archivador(o, "x", XA_OESTE + 0.1, 1, 20.0, 20.9)
+    for a in (10.0, 10.9, 11.8, 12.7):
+        _archivador(o, "x", XA_ESTE - 0.1, -1, a, a + 0.85)
+    # Separadas del muro: detras de ellas se esconde uno agachado, y con
+    # menos de un metro la camara no cabia y se metia en la pared.
+    _mesa(o, 4.2, 6.4, 9.0, 10.2)
+    _mesa(o, 7.7, 10.4, 9.2, 10.6)              # folio 2
+    _mesa(o, -7.0, -5.4, 14.6, 15.4)            # folio 1, entre dos filas
+    _mesa(o, 22.4, 24.0, 26.6, 27.6)            # folio 4, al fondo
+    o.caja("madera", 16.7, 20.2, 0, 0.95, 9.1, 9.6, bloquea=True)   # mostrador
+    # En las esquinas del fondo, fuera de las rondas.
+    for x, z, h in ((10.6, 29.2, 0.35), (10.6, 29.6, 0.3), (11.1, 30.0, 0.7),
+                    (-10.6, 29.8, 0.35), (16.2, 26.0, 0.65), (12.6, 29.8, 0.35)):
         o.caja("carton", x, x + 0.42, 0, h, z, z + 0.36, bloquea=True)
-    o.letrero("SOLO PERSONAL AUTORIZADO", "x", 12.0 - 0.1, -1, 11.3, 2.55, 0.11,
+    o.letrero("SOLO PERSONAL AUTORIZADO", "x", 12.0 - 0.1, -1, 12.8, 2.55, 0.11,
               (0.95, 0.30, 0.20))
 
     # ================= HALL DE ENTRADA =================
@@ -1894,12 +1928,15 @@ def _rectoria(mundo):
     def poner(mat, x0, x1, y0, y1, z0, z1):
         caras.setdefault(mat, []).extend(_caras_caja(x0, x1, y0, y1, z0, z1))
 
-    caras["suelo"] = [(((X_OESTE, 0.001, Z_SUR), (X_ESTE, 0.001, Z_SUR),
-                        (X_ESTE, 0.001, Z_NORTE), (X_OESTE, 0.001, Z_NORTE)),
-                       (0, 1, 0))]
-    y = ALTO_COLEGIO
-    caras["techo"] = [(((X_OESTE, y, Z_NORTE), (X_ESTE, y, Z_NORTE),
-                        (X_ESTE, y, Z_SUR), (X_OESTE, y, Z_SUR)), (0, -1, 0))]
+    # Suelo y techo en dos piezas: el cuerpo del edificio y el ala de los
+    # archivos, que es mas ancha y mas alta.
+    caras["suelo"], caras["techo"] = [], []
+    for x0, x1, z0, z1, y in ((X_OESTE, X_ESTE, Z_SUR, Z_ARCHIVO, ALTO_COLEGIO),
+                              (XA_OESTE, XA_ESTE, Z_ARCHIVO, Z_NORTE, ALTO_ARCHIVOS)):
+        caras["suelo"].append((((x0, 0.001, z0), (x1, 0.001, z0),
+                                (x1, 0.001, z1), (x0, 0.001, z1)), (0, 1, 0)))
+        caras["techo"].append((((x0, y, z1), (x1, y, z1),
+                                (x1, y, z0), (x0, y, z0)), (0, -1, 0)))
 
     # Ventanales del hall al patio y ventanas altas del archivo: paneles
     # emisivos pegados por dentro del muro, con su marco blanco. La
@@ -1909,8 +1946,10 @@ def _rectoria(mundo):
         poner("ventana", x, x + 1.6, 1.1, 2.8, Z_SUR + g, Z_SUR + g + 0.02)
         poner("marco_puerta", x - 0.06, x + 1.66, 1.04, 1.1, Z_SUR + g, Z_SUR + g + 0.12)
         poner("columna", x + 0.77, x + 0.83, 1.1, 2.8, Z_SUR + g, Z_SUR + g + 0.04)
-    for x in (-3.8, 0.2, 4.2, 8.2, 14.2, 18.2, 22.2):
-        poner("ventana", x, x + 1.4, 2.1, 2.9, Z_NORTE - g - 0.02, Z_NORTE - g)
+    x = XA_OESTE + 1.3
+    while x + 1.4 < XA_ESTE - 0.5:
+        poner("ventana", x, x + 1.4, 3.3, 4.5, Z_NORTE - g - 0.02, Z_NORTE - g)
+        x += 4.0
     for x, alto, z in FOLIOS_COLEGIO:
         poner("folio", x - 0.15, x + 0.15, alto, alto + 0.01, z - 0.11, z + 0.11)
     _volcar_obra(mundo, OBRA_COLEGIO, MATERIALES_COLEGIO, caras)
@@ -2002,7 +2041,9 @@ def _letreros(letreros):
 
 
 LUNA = (0.16, 0.22, 0.38)
-AMBIENTE_COLEGIO = (0.060, 0.068, 0.100)
+# Un poco mas que la noche de la cafeteria: el ala de archivos es grande y
+# solo tiene dos luces, y a oscuras no se leian ni estantes ni vigilantes.
+AMBIENTE_COLEGIO = (0.072, 0.080, 0.118)
 
 
 def relampago(fuerza):
@@ -2039,8 +2080,11 @@ def _luces_rectoria(mundo):
 
     for nombre, pos, col, att in (
             ("lampara_rector", (0.38, 1.15, 2.0), (2.0, 1.30, 0.62), (1, 0.18, 0.30)),
-            ("fluorescente", (3.0, 2.9, 10.5), (0.55, 0.75, 0.95), (1, 0.10, 0.10)),
-            ("lampara_restringido", (18.5, 1.6, 7.9), (1.6, 1.0, 0.5), (1, 0.18, 0.28)),
+            # Las dos del archivo cuelgan del techo alto (5 m) y caen mas
+            # despacio: cada sala mide unos 20 x 23 m y tienen que llegar
+            # del mostrador al fondo.
+            ("fluorescente", (-1.0, 4.6, 19.5), (0.55, 0.75, 0.95), (1, 0.06, 0.035)),
+            ("lampara_restringido", (21.1, 4.6, 20.0), (1.6, 1.0, 0.5), (1, 0.06, 0.03)),
             # Junto a las patrullas: tine de rojo y azul la esquina oeste de
             # la fachada y el asfalto mojado. fondo_vivo la alterna.
             # Cae rapido con la distancia: el despacho no tiene ventanas y
@@ -2595,7 +2639,8 @@ LIMITES = {
     "cafeteria": (-3.45, 3.45, -5.45, 4.45),
     "plaza": (-9.0, 9.0, -9.0, 9.0),
     "ciudad": (-6.0, 6.0, -60.0, 200.0),
-    "rectoria": (X_OESTE + 0.3, X_ESTE - 0.3, Z_SUR + 0.3, Z_NORTE - 0.3),
+    # La caja que envuelve la T: las esquinas de fuera las cierran los muros.
+    "rectoria": (XA_OESTE + 0.3, XA_ESTE - 0.3, Z_SUR + 0.3, Z_NORTE - 0.3),
     "campana": (CX0 + 0.3, CX1 - 0.3, CZ_FONDO + 0.3, CZ_VENTANAL - 0.3),
 }
 BLOQUEOS = {
@@ -2628,6 +2673,16 @@ TECHOS = {"rectoria": ALTO_COLEGIO - 0.25, "campana": ALTO_CAMPANA - 0.25}
 
 def techo():
     return TECHOS.get(_ACTUAL["nombre"], 2.45)
+
+
+# Lente de la camara de exploracion (grados horizontales). La cafeteria
+# usa la cerrada de cine; en el colegio hay que ver a los vigilantes a
+# los lados, y la oficina es grande y abierta.
+LENTES = {"rectoria": 56, "campana": 50}
+
+
+def lente():
+    return LENTES.get(_ACTUAL["nombre"], FOV_BASE)
 
 
 def coberturas():
@@ -3144,7 +3199,7 @@ RITMO_RONDA = 0.6
 
 
 def vigilante(mundo):
-    """Un vigilante de ronda. Devuelve (actor, abanico).
+    """Un vigilante de ronda. Devuelve (actor, abanico, foco, haz).
 
     El cuerpo es el modelo de prueba (el unico de fondo que sabe andar).
     El abanico es la luz de la linterna en el suelo: va fuera del nodo PBR,
@@ -3161,13 +3216,30 @@ def vigilante(mundo):
     foco.clearShader()
     foco.setMaterial(_material((0.05, 0.05, 0.05, 1),
                                emision=(3.0, 2.4, 1.4, 1)), 1)
-    abanico = Entity(model=Mesh(vertices=[(0, 0, 0)] * 3, triangles=[0, 1, 2],
-                                colors=[color.clear] * 3, mode="triangle",
-                                static=False))
-    abanico.setTransparency(TransparencyAttrib.MAlpha)
-    abanico.setDepthWrite(False)
-    abanico.setTwoSided(True)
-    return actor, abanico, foco
+    # El abanico en el suelo y el haz que baja de la linterna hasta el: con
+    # solo el suelo, desde lejos o detras de un estante no se sabia donde
+    # estaba el vigilante; el haz se ve de lado y por encima de los muebles.
+    return actor, _malla_de_luz(), foco, _malla_de_luz()
+
+
+def _malla_de_luz():
+    luz = Entity(model=Mesh(vertices=[(0, 0, 0)] * 3, triangles=[0, 1, 2],
+                            colors=[color.clear] * 3, mode="triangle",
+                            static=False))
+    luz.setTransparency(TransparencyAttrib.MAlpha)
+    luz.setDepthWrite(False)
+    luz.setTwoSided(True)
+    return luz
+
+
+def _abanico(entidad, centro, rayos, y_rayos, rgb, alfa_centro, alfa_borde):
+    """Abanico de triangulos de centro a los extremos del cono, de luz."""
+    malla = entidad.model
+    malla.vertices = [centro] + [(px, y_rayos, pz) for px, pz in rayos]
+    malla.colors = ([color.Color(*rgb, alfa_centro)]
+                    + [color.Color(*rgb, alfa_borde)] * len(rayos))
+    malla.triangles = [i for k in range(1, len(rayos)) for i in (0, k, k + 1)]
+    malla.generate()
 
 
 def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta):
@@ -3176,17 +3248,15 @@ def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta):
     rayos: los extremos del cono (sigilo.Vigilante.rayos), ya cortados
     contra muros y estantes. alerta: te esta viendo; la luz vira a rojo.
     """
-    actor, abanico, _ = par
+    actor, abanico, _foco, haz = par
     mover_actor(actor, x, z, rumbo, andando)
-    r, g, b = LINTERNA_ALERTA if alerta else LINTERNA
-    y = 0.03                             # encima de la baldosa y del damero
-    malla = abanico.model
-    malla.vertices = [(x, y, z)] + [(px, y, pz) for px, pz in rayos]
+    rgb = LINTERNA_ALERTA if alerta else LINTERNA
     # Fuerte al pie de la linterna y casi nada en el borde: se lee como luz.
-    malla.colors = ([color.Color(r, g, b, 0.42)]
-                    + [color.Color(r, g, b, 0.05)] * len(rayos))
-    malla.triangles = [i for k in range(1, len(rayos)) for i in (0, k, k + 1)]
-    malla.generate()
+    _abanico(abanico, (x, 0.03, z), rayos, 0.03, rgb, 0.42, 0.05)
+    # El haz sale del pecho, un palmo por delante del cuerpo.
+    r = math.radians(rumbo)
+    pecho = (x + math.sin(r) * 0.35, 1.15, z + math.cos(r) * 0.35)
+    _abanico(haz, pecho, rayos, 0.03, rgb, 0.22, 0.0)
 
 
 def mover_actor(actor, x, z, rumbo, andando):
@@ -3213,9 +3283,10 @@ def asesor(mundo):
 
 
 def quitar_vigilantes(pares):
-    for actor, abanico, foco in pares:
+    for actor, abanico, foco, haz in pares:
         destroy(foco)
         destroy(abanico)
+        destroy(haz)
         actor.cleanup()
         actor.removeNode()
 

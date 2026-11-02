@@ -35,8 +35,9 @@ PLANOS = (
     # Dentro: el pasillo a oscuras, de espaldas, hacia la rectoria.
     # Ya dentro del pasillo: desde la boca, el canto del muro tapaba medio
     # plano.
-    ("pasillo", 4.5, Vec3(21.6, 1.75, 5.0), Vec3(20.4, 1.7, 5.0),
-     Vec3(4.0, 1.3, 4.6), Vec3(4.0, 1.3, 4.6), 48),
+    ("pasillo", 4.5, Vec3(21.6, 1.75, mundo.Z_MEDIO_PASILLO),
+     Vec3(20.4, 1.7, mundo.Z_MEDIO_PASILLO),
+     Vec3(4.0, 1.3, 5.3), Vec3(4.0, 1.3, 5.3), 48),
     # El despacho: los dos, con la lampara del rector entre ellos.
     ("despacho", 11.5, Vec3(3.3, 1.7, -1.0), Vec3(2.8, 1.6, -0.6),
      Vec3(-0.3, 1.2, 1.7), Vec3(-0.3, 1.2, 1.8), 50),
@@ -52,7 +53,7 @@ DURACION = _t
 # clip de caminar esta hecho para 2,7 m/s; mas lento patina si no se frena.
 CAMINOS = {
     "llegada": ((13.2, ZF - 1.9), (7.2, ZF - 1.1), 0.4),
-    "pasillo": ((17.0, 4.95), (5.5, 4.95), 0.95),
+    "pasillo": ((17.0, 5.3), (5.5, 5.3), 0.95),
 }
 DONDE_HABLA = (0.35, 0.45)              # de pie, frente al escritorio
 RECTOR = mundo.FIGURANTES["rectoria"]["rector"][1]

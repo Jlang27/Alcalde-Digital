@@ -87,7 +87,7 @@ class Cliente:
         self.bloqueos_npc = []
         self.capitulo = 0             # el dia con el que arranca la partida
         self.capitulo_sel = 0         # el renglon marcado en «Capítulos»
-        self.vigilantes = {}          # id -> (actor, abanico, foco) del dia 2
+        self.vigilantes = {}          # id -> (actor, abanico, foco, haz) del dia 2
         self.figurantes = {}          # gente de escenario sin pistas (el rector)
         self.cine = None              # la cinematica de un capitulo, si suena
         self.asesor = None            # el asesor de Daniel (dia 3)
@@ -1026,6 +1026,7 @@ def abrir_libre():
         cl.jugador.bloqueos = bloqueos
         cl.jugador.muros = list(mundo.muros())
     cl.jugador.techo = mundo.techo()
+    cl.jugador.fov = mundo.lente()
     cl.jugador.encuadrar()
     cl.jugador.activar()
     cl.aviso = pantallas.AvisoLibre()

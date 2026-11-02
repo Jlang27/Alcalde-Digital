@@ -79,15 +79,15 @@ foto("colegio_archivo_ronda")
 
 # Agachada detras de la mesa del folio 2, con el vigilante al otro lado:
 # la mesa tapa. De pie, la misma mesa no.
-mesa = (7.7, 10.4, 7.2, 8.6)
-ojo = (9.0, 10.0)
+mesa = (7.7, 10.4, 9.2, 10.6)
+ojo = (9.0, 12.0)
 tapan = [r for r in s.tapan_agachado if r == mesa]
 assert tapan, "la mesa del folio 2 tiene que contar como cobertura"
 from sigilo import Vigilante
 quieto = Vigilante("prueba", [ojo, (9.0, 15.0)])
 quieto.rumbo = 180.0                       # mira hacia la mesa (-z)
-assert quieto.ve(9.0, 6.9, True, s.tapan_agachado) is None
-assert quieto.ve(9.0, 6.9, False, s.tapan_de_pie) is not None
+assert quieto.ve(9.0, 8.6, True, s.tapan_agachado) is None
+assert quieto.ve(9.0, 8.6, False, s.tapan_de_pie) is not None
 
 # Tres veces delante de la linterna: dos avisos y fuera.
 for n in range(1, AVISOS_MAXIMOS + 1):
