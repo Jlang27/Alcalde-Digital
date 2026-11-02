@@ -63,6 +63,21 @@ HOMBRO = 0.62                # descentra al personaje y deja aire a la derecha
 SUAVIDAD = 7.0               # retardo de la camara; 0 seria rigido
 
 PITCH_MIN, PITCH_MAX = -6.0, 32.0
+
+# Esconderse (C): pegada a una mesa, un estante o un muro, agachada y
+# mirandolo, como quien espia por encima. A y D la asoman a un lado: el
+# cuerpo se corre un palmo, el torso y la cabeza giran hacia alli y la
+# camara se asoma con ella. Para volver a andar, C otra vez.
+ALCANCE_CUBRIRSE = 0.75      # del centro del personaje al borde del mueble
+PEGADA = RADIO + 0.04        # a cuanto del mueble se queda
+ASOMAR = 0.35                # metros que se corre el cuerpo al asomarse
+ASOMAR_CAMARA = 0.45         # y lo que se corre ademas la camara
+RITMO_ASOMAR = 6.0           # lo rapido que entra y sale del asomo
+# (hueso, giro, inclinacion) en grados hacia su derecha con el asomo entero.
+# Medido en estos esqueletos, no supuesto: H gira el torso, R lo ladea y P
+# lo dobla hacia delante; los dos primeros, positivos hacia su izquierda.
+# La cabeza se endereza un poco: quien espia mantiene los ojos a nivel.
+GIROS_ASOMAR = (("Spine1", 12.0, 8.0), ("Spine2", 12.0, 8.0), ("Head", 30.0, -6.0))
 FOV_EXPLORACION = 40         # igual que mundo.FOV_BASE: horizontal, cerrada
 ABRIR_CORRER = 6             # abrir un poco la lente al correr da sensacion de velocidad
 
@@ -147,6 +162,15 @@ class Jugador:
         # se oye mas. Aqui solo se mueve; las reglas iran en Partida.
         self.agachado = False
         self.corriendo = False
+        self.moviendose = False         # quieta no hace ruido
+        self.agachado_fijo = False      # C lejos de un mueble: agachada sin Ctrl
+        # Lo que sirve para esconderse (rectangulos) y donde esta escondida:
+        # (x, z) de la base, el lado hacia donde se asoma y el asomo, -1..1.
+        self.coberturas = []
+        self.cubierta = None
+        self.lado = Vec3(0, 0, 0)
+        self.asomada = 0.0
+        self._huesos = []               # (hueso, nodo controlado, matriz base, giro, inclinacion)
 
         self.pivote = None              # lo que sigue la camara, con retardo
         self.distancia = DISTANCIA
@@ -186,7 +210,8 @@ class Jugador:
     def desactivar(self):
         """Modo decision: el raton vuelve a ser cursor."""
         self.explorando = False
-        self.agachado = self.corriendo = False
+        self.salir_de_cobertura()
+        self.agachado = self.corriendo = self.moviendose = self.agachado_fijo = False
         _raton(False)
         self._animar("quieto")
         # Los planos fijos de decision necesitan al personaje entero.
@@ -216,13 +241,121 @@ class Jugador:
             self._mirar(mouse.velocity[0], mouse.velocity[1])
             avance = held_keys["w"] - held_keys["s"]
             lado = held_keys["d"] - held_keys["a"]
+            if self.cubierta is not None:
+                self._asomarse(lado, dt)
+                return
             # Ursina junta izquierda y derecha en «control» y «shift».
             # Agachado gana: con Ctrl pulsado no se puede correr.
-            self.agachado = bool(held_keys["control"])
+            self.agachado = bool(held_keys["control"]) or self.agachado_fijo
             self.corriendo = bool(held_keys["shift"]) and not self.agachado
             self._caminar(avance, lado, dt)
         # La camara la mueve quien llama a seguir() una vez por fotograma.
         # Antes tambien se llamaba aqui y el retardo corria al doble.
+
+    # ----------------------------------------------------------------
+    #  esconderse
+    # ----------------------------------------------------------------
+
+    def cobertura_cerca(self):
+        """El mueble al alcance para esconderse: (dist, rect, x, z) del punto
+        mas cercano de su borde, o None."""
+        x, _, z = self.actor.getPos()
+        a = ALCANCE_CUBRIRSE
+        mejor = None
+        for r in self.coberturas:
+            x0, x1, z0, z1 = r
+            if not (x0 - a < x < x1 + a and z0 - a < z < z1 + a):
+                continue
+            cx, cz = min(max(x, x0), x1), min(max(z, z0), z1)
+            d = math.hypot(x - cx, z - cz)
+            if d < a and (mejor is None or d < mejor[0]):
+                mejor = (d, r, cx, cz)
+        return mejor
+
+    def cubrirse(self):
+        """C. Pegarse al mueble mas cercano o soltarse. Sin nada cerca,
+        agacharse (o levantarse) sin tener que mantener Ctrl.
+
+        Devuelve "escondida", "fuera", "agachada" o "de pie".
+        """
+        if self.cubierta is not None:
+            self.salir_de_cobertura()
+            return "fuera"
+        cerca = self.cobertura_cerca()
+        if cerca is None:
+            self.agachado_fijo = not self.agachado_fijo
+            return "agachada" if self.agachado_fijo else "de pie"
+        _d, (x0, x1, z0, z1), cx, cz = cerca
+        x, _, z = self.actor.getPos()
+        # Del mueble hacia ella, por el lado que tiene delante.
+        if abs(x - cx) >= abs(z - cz):
+            nx, nz = (1.0 if x > cx else -1.0), 0.0
+            bx, bz = (x1 if nx > 0 else x0) + nx * PEGADA, z
+        else:
+            nx, nz = 0.0, (1.0 if z > cz else -1.0)
+            bx, bz = x, (z1 if nz > 0 else z0) + nz * PEGADA
+        if self._bloqueado(bx, bz):
+            bx, bz = x, z
+        self.cubierta = (bx, bz, nx, nz)
+        self.agachado, self.corriendo, self.moviendose = True, False, False
+        self.actor.setPos(bx, self.altura_suelo, bz)
+        # De cara al mueble, y la camara detras: se mira por encima de el.
+        self.yaw = math.degrees(math.atan2(-nx, -nz))
+        self.rumbo = 180.0 - self.yaw
+        self.actor.setH(self.rumbo)
+        self._animar("agachado")
+        self._tomar_columna()
+        return "escondida"
+
+    def salir_de_cobertura(self):
+        if self.cubierta is None:
+            return
+        bx, bz, _nx, _nz = self.cubierta
+        self.actor.setPos(bx, self.altura_suelo, bz)
+        self.cubierta = None
+        self.asomada = 0.0
+        for nombre, *_ in self._huesos:
+            self.actor.releaseJoint("modelRoot", nombre)
+        self._huesos = []
+
+    def _tomar_columna(self):
+        """Toma el control de columna y cabeza con la pose que tienen ahora
+        (la de agachada): el asomo gira encima de ella, no de la de reposo.
+        El prefijo de Mixamo cambia de un modelo a otro: se busca el final."""
+        self._huesos = []
+        # Los huesos se ponen al dia al pintar el cuadro; recien pedida la
+        # animacion aun tienen la pose de pie, y sobre unas caderas
+        # agachadas eso la dejaba echada hacia atras.
+        self.actor.update(force=True)
+        huesos = {j.getName().split(":")[-1]: j for j in self.actor.getJoints()}
+        for sufijo, giro, incl in GIROS_ASOMAR:
+            hueso = huesos.get(sufijo)
+            if hueso is None:
+                continue
+            base = hueso.getTransformState().getMat()
+            control = self.actor.controlJoint(None, "modelRoot", hueso.getName())
+            control.setMat(base)
+            self._huesos.append((hueso.getName(), control, base, giro, incl))
+
+    def _asomarse(self, lado, dt):
+        """A/D estando escondida: se asoma por ese lado mientras se mantenga."""
+        bx, bz, nx, nz = self.cubierta
+        self.agachado, self.corriendo, self.moviendose = True, False, False
+        # El lado es el de la pantalla, pegado al mueble: A a la izquierda
+        # de la camara, D a la derecha, sin despegarse.
+        rad = math.radians(self.yaw)
+        tx, tz = -nz, nx
+        if tx * math.cos(rad) - tz * math.sin(rad) < 0:
+            tx, tz = -tx, -tz
+        self.lado = Vec3(tx, 0, tz)
+        self.asomada = _acercar(self.asomada, float(lado), RITMO_ASOMAR * dt)
+        x, z = bx + tx * ASOMAR * self.asomada, bz + tz * ASOMAR * self.asomada
+        if not self._bloqueado(x, z):
+            self.actor.setPos(x, self.altura_suelo, z)
+        for _nombre, control, base, giro, incl in self._huesos:
+            control.setMat(base)
+            control.setHpr(control, -giro * self.asomada, 0, -incl * self.asomada)
+        self._animar("agachado")
 
     def _mirar(self, dx, dy):
         self.yaw += dx * SENSIBILIDAD
@@ -230,6 +363,7 @@ class Jugador:
 
     def _caminar(self, avance, lado, dt):
         quieto = "agachado" if self.agachado else "quieto"
+        self.moviendose = False
         if avance == 0 and lado == 0:
             self.corriendo = False      # correr sin moverse no hace ruido
             self._animar(quieto)
@@ -267,7 +401,10 @@ class Jugador:
             x_min, x_max, z_min, z_max = self.limites
             x = max(x_min, min(x_max, x))
             z = max(z_min, min(z_max, z))
+        antes = self.actor.getPos()
         self.actor.setPos(x, self.altura_suelo, z)
+        # Contra un muro no hay pasos: empujar la pared no hace ruido.
+        self.moviendose = abs(antes.x - x) + abs(antes.z - z) > 1e-4
 
         # El personaje gira hacia donde anda, pero no de golpe. El H de
         # Panda gira al reves que atan2(x, z): con el signo directo, W/S
@@ -301,6 +438,11 @@ class Jugador:
     def objetivo(self):
         x, _, z = self.actor.getPos()
         alto = ALTURA_AGACHADO if self.agachado else ALTURA_OBJETIVO
+        if self.cubierta is not None:
+            # La camara se asoma con ella, un poco mas: si no, el borde del
+            # mueble seguia tapando lo que hay detras.
+            x += self.lado.x * ASOMAR_CAMARA * self.asomada
+            z += self.lado.z * ASOMAR_CAMARA * self.asomada
         return Vec3(x, self.altura_suelo + alto, z)
 
     def _distancia_util(self, origen, rad, rad_p, maximo=DISTANCIA):
@@ -396,7 +538,10 @@ class Jugador:
         cerca = (DISTANCIA_CERCA - distancia) / (DISTANCIA_CERCA - DISTANCIA_MINIMA_MURO)
         cerca = max(0.0, min(1.0, cerca))
         self.cerca = cerca if inmediato else _acercar(self.cerca, cerca, factor)
-        pos.y += GRUA * self.cerca * (1.0 - (1.0 - GRUA_AGACHADO) * self.agache)
+        # Escondida si sube del todo: pegada a una mesa contra la pared, la
+        # camara no cabe detras y desde abajo solo se veia su espalda.
+        recorte = 0.0 if self.cubierta is not None else (1.0 - GRUA_AGACHADO) * self.agache
+        pos.y += GRUA * self.cerca * (1.0 - recorte)
         tapa = ((DISTANCIA_TRANSPARENTE - distancia)
                 / (DISTANCIA_TRANSPARENTE - DISTANCIA_MINIMA_MURO))
         self._poner_alfa(1.0 - (1.0 - ALFA_CERCA) * max(0.0, min(1.0, tapa)))

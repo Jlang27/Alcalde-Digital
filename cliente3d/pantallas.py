@@ -386,12 +386,19 @@ class Sospecha:
         self.piezas += [self.barra, self.texto]
         self.poner(0.0, 0, 0)
 
-    def poner(self, sospecha, avisos, maximo):
-        visible = sospecha > 0.01
-        for p in self.piezas:
-            p.enabled = visible
+    def poner(self, sospecha, avisos, maximo, a_salvo=False):
+        """a_salvo: en una zona segura se dice en verde, aunque la franja
+        todavia se este vaciando."""
+        hay = sospecha > 0.01
+        self.piezas[0].enabled = self.barra.enabled = hay
+        self.texto.enabled = hay or a_salvo
         self.barra.scale_x = self.ANCHO * min(1.0, sospecha)
-        self.texto.text = f"TE ESTÁN VIENDO   ·   AVISOS {avisos}/{maximo}"
+        if a_salvo:
+            self.texto.text = "ZONA SEGURA   ·   AQUÍ NO TE VEN NI TE OYEN"
+            self.texto.color = E.RESTREPO
+        else:
+            self.texto.text = f"TE ESTÁN VIENDO   ·   AVISOS {avisos}/{maximo}"
+            self.texto.color = E.GAITAN
 
     def cerrar(self):
         _limpiar(self.piezas)
@@ -417,7 +424,8 @@ class Inventario:
         if not objetos:
             return
         a = self.piezas.append
-        a(E.pequena("LLEVAS", (self.X, self.Y), E.TEXTO_TENUE, escala=0.5))
+        a(E.pequena("LLEVAS   ·   CLIC PARA USAR", (self.X, self.Y), E.TEXTO_TENUE,
+                    escala=0.5))
         for k, (nombre, cantidad) in enumerate(objetos):
             y = self.Y - 0.05 - k * self.PASO
             piezas, ancho = E.tecla(str(k + 1), "", self.X, y, escala=0.8)

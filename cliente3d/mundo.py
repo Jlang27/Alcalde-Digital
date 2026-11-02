@@ -12,6 +12,8 @@ from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
 from PIL import Image, ImageDraw, ImageFont
 from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec3
 
+from contenido import ZONAS_SEGURAS_CAPITULO_2
+
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUTA_PERSONAJE = os.path.join(RAIZ, "assets", "personajes", "prueba.glb")
 
@@ -1443,6 +1445,37 @@ def _archivador(o, eje, plano, signo, a0, a1):
                 (a0 + a1) / 2 + 0.08, y - 0.12, y - 0.09, 0.6, 0.62)
 
 
+# La franja x0..x1 del muro de cajas que cierra por el este cada rincon
+# seguro de los archivos (las zonas son de las reglas, en contenido.py).
+RINCONES_COLEGIO = ((-8.6, -8.1), (14.4, 14.9))
+
+
+def _rincon_seguro(o, azar, zona, x0, x1, alto=1.75):
+    """Esquina del fondo cerrada por cajas de archivo apiladas.
+
+    Mas altas que ALTO_CAMARA: cortan la linterna, asi que lo que se ve
+    iluminado sigue siendo lo que vigilan. Una cinta verde en el suelo
+    marca por donde se entra: en la oscuridad tiene que leerse.
+    """
+    zx0, zx1, z0, z1 = zona
+    o.solido((x0, x1, z0, z1), alto)
+    z = z0
+    while z < z1 - 0.2:
+        largo = min(azar.uniform(0.38, 0.48), z1 - z)
+        y = 0.0
+        while y < alto - 0.05:
+            h = min(azar.uniform(0.38, 0.46), alto - y)
+            dx = azar.uniform(-0.04, 0.04)
+            o.caja(azar.choice(CAJAS_ARCHIVO), x0 + 0.02 + dx, x1 - 0.02 + dx,
+                   y, y + h, z + 0.01, z + largo - 0.01)
+            y += h
+        z += largo
+    g = 0.06
+    for a, b, c, d in ((zx0, zx1, z0, z0 + g), (zx0, zx1, z1 - g, z1),
+                       (zx0, zx0 + g, z0, z1), (zx1 - g, zx1, z0, z1)):
+        o.caja("cinta_segura", a, b, 0, 0.006, c, d)
+
+
 def _planta(o, x, z):
     o.caja("maceta", x - 0.22, x + 0.22, 0, 0.45, z - 0.22, z + 0.22, bloquea=True)
     o.esferas.append(("hojas", x, 0.85, z, 0.75))
@@ -1689,6 +1722,8 @@ def _obra_colegio():
         o.caja("carton", x, x + 0.42, 0, h, z, z + 0.36, bloquea=True)
     o.letrero("SOLO PERSONAL AUTORIZADO", "x", 12.0 - 0.1, -1, 12.8, 2.55, 0.11,
               (0.95, 0.30, 0.20))
+    for zona, (x0, x1) in zip(ZONAS_SEGURAS_CAPITULO_2, RINCONES_COLEGIO):
+        _rincon_seguro(o, azar, zona, x0, x1)
 
     # ================= HALL DE ENTRADA =================
     for x in (-2.2, 3.2):
@@ -1892,6 +1927,7 @@ MATERIALES_COLEGIO = {
     "caja_gris": ((0.22, 0.24, 0.27), 0.9, 0, None),
     "caja_carton": ((0.32, 0.20, 0.09), 0.95, 0, None),
     "carton": ((0.32, 0.20, 0.09), 0.95, 0, None),
+    "cinta_segura": ((0.05, 0.30, 0.12), 0.6, 0, (0.03, 0.17, 0.06)),
     "archivador": ((0.20, 0.21, 0.20), 0.4, 0.8, None),
     "columna": ((0.42, 0.42, 0.42), 0.3, 0, None),
     "bloque_rojo": ((0.45, 0.05, 0.04), 0.3, 0, None),
@@ -2729,9 +2765,11 @@ def cambiar_escenario(mundo, escenario):
     # cleanup() las deja corriendo sobre un modelo que ya no existe.
     for actor in _ACTUAL.pop("actores", ()):
         actor.cleanup()
+    for usado in _ACTUAL.get("usados", ()):
+        usado["nodo"].removeNode()      # sus piezas ya se fueron con _ENTIDADES
     for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo", "lluvia",
                   "sirenas", "fase_sirena", "luz_sirena", "reloj",
-                  "luz_ambiente", "objetos"):
+                  "luz_ambiente", "objetos", "usados"):
         _ACTUAL.pop(clave, None)
     if _ACTUAL["contenedor"] is not None:
         _ACTUAL["contenedor"].removeNode()
@@ -3594,6 +3632,116 @@ def quitar_objeto(id_objeto):
 def quitar_objetos():
     for i in list(_ACTUAL.get("objetos", {})):
         quitar_objeto(i)
+    for u in _ACTUAL.pop("usados", ()):
+        _quitar_piezas(u["piezas"])
+        u["nodo"].removeNode()
+
+
+def _quitar_piezas(piezas):
+    for e in piezas:
+        if e in _ENTIDADES:
+            destroy(e)
+            _ENTIDADES.remove(e)
+    piezas.clear()
+
+
+def _destello_suelto(posicion, escala, rgb, alfa):
+    """Un destello sin luz ni niebla, siempre de cara a la camara."""
+    e = Entity(parent=scene, model="quad", position=posicion, scale=escala,
+               color=color.Color(*rgb, alfa))
+    e.setBillboardPointEye()
+    e.setTexture(_textura("destello", _pintar_destello, 64, 64, srgb=False), 1)
+    e.setTransparency(TransparencyAttrib.MAlpha)
+    e.setDepthWrite(False)
+    _ENTIDADES.append(e)
+    return e
+
+
+ALTO_MANO = 1.1         # de donde sale lo que se lanza
+
+
+def usar_objeto(mundo, evento):
+    """Dibuja lo que se acaba de usar (sigilo.Sigilo.usar): una canica o el
+    petardo vuelan hasta donde caen; el despertador se queda a los pies.
+
+    Va colgado de un nodo propio para moverlo entero mientras vuela.
+    """
+    i = evento["objeto"]
+    nodo = mundo.attachNewNode(f"usado_{i}")
+    antes = len(_ENTIDADES)
+    if i == "canicas":
+        k = random.randrange(len(TINTES_CANICAS))
+        tinte = TINTES_CANICAS[k]
+        vidrio = _material((1, 1, 1, 1), rugosidad=0.08,
+                           emision=(*(c / 255 * 0.05 for c in tinte), 1))
+        _con_textura(_pieza(nodo, "sphere", vidrio, 0.032, (0, 0.016, 0)),
+                     _textura(f"canica{k}", _pintar_canica(tinte), 64, 32))
+    else:
+        _OBJETOS[i](nodo, 0, 0, 0)
+    x, z = evento["desde"]
+    nodo.setPos(x, ALTO_MANO if evento["vuelo"] else 0.0, z)
+    if evento["vuelo"] == 0:
+        # Dejado en el suelo, mirando hacia donde se dejo.
+        nodo.setH(random.uniform(0, 360))
+    _ACTUAL.setdefault("usados", []).append({
+        "objeto": i, "nodo": nodo, "piezas": _ENTIDADES[antes:], "t": 0.0,
+        "desde": evento["desde"], "hasta": evento["hasta"],
+        "vuelo": evento["vuelo"], "mecha": evento["retraso"] - evento["vuelo"],
+        "chispa": None, "suena": 0.0, "fogonazo": None})
+
+
+def sonar_objeto(ruido):
+    """Lo que se usa acaba de sonar (sigilo.Sigilo.sonaron): el despertador
+    tiembla mientras suena y el petardo estalla y desaparece."""
+    u = next((u for u in _ACTUAL.get("usados", ())
+              if u["objeto"] == ruido["objeto"] and not u.get("sono")), None)
+    if u is None:
+        return
+    u["sono"] = True
+    if u["objeto"] == "despertador":
+        u["suena"] = ruido["dura"]
+    elif u["objeto"] == "petardo":
+        x, z = u["hasta"]
+        _quitar_piezas(u["piezas"])
+        u["fogonazo"] = _destello_suelto((x, 0.4, z), 3.2, (1.0, 0.72, 0.38), 1.0)
+        u["t_fogonazo"] = 0.0
+
+
+def animar_usados(dt):
+    """Vuelo, mecha, timbre y fogonazo de lo que se ha usado."""
+    for u in _ACTUAL.get("usados", ()):
+        u["t"] += dt
+        t, vuelo, nodo = u["t"], u["vuelo"], u["nodo"]
+        (x0, z0), (x1, z1) = u["desde"], u["hasta"]
+        if vuelo and t <= vuelo:
+            # Parabola de la mano al suelo, girando en el aire.
+            f = t / vuelo
+            nodo.setPos(x0 + (x1 - x0) * f, ALTO_MANO * (1 - f) + 2.4 * f * (1 - f),
+                        z0 + (z1 - z0) * f)
+            nodo.setH(nodo.getH() + 600 * dt)
+        elif vuelo and not u.get("posada"):
+            u["posada"] = True
+            nodo.setPos(x1, 0, z1)
+            if u["objeto"] == "petardo":
+                u["chispa"] = _destello_suelto((x1 + 0.12, 0.06, z1), 0.18,
+                                               (1.0, 0.70, 0.30), 0.9)
+        if u["chispa"] is not None:
+            if u.get("sono") or not u["piezas"]:
+                _quitar_piezas([u["chispa"]])
+                u["chispa"] = None
+            else:
+                u["chispa"].scale = 0.12 + 0.12 * random.random()
+        if u["suena"] > 0:
+            u["suena"] = max(0.0, u["suena"] - dt)
+            nodo.setR(math.sin(t * 70) * 7 * min(1.0, u["suena"]))
+        if u["fogonazo"] is not None:
+            u["t_fogonazo"] += dt
+            k = max(0.0, 1.0 - u["t_fogonazo"] / 0.45)
+            u["fogonazo"].alpha = k
+            relampago(0.35 * k)
+            if k == 0.0:
+                _quitar_piezas([u["fogonazo"]])
+                u["fogonazo"] = None
 
 
 # Los que tienen algo que contar en la cafeteria (capitulo 1). Las sillas

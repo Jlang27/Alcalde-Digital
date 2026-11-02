@@ -94,6 +94,74 @@ assert s.en_mano == "despertador"
 tecla("5", 0.2)
 assert s.en_mano == "despertador", "un numero sin objeto no cambia nada"
 foto("colegio_inventario")
+
+# Andar de pie a su espalda se oye; agachada, no.
+from ursina import held_keys
+g = vigilante("archivo")
+g.x, g.z, g.rumbo = 7.0, 20.0, 0.0
+for agachada, oye in ((True, False), (False, True)):
+    g.atento = 0.0
+    poner(7.0, 18.2, (7.0, 10.0))
+    held_keys["control"], held_keys["w"] = int(agachada), 1
+    pasar(0.3)
+    held_keys["control"] = held_keys["w"] = 0
+    assert (g.atento > 0) == oye, ("agachada" if agachada else "de pie", g.atento)
+g.atento = 0.0
+pasar(0.3)
+s.sospecha = 0.0
+
+# La zona segura: con el vigilante delante, nadie la ve.
+g.x, g.z, g.rumbo = -9.9, 28.0, 0.0
+poner(-9.9, 29.6, (-9.9, 28.0))
+pasar(1.0)
+assert s.a_salvo and s.sospecha == 0.0, (s.a_salvo, s.sospecha)
+assert J.cl.sospecha.texto.enabled and "ZONA SEGURA" in J.cl.sospecha.texto.text
+foto("colegio_zona_segura")
+g.x, g.z = 7.0, 20.0
+
+# C la esconde detras de la mesa del folio 2; A y D la asoman; C la suelta.
+poner(9.0, 8.6, (9.0, 10.0))
+pasar(0.3)
+assert J.cl.marca_cobertura_estado == "cerca"
+tecla("c", 0.3)
+j = J.cl.jugador
+assert j.cubierta is not None and j.agachado and abs(J.cl.actor.getZ() - (9.2 - 0.38)) < 0.01
+assert J.cl.marca_cobertura_estado == "dentro"
+for k, signo in (("a", -1), ("d", 1)):
+    held_keys[k] = 1
+    pasar(0.8)
+    assert abs(j.asomada - signo) < 0.05, (k, j.asomada)
+    foto(f"colegio_asomada_{k}")
+    held_keys[k] = 0
+    pasar(0.8)
+held_keys["w"] = 1
+pasar(0.4)
+held_keys["w"] = 0
+assert j.cubierta is not None, "escondida no se anda"
+tecla("c", 0.3)
+assert j.cubierta is None and not j.agachado
+
+# Clic: la canica vuela por el pasillo central y el vigilante mira alli.
+g.x, g.z, g.rumbo = 4.0, 23.0, 180.0
+tecla("1", 0.1)
+poner(-1.0, 15.0, (-1.0, 25.0))
+pasar(0.2)
+tecla("left mouse down", 0.2)
+assert s.cantidades["canicas"] == 4
+pasar(1.0)
+assert g.hacia_ruido is not None and abs(g.hacia_ruido[1] - 23.0) < 0.5, g.hacia_ruido
+# El petardo: vuela, chisporrotea y estalla.
+tecla("3", 0.1)
+tecla("left mouse down", 0.1)
+assert "petardo" not in s.inventario
+t = 0.0
+while not s.sonaron and t < 4.0 and not any(u.get("sono") for u in J.mundo._ACTUAL.get("usados", ())
+                                             if u["objeto"] == "petardo"):
+    pasar(frames=1)
+    t += 1 / 30
+pasar(frames=2)
+foto("colegio_petardo")
+pasar(1.0)
 for v in s.vigilantes:
     del v.avanzar
 

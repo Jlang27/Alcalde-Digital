@@ -599,14 +599,25 @@ REGRESO_CAPITULO_2 = (3.9, 5.6, 90.0)
 # Lo que se puede agarrar con E, cada cosa donde tendria sentido
 # encontrarla. pos = (x, alto, z) del plano de mundo.py: el alto es el de
 # la mesa o el mostrador sobre el que esta.
+# Con clic se usa el de la mano: «lanzar» vuela hasta alcance metros hacia
+# donde mira la camara; «dejar» se queda a tus pies. Al sonar, cada
+# vigilante a menos de ruido metros se para a mirar alli atencion segundos.
+# mecha: lo que tarda en sonar despues de caer.
 OBJETOS_CAPITULO_2 = {
     # requisadas en clase: en la mesa de la profesora del aula 2B
-    "canicas": {"nombre": "canicas", "cantidad": 5, "pos": (6.3, 0.76, 0.85)},
+    "canicas": {"nombre": "canicas", "cantidad": 5, "pos": (6.3, 0.76, 0.85),
+                "uso": "lanzar", "alcance": 8.0, "ruido": 6.0, "atencion": 4.0},
     # el de la sala de profesores, junto al monitor
-    "despertador": {"nombre": "despertador", "cantidad": 1, "pos": (19.85, 0.76, 2.85)},
+    "despertador": {"nombre": "despertador", "cantidad": 1, "pos": (19.85, 0.76, 2.85),
+                    "uso": "dejar", "mecha": 4.0, "ruido": 9.0, "atencion": 8.0},
     # junto a la caja de requisados del mostrador del hall
-    "petardo": {"nombre": "petardo", "cantidad": 1, "pos": (5.35, 1.1, -5.6)},
+    "petardo": {"nombre": "petardo", "cantidad": 1, "pos": (5.35, 1.1, -5.6),
+                "uso": "lanzar", "alcance": 7.0, "mecha": 2.5, "ruido": 16.0,
+                "atencion": 9.0},
 }
+# Un rincon al fondo de cada archivo donde nadie te ve ni te oye
+# (x0, x1, z0, z1). mundo.py lo cierra con cajas apiladas y lo marca.
+ZONAS_SEGURAS_CAPITULO_2 = ((-11.2, -8.6, 27.4, 30.7), (12.1, 14.4, 27.4, 30.7))
 
 
 # ===================================================================

@@ -109,6 +109,8 @@ class Cliente:
         self.marca_hablar = []        # el «E  hablar» de abajo
         self.objeto_cerca = None      # id del objeto al alcance (capitulo 2)
         self.marca_objeto = []        # el «E  agarrar» de abajo
+        self.marca_cobertura = []     # «C esconderse» o «A D asomarse · C salir»
+        self.marca_cobertura_estado = None
         self.inventario = None        # lo que llevas, abajo a la derecha
         self.dialogo = None
         self.con_quien = None
@@ -1030,6 +1032,9 @@ def abrir_libre():
         cl.jugador.muros = list(mundo.muros())
     cl.jugador.techo = mundo.techo()
     cl.jugador.fov = mundo.lente()
+    # Donde esconderse: lo que tapa agachada (mesas, estantes, muros).
+    cl.jugador.coberturas = (cl.partida.sigilo.tapan_agachado
+                             if p is not None and p.sigilo is not None else [])
     cl.jugador.encuadrar()
     cl.jugador.activar()
     cl.aviso = pantallas.AvisoLibre()
@@ -1043,6 +1048,8 @@ def cerrar_libre():
     cl.cerca = None
     limpiar(cl.marca_objeto)
     cl.objeto_cerca = None
+    limpiar(cl.marca_cobertura)
+    cl.marca_cobertura_estado = None
     if cl.sospecha is not None:
         cl.sospecha.poner(0.0, 0, 0)      # fuera de la ronda no se avisa
     if cl.jugador is not None:
@@ -1147,6 +1154,9 @@ TEXTO_PILLADA = (
 TEXTO_EXPULSADA = (
     "Esta vez no hay advertencia: te sacan del colegio y cierran el "
     "portón. Lo que no alcanzaste a ver se queda en el archivo.")
+# El momento de audio.py que suena cuando cada objeto hace su ruido.
+SONIDO_OBJETO = {"canicas": "canica", "despertador": "despertador",
+                 "petardo": "petardo"}
 
 
 def preparar_vigilantes():
@@ -1217,10 +1227,19 @@ def ronda(dt):
     """Un paso de la ronda mientras exploras. Las reglas deciden; aqui se
     dibuja y, si te pillaron, se cuenta."""
     s = cl.partida.sigilo
+    j = cl.jugador
     evento = s.actualizar(dt, cl.actor.getX(), cl.actor.getZ(),
-                          cl.jugador.agachado, cl.jugador.corriendo)
+                          j.agachado, j.corriendo, j.moviendose)
     dibujar_ronda()
-    cl.sospecha.poner(s.sospecha, s.avisos, AVISOS_MAXIMOS)
+    cl.sospecha.poner(s.sospecha, s.avisos, AVISOS_MAXIMOS, s.a_salvo)
+    for ruido in s.sonaron:
+        # Mas flojo cuanto mas lejos: el sonido no es 3D, pero asi se
+        # sabe si el petardo cayo al lado o en la otra punta.
+        lejos = math.hypot(ruido["x"] - cl.actor.getX(), ruido["z"] - cl.actor.getZ())
+        audio.efecto(SONIDO_OBJETO[ruido["objeto"]], max(0.25, 1.0 - lejos / 25.0))
+        mundo.sonar_objeto(ruido)
+    s.sonaron.clear()
+    mundo.animar_usados(dt)
     if evento:
         pillada(evento)
 
@@ -1228,6 +1247,7 @@ def ronda(dt):
 def pillada(evento):
     """Te vio un vigilante: al pasillo con un aviso, o fuera del colegio."""
     s = cl.partida.sigilo
+    cl.jugador.salir_de_cobertura()
     x, z, rumbo = s.regreso
     cl.actor.setPos(x, 0, z)
     cl.actor.setH(180.0 - rumbo)
@@ -1281,6 +1301,33 @@ def senalar_objeto():
         nombre = OBJETOS_CAPITULO_2[cerca]["nombre"]
         piezas, _ = E.tecla("e", f"agarrar {nombre}", -0.12, -0.36)
         cl.marca_objeto += piezas
+
+
+def senalar_cobertura():
+    """«C esconderse» junto a un mueble; escondida, como asomarse y salir."""
+    estado = ("dentro" if cl.jugador.cubierta is not None
+              else "cerca" if cl.jugador.cobertura_cerca() else None)
+    if estado == cl.marca_cobertura_estado:
+        return
+    cl.marca_cobertura_estado = estado
+    limpiar(cl.marca_cobertura)
+    if estado == "cerca":
+        cl.marca_cobertura += E.tecla("c", "esconderse", -0.12, -0.30)[0]
+    elif estado == "dentro":
+        cl.marca_cobertura += E.leyenda((("a  d", "asomarse"), ("c", "salir")),
+                                        -0.30, x0=-0.12)
+
+
+def usar():
+    """Clic: usa lo que hay en la mano hacia donde mira la camara."""
+    s = cl.partida.sigilo
+    evento = s.usar(cl.actor.getX(), cl.actor.getZ(), cl.jugador.yaw)
+    if evento is None:
+        return
+    mundo.usar_objeto(cl.mundo, evento)
+    if evento["objeto"] == "petardo":
+        audio.efecto("mecha")
+    pintar_inventario()
 
 
 def agarrar():
@@ -2139,6 +2186,7 @@ def update():
         if cl.partida.sigilo is not None and not cl.confirmando:
             ronda(time.dt)
             senalar_objeto()
+            senalar_cobertura()
         if cl.npcs:
             senalar_cercano()
         return
@@ -2380,6 +2428,10 @@ def input(tecla):
             abrir_dialogo(cl.cerca)
         elif tecla == "e" and cl.objeto_cerca is not None:
             agarrar()
+        elif tecla == "c":
+            cl.jugador.cubrirse()
+        elif tecla == "left mouse down" and cl.partida.sigilo is not None:
+            usar()
         elif (tecla.isdigit() and tecla != "0" and cl.partida.sigilo is not None
               and cl.partida.sigilo.elegir(int(tecla))):
             # 1-9 ponen en la mano lo que llevas, en el orden en que lo agarraste

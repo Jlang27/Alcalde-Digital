@@ -16,6 +16,12 @@ ALCANCE = 7.0              # hasta donde llega la linterna
 ALCANCE_AGACHADO = 4.0     # agachada solo te ven de cerca
 MEDIO_ANGULO = 28.0        # apertura del cono a cada lado, en grados
 OIDO_CORRIENDO = 4.5       # correr se oye aunque no te miren
+OIDO_ANDANDO = 2.5         # y andar de pie tambien, mas de cerca; agachada, no
+# Oir no es ver: lo que oye sube la sospecha a la mitad de ritmo, pero el
+# vigilante se gira hacia el ruido y ahi ya te puede ver.
+OIDO_LENTO = 2.0
+ATENCION = 3.0             # segundos que se queda mirando hacia lo que oyo
+GIRO_ATENTO = 160.0        # grados por segundo al girarse hacia un ruido
 CERCA = 1.0                # tropezarse con el vigilante
 # Segundos de vista seguida para que te pillen: a quemarropa la mitad,
 # en el borde del cono vez y media. Da tiempo a esconderse si reaccionas.
@@ -62,6 +68,8 @@ class Vigilante:
         self.espera = 0.0
         self.desde = self.rumbo       # rumbo al llegar a la parada
         self.andando = True
+        self.atento = 0.0             # segundos que le quedan mirando un ruido
+        self.hacia_ruido = None       # (x, z) de lo que oyo
 
     def _hacia(self, p):
         return math.degrees(math.atan2(p[0] - self.x, p[1] - self.z))
@@ -70,7 +78,20 @@ class Vigilante:
         r = math.radians(self.rumbo)
         return math.sin(r), math.cos(r)
 
+    def atender(self, x, z, segundos):
+        """Oyo algo en (x, z): se para y se gira hacia alli un rato."""
+        self.hacia_ruido = (x, z)
+        self.atento = max(self.atento, segundos)
+
     def avanzar(self, dt):
+        if self.atento > 0:
+            # Parado y girandose hacia el ruido, no de golpe: se ve venir.
+            self.atento = max(0.0, self.atento - dt)
+            giro = _giro_corto(self.rumbo, self._hacia(self.hacia_ruido))
+            paso = GIRO_ATENTO * dt
+            self.rumbo += max(-paso, min(paso, giro))
+            self.andando = False
+            return
         if self.espera > 0:
             # Parado: gira hacia el siguiente tramo mientras barre a un lado
             # y a otro. Darse la vuelta de golpe se leia como un robot.
@@ -135,19 +156,27 @@ class Vigilante:
 class Sigilo:
     """La ronda entera y lo que sabe de ti: sospecha, avisos y lo que llevas."""
 
-    def __init__(self, rutas, regreso, objetos=None):
+    def __init__(self, rutas, regreso, objetos=None, zonas_seguras=()):
         self.vigilantes = [Vigilante(i, r) for i, r in rutas.items()]
         self.regreso = regreso        # (x, z, rumbo): a donde te llevan al pillarte
         self.sospecha = 0.0           # 0..1
         self.avisos = 0
         self.quien = None             # el que te esta viendo ahora
+        # Rincones (x0, x1, z0, z1) donde nadie te ve ni te oye.
+        self.zonas_seguras = list(zonas_seguras)
+        self.a_salvo = False
         # Lo que sigue por el colegio (id -> (x, z)) y lo que llevas, en el
         # orden en que lo agarraste: ese orden es el de las teclas 1-9.
         objetos = objetos or {}
+        self.objetos = objetos
         self.sueltos = {i: (o["pos"][0], o["pos"][2]) for i, o in objetos.items()}
         self.cantidades = {i: o.get("cantidad", 1) for i, o in objetos.items()}
         self.inventario = []
         self.en_mano = None
+        # Ruidos que van a sonar (un petardo con la mecha encendida) y los
+        # que acaban de sonar, que el cliente recoge para oirlos y verlos.
+        self.ruidos = []
+        self.sonaron = []
         # Lo que corta la vista, de pie y agachada. Es la geometria del
         # mapa y la pone el cliente al montar el escenario.
         # shortcut: viene de mundo.py; con servidor, el mapa pasara a datos compartidos.
@@ -158,20 +187,36 @@ class Sigilo:
     def expulsada(self):
         return self.avisos >= AVISOS_MAXIMOS
 
-    def actualizar(self, dt, x, z, agachado, corriendo):
-        """Un paso de la ronda. Devuelve None, "pillada" o "expulsada"."""
+    def en_zona_segura(self, x, z):
+        return any(x0 < x < x1 and z0 < z < z1 for x0, x1, z0, z1 in self.zonas_seguras)
+
+    def actualizar(self, dt, x, z, agachado, corriendo, moviendose=False):
+        """Un paso de la ronda. Devuelve None, "pillada" o "expulsada".
+
+        moviendose: si se esta desplazando (quieta no hace ruido). De pie
+        se la oye de cerca; corriendo, de mas lejos; agachada, nada.
+        """
         if self.expulsada:
             return None
+        self._sonar(dt)
         tapan = self.tapan_agachado if agachado else self.tapan_de_pie
+        self.a_salvo = self.en_zona_segura(x, z)
+        oye = (0.0 if self.a_salvo
+               else OIDO_CORRIENDO if corriendo        # correr ya es moverse
+               else 0.0 if not moviendose
+               else 0.0 if agachado else OIDO_ANDANDO)
         self.quien, tasa = None, 0.0
         for v in self.vigilantes:
             v.avanzar(dt)
-            dist = v.ve(x, z, agachado, tapan)
-            if dist is None and corriendo:
+            dist = None if self.a_salvo else v.ve(x, z, agachado, tapan)
+            lento = 1.0
+            if dist is None and oye:
                 oido = math.hypot(x - v.x, z - v.z)
-                dist = oido if oido < OIDO_CORRIENDO else None
+                if oido < oye:
+                    v.atender(x, z, ATENCION)
+                    dist, lento = oido, OIDO_LENTO
             if dist is not None:
-                t = TIEMPO_PILLAR * (0.5 + dist / ALCANCE)
+                t = TIEMPO_PILLAR * (0.5 + dist / ALCANCE) * lento
                 if 1.0 / t > tasa:
                     tasa, self.quien = 1.0 / t, v.id
         if tasa:
@@ -208,6 +253,57 @@ class Sigilo:
             return False
         self.en_mano = self.inventario[n - 1]
         return True
+
+    def _caida(self, x, z, rumbo, alcance):
+        """Donde cae algo lanzado hacia rumbo: lo frena lo alto (muros y
+        estantes), y rebota un palmo hacia atras."""
+        a = math.radians(rumbo)
+        q = (x + math.sin(a) * alcance, z + math.cos(a) * alcance)
+        t = min((e for r in self.tapan_de_pie
+                 if (e := _entrada((x, z), q, r)) is not None), default=1.0)
+        t = max(0.0, t - 0.3 / alcance)
+        return x + (q[0] - x) * t, z + (q[1] - z) * t
+
+    def usar(self, x, z, rumbo):
+        """Usa lo que hay en la mano hacia rumbo (el de la camara).
+
+        Lo lanzable vuela y suena donde cae; lo que se deja (el
+        despertador) se queda a tus pies y suena despues. Devuelve lo que
+        hay que dibujar, o None si no llevas nada en la mano.
+        """
+        i = self.en_mano
+        if i is None:
+            return None
+        o = self.objetos[i]
+        if o["uso"] == "lanzar":
+            hasta = self._caida(x, z, rumbo, o["alcance"])
+            vuelo = 0.25 + 0.06 * math.hypot(hasta[0] - x, hasta[1] - z)
+        else:
+            hasta, vuelo = (x, z), 0.0
+        retraso = vuelo + o.get("mecha", 0.0)
+        self.ruidos.append({"objeto": i, "x": hasta[0], "z": hasta[1],
+                            "radio": o["ruido"], "dura": o["atencion"],
+                            "falta": retraso})
+        self.cantidades[i] -= 1
+        if self.cantidades[i] <= 0:
+            self.inventario.remove(i)
+            self.en_mano = self.inventario[0] if self.inventario else None
+        return {"objeto": i, "desde": (x, z), "hasta": hasta, "vuelo": vuelo,
+                "retraso": retraso, "dura": o["atencion"]}
+
+    def _sonar(self, dt):
+        """Hace sonar lo que toca: cada vigilante que lo oye se gira hacia alli."""
+        pendientes = []
+        for r in self.ruidos:
+            r["falta"] -= dt
+            if r["falta"] > 0:
+                pendientes.append(r)
+                continue
+            for v in self.vigilantes:
+                if math.hypot(v.x - r["x"], v.z - r["z"]) < r["radio"]:
+                    v.atender(r["x"], r["z"], r["dura"])
+            self.sonaron.append(r)
+        self.ruidos = pendientes
 
 
 # ===================================================================
@@ -257,6 +353,50 @@ if __name__ == "__main__":
     assert s.sospecha == 0.0
     s.actualizar(0.5, -3.0, 0.0, False, True)
     assert s.sospecha > 0.0 and s.quien == "g"
+
+    # Andar de pie cerca de su espalda tambien se oye, y se da la vuelta;
+    # agachada no. Quieta tampoco.
+    def de_espaldas():
+        s = Sigilo({"g": [(0.0, 0.0), (10.0, 0.0)]}, (0.0, -5.0, 0.0))
+        s.vigilantes[0].velocidad = 0.0
+        return s, s.vigilantes[0]
+    s, g = de_espaldas()
+    s.actualizar(0.1, -2.0, 0.0, True, False, moviendose=True)
+    s.actualizar(0.1, -2.0, 0.0, False, False, moviendose=False)
+    assert s.sospecha == 0.0 and g.atento == 0.0
+    s.actualizar(0.1, -2.0, 0.0, False, False, moviendose=True)
+    assert s.sospecha > 0.0 and g.atento > 0.0
+    for _ in range(15):
+        s.actualizar(0.1, -2.0, 0.0, True, False)
+    assert abs(_giro_corto(g.rumbo, -90.0)) < 1.0, "se giro hacia el ruido"
+
+    # En la zona segura no te ve aunque te mire de frente.
+    s, g = de_espaldas()
+    s.zonas_seguras = [(2.0, 4.0, -1.0, 1.0)]
+    s.actualizar(0.5, 3.0, 0.0, False, True, moviendose=True)
+    assert s.a_salvo and s.sospecha == 0.0
+
+    # Una canica vuela, se frena en el muro y el vigilante mira alli.
+    s, g = de_espaldas()
+    s.tapan_de_pie = [muro]
+    s.objetos = {"canicas": {"uso": "lanzar", "alcance": 8.0, "ruido": 6.0,
+                             "atencion": 4.0},
+                 "despertador": {"uso": "dejar", "mecha": 3.0, "ruido": 9.0,
+                                 "atencion": 8.0}}
+    s.inventario, s.cantidades = ["canicas", "despertador"], {"canicas": 2, "despertador": 1}
+    s.en_mano = "canicas"
+    ev = s.usar(1.0, 0.0, 90.0)
+    assert abs(ev["hasta"][0] - 4.7) < 1e-6 and s.cantidades["canicas"] == 1
+    s.actualizar(ev["vuelo"] / 2, -9.0, 9.0, False, False)
+    assert g.atento == 0.0, "aun vuela"
+    s.actualizar(ev["vuelo"], -9.0, 9.0, False, False)
+    assert g.hacia_ruido == ev["hasta"] and s.sonaron
+    s.en_mano = "despertador"
+    ev = s.usar(-2.0, 0.0, 0.0)
+    assert ev["hasta"] == (-2.0, 0.0) and ev["retraso"] == 3.0
+    assert s.inventario == ["canicas"] and s.en_mano == "canicas"
+    assert s.usar(0.0, 0.0, 0.0)["objeto"] == "canicas" and s.en_mano is None
+    assert s.usar(0.0, 0.0, 0.0) is None
 
     # Se agarra de cerca, se lleva en orden y se elige con el numero.
     s = Sigilo({}, (0, 0, 0), {"canicas": {"pos": (1.0, 0.8, 0.0), "cantidad": 5},

@@ -16,6 +16,10 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 | `assets/audio/ambiente.ogg` | Ambiente de calle de la cinemática (tráfico, murmullo, carros que pasan) | Generado por el proyecto (`herramientas/componer_intro.py`) | Propia | No | A · 2026-10-20 |
 | `assets/audio/ambiente_lluvia.wav` | Lluvia en bucle con rachas y una sirena lejana (colegio de noche, capítulo 2) | Generado por el proyecto (`herramientas/componer_lluvia.py`) | Propia | No | A · 2026-10-31 |
 | `assets/audio/fx_trueno.wav` | Trueno de la cinemática del capítulo 2 | Generado por el proyecto (`herramientas/componer_lluvia.py`) | Propia | No | A · 2026-10-31 |
+| `assets/audio/fx_canica.wav` | Canica que bota y rueda (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
+| `assets/audio/fx_despertador.wav` | Campanas del despertador, 8 s (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
+| `assets/audio/fx_mecha.wav` | Mecha del petardo (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
+| `assets/audio/fx_petardo.wav` | Estallido del petardo con eco (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
 | `assets/audio/intro.ogg` | Música de la cinemática, sintetizada contra sus tiempos | Generada por el proyecto (`herramientas/componer_intro.py`) | Propia | No | A · 2026-10-20 |
 | `assets/audio/ui_mover.wav` | Efecto «Scroll» del menú | Canal GamingSFX (YouTube), pack «Game Menu Sound Effects 01» | **POR CONFIRMAR** | Probablemente sí | A · 2026-10-20 |
 | `assets/audio/ui_confirmar.wav` | Efecto «Select Confirm» | Canal GamingSFX (YouTube), mismo pack | **POR CONFIRMAR** | Probablemente sí | A · 2026-10-20 |

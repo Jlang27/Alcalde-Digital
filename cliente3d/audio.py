@@ -86,6 +86,11 @@ EFECTOS = {
     "rumor_llega": ("fx_rumor_llega.ogg", 0.35, 0.08),
     # el colegio de noche
     "trueno": ("fx_trueno.wav", 1.0, 0.05),
+    # los objetos que se usan (herramientas/componer_objetos.py)
+    "canica": ("fx_canica.wav", 1.0, 0.08),
+    "despertador": ("fx_despertador.wav", 0.8, 0.0),
+    "mecha": ("fx_mecha.wav", 0.7, 0.05),
+    "petardo": ("fx_petardo.wav", 1.0, 0.04),
 }
 
 # Los efectos de interfaz suenan MUCHAS veces seguidas. A volumen de
