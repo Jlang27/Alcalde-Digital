@@ -35,7 +35,8 @@ from jugador import Jugador
 from contenido import INDICADORES_META
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
-                       HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2)
+                       HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
+                       MENSAJE_ANONIMO)
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
 from sigilo import AVISOS_MAXIMOS, Vigilante
@@ -90,6 +91,7 @@ class Cliente:
         self.vigilantes = {}          # id -> (actor, abanico, foco, haz) del dia 2
         self.figurantes = {}          # gente de escenario sin pistas (el rector)
         self.cine = None              # la cinematica de un capitulo, si suena
+        self.escena = None            # la salida del colegio, con su decision
         self.asesor = None            # el asesor de Daniel (dia 3)
         self.ronda_asesor = None      # su ida y vuelta (sigilo.Vigilante)
         self.sospecha = None          # el medidor de «te estan viendo»
@@ -935,7 +937,16 @@ def abrir_cinematica(indice):
         return
     cl.estado = "cinematica"
     animar("idle")
+    # La ronda empieza cuando sueltas a la protagonista: en la llegada no
+    # hay vigilantes (el del pasillo salia en el plano con el rector).
+    mostrar_vigilantes(False)
     cl.cine = clase(cl.actor, cl.partida.protagonista.nombre)
+
+
+def mostrar_vigilantes(visibles):
+    for actor, abanico, _foco, haz in cl.vigilantes.values():
+        for nodo in (actor, abanico, haz):
+            nodo.show() if visibles else nodo.hide()
 
 
 def terminar_cinematica():
@@ -943,6 +954,7 @@ def terminar_cinematica():
     fundido = pantallas.Fundido()
     cl.cine.cerrar()
     cl.cine = None
+    mostrar_vigilantes(True)
     abrir_rotulo(cl.partida.dia_actual)
     fundido.desvanecer(0.9, retraso=0.25)
 
@@ -1015,6 +1027,11 @@ def abrir_libre():
         abrir_aviso_papel("TU JORNADA", "Analiza los hechos", TEXTO_JORNADA,
                           abrir_libre)
         return
+    if p is not None and p.sigilo is not None and cl.dia_avisado != p.dia_actual:
+        cl.dia_avisado = p.dia_actual
+        abrir_aviso_papel("TU NOCHE", "Saca la propuesta del colegio", TEXTO_NOCHE,
+                          abrir_libre)
+        return
     cl.estado = "libre"
     animar("idle")
     audio.agachar(False)
@@ -1037,13 +1054,16 @@ def abrir_libre():
                              if p is not None and p.sigilo is not None else [])
     cl.jugador.encuadrar()
     cl.jugador.activar()
-    cl.aviso = pantallas.AvisoLibre()
+    cl.aviso = pantallas.AvisoLibre(telefono=p is None or p.sigilo is None)
     cl.mapa.preparar(mundo.escenario(), mundo.limites(), mundo.bloqueos())
     pintar_reloj_manana()
 
 
 def cerrar_libre():
     cl.mapa.mostrar(False)
+    if cl.inventario is not None:
+        # actualizar_mapa lo apaga, pero una escena que no pasa por el no
+        cl.inventario.mostrar(False)
     limpiar(cl.marca_hablar)
     cl.cerca = None
     limpiar(cl.marca_objeto)
@@ -1149,11 +1169,18 @@ def quitar_npcs():
 
 TEXTO_PILLADA = (
     "Un vigilante te alumbra la cara. «A esta hora no puede estar aquí». "
-    "Te acompaña al pasillo sin soltarte el brazo. Agáchate detrás de las "
+    "Te acompaña hasta el hall sin soltarte el brazo. Agáchate detrás de las "
     "mesas y no corras cerca de ellos: correr se oye.")
 TEXTO_EXPULSADA = (
     "Esta vez no hay advertencia: te sacan del colegio y cierran el "
     "portón. Lo que no alcanzaste a ver se queda en el archivo.")
+TEXTO_NOCHE = (
+    "Busca en el archivo la carpeta «Propuesta de Ospina» y sácala por la "
+    "puerta verde de SALIDA, junto a las taquillas rojas. Esta noche no "
+    "hay teléfono que valga: si te ven tres veces, te sacan del colegio.")
+TEXTO_SIN_PROPUESTA = (
+    "Todavía no puedes irte: tienes que encontrar el archivo «Propuesta de "
+    "Ospina». Está en algún lugar del archivo.")
 # El momento de audio.py que suena cuando cada objeto hace su ruido.
 SONIDO_OBJETO = {"canicas": "canica", "despertador": "despertador",
                  "petardo": "petardo"}
@@ -1167,11 +1194,11 @@ def preparar_vigilantes():
     if s is None:
         return
     s.tapan_de_pie, s.tapan_agachado = mundo.coberturas()
+    s.preparar_plano(mundo.bloqueos(), mundo.limites())
     for v in s.vigilantes:
         cl.vigilantes[v.id] = mundo.vigilante(cl.mundo)
     cl.sospecha = pantallas.Sospecha()
-    mundo.objetos_sueltos(cl.mundo, {i: OBJETOS_CAPITULO_2[i]["pos"]
-                                     for i in s.sueltos})
+    mundo.objetos_sueltos(cl.mundo, {i: OBJETOS_CAPITULO_2[i] for i in s.sueltos})
     cl.inventario = pantallas.Inventario()
     pintar_inventario()
     dibujar_ronda()
@@ -1220,7 +1247,7 @@ def dibujar_ronda():
     s = cl.partida.sigilo
     for v in s.vigilantes:
         mundo.mover_vigilante(cl.vigilantes[v.id], v.x, v.z, v.rumbo,
-                              v.andando, s.rayos(v), v.id == s.quien)
+                              v.andando, s.rayos(v), v.id == s.quien, v.corriendo)
 
 
 def ronda(dt):
@@ -1240,8 +1267,52 @@ def ronda(dt):
         mundo.sonar_objeto(ruido)
     s.sonaron.clear()
     mundo.animar_usados(dt)
-    if evento:
+    if evento == "sin_objetivo":
+        abrir_aviso_papel("TODAVÍA NO", "Falta la propuesta de Ospina",
+                          TEXTO_SIN_PROPUESTA, abrir_libre)
+    elif evento == "escapada":
+        abrir_salida()
+    elif evento:
         pillada(evento)
+
+
+def abrir_salida():
+    """Fuera del colegio con la propuesta: el mensaje anonimo y la
+    decision del capitulo 2 (el arbol lo pone la Partida)."""
+    cerrar_libre()
+    cl.estado = "salida"
+    opciones = [(o.id, o.texto, o.detalle) for o in cl.partida.opciones()]
+    cl.escena = cine_colegio.SalidaColegio(cl.actor, opciones, MENSAJE_ANONIMO)
+
+
+def elegir_en_salida(i):
+    """1 o 2 en la calle: la opcion y, detras, su unica consecuencia."""
+    id_opcion = cl.escena.elegir(i)
+    if id_opcion is None:
+        return
+    audio.efecto("decidir")
+    cl.partida.elegir(id_opcion)
+    hoja = cl.partida.elegir(cl.partida.opciones()[0].id)
+    cl.escena.consecuencia(hoja.texto, cl.partida.ultimo_detalle)
+
+
+def terminar_salida():
+    cl.escena.cerrar()
+    cl.escena = None
+    cl.estado = "juego"
+    cerrar_dia(plano=None)        # la foto del cierre es la calle, no el despacho
+
+
+def terminar_noche():
+    """Expulsada sin la propuesta no hay dilema: directo al cierre del dia."""
+    cl.partida.terminar_noche()
+    cl.estado = "juego"
+    # Los planos fijos del cierre estan medidos desde la marca.
+    fundido = pantallas.Fundido()
+    cl.actor.setPos(0, 0, 0)
+    cl.actor.setH(0)
+    fundido.desvanecer(0.45, retraso=0.1)
+    cerrar_dia()
 
 
 def pillada(evento):
@@ -1254,10 +1325,9 @@ def pillada(evento):
     cl.jugador.yaw, cl.jugador.rumbo, cl.jugador.pivote = rumbo, 180.0 - rumbo, None
     audio.efecto("vibracion")
     if evento == "expulsada":
-        # Sin colegio no hay mas que investigar: queda el telefono.
         abrir_aviso_papel("TE SACARON DEL COLEGIO",
                           f"Aviso {s.avisos} de {AVISOS_MAXIMOS}",
-                          TEXTO_EXPULSADA, empezar_decision)
+                          TEXTO_EXPULSADA, terminar_noche)
     else:
         abrir_aviso_papel("TE VIERON", f"Aviso {s.avisos} de {AVISOS_MAXIMOS}",
                           TEXTO_PILLADA, abrir_libre)
@@ -1679,7 +1749,8 @@ def cerrar_modal(acepta):
 #  CIERRE DEL DIA: el diagrama de flujo
 # ===================================================================
 
-def cerrar_dia():
+def cerrar_dia(plano="PM"):
+    """plano: el corte para la foto del cierre; None deja la camara donde esta."""
     cl.dia_cerrado = True
     cl.nodo_pendiente = None
     cl.agotado = False
@@ -1702,7 +1773,8 @@ def cerrar_dia():
         e.enabled = False
     # Plano medio limpio, sin interfaz: dentro de unos fotogramas se
     # fotografia para la miniatura del «inicio» del diagrama.
-    mundo.corte("PM")
+    if plano:
+        mundo.corte(plano)
     cl.pagina_cierre = None
     invoke(revelar_diagrama, delay=0.12)
 
@@ -2156,6 +2228,11 @@ def update():
             terminar_cinematica()
         return
 
+    if cl.estado == "salida" and cl.escena is not None:
+        if cl.escena.actualizar(time.dt):
+            terminar_salida()
+        return
+
     if cl.estado == "intro" and cl.intro is not None:
         if cl.intro.actualizar(time.dt):
             terminar_intro()
@@ -2185,8 +2262,11 @@ def update():
         cl.jugador.seguir(time.dt)
         if cl.partida.sigilo is not None and not cl.confirmando:
             ronda(time.dt)
-            senalar_objeto()
-            senalar_cobertura()
+            # la ronda puede haber abierto un aviso: sin esto, «C esconderse»
+            # se volvia a pintar detras de la tarjeta y del cierre
+            if cl.estado == "libre":
+                senalar_objeto()
+                senalar_cobertura()
         if cl.npcs:
             senalar_cercano()
         return
@@ -2352,6 +2432,14 @@ def input(tecla):
             cl.cine.saltar()
         return
 
+    elif cl.estado == "salida" and cl.escena is not None:
+        # 1-9 deciden, como en el telefono; Enter adelanta, pero no decide.
+        if tecla.isdigit() and tecla != "0":
+            elegir_en_salida(int(tecla) - 1)
+        elif tecla in ("enter", "space", "escape"):
+            cl.escena.saltar()
+        return
+
     elif cl.estado == "intro":
         # Se puede saltar, pero no se puede salir al menu desde aqui:
         # Esc a mitad de cinematica es casi siempre «ya la vi».
@@ -2437,7 +2525,8 @@ def input(tecla):
             # 1-9 ponen en la mano lo que llevas, en el orden en que lo agarraste
             audio.efecto("mover")
             pintar_inventario()
-        elif tecla in ("enter", "space"):
+        elif tecla in ("enter", "space") and cl.partida.sigilo is None:
+            # el telefono es del capitulo 1: de noche en el colegio no se saca
             p = cl.partida
             # el dia que se investiga, sacar el telefono es irreversible:
             # se pregunta. (A las 8:30 ya no hay nada que preguntar.)

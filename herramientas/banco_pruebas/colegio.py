@@ -59,14 +59,16 @@ assert J.cl.cine is None and J.cl.actor.getPos().length() < 0.01
 p = J.cl.partida
 assert p.dia_actual == 1 and p.protagonista.nombre == "Valeria Samper", (
     p.dia_actual, p.protagonista.nombre)
-for _ in range(4):                         # rotulo, contexto y avisos de papel
+for _ in range(6):                         # rotulo, contexto y avisos de papel
     if estado() == "libre":
         break
     tecla("enter", 0.6)
 assert estado() == "libre", estado()
+tecla("enter", 0.3)
+assert estado() == "libre", "en el capitulo 2 no se saca el telefono"
 
 s = J.cl.partida.sigilo
-assert s is not None and len(J.cl.vigilantes) == 3, "el dia 2 trae su ronda"
+assert s is not None and sorted(J.cl.vigilantes) == ["archivo", "pasillo", "restringido"]
 assert J.mundo._ACTUAL["nombre"] == "rectoria"
 antes = [(v.x, v.z) for v in s.vigilantes]
 pasar(2.0)
@@ -76,11 +78,23 @@ assert [(v.x, v.z) for v in s.vigilantes] != antes, "la ronda no anda"
 # ponen en la mano. La ronda se queda quieta y lejos para no estorbar.
 for v in s.vigilantes:
     v.avanzar = lambda dt: None
-vigilante("sala").x, vigilante("sala").z, vigilante("sala").rumbo = 20.8, -2.9, 180.0
-assert set(s.sueltos) == {"canicas", "despertador", "petardo"}
+vigilante("pasillo").x, vigilante("pasillo").z, vigilante("pasillo").rumbo = -3.6, 5.6, -90.0
+r = vigilante("restringido")
+r.x, r.z, r.rumbo = 18.5, 28.8, 0.0
+assert set(s.sueltos) == {"canicas", "despertador", "petardo", "propuesta"}
+
+# Sin la propuesta, la salida solo avisa de que falta.
+poner(24.0, -7.3, (25.0, -7.3))
+pasar(0.3)
+texto = " ".join(getattr(e, "text", "") for e in J.cl.aviso_papel.piezas)
+assert estado() == "aviso_papel" and "propuesta de ospina" in " ".join(texto.lower().split()), estado()
+foto("colegio_salida_sin_propuesta")
+tecla("enter", 0.4)
+assert estado() == "libre" and not s.escapo
 for id_objeto, sitio, mesa in (("canicas", (7.3, 0.85), (6.3, 0.85)),
-                               ("despertador", (19.85, 2.1), (19.85, 2.85)),
-                               ("petardo", (5.35, -6.4), (5.35, -5.6))):
+                               ("despertador", (9.3, -8.0), (9.3, -8.75)),
+                               ("petardo", (5.35, -6.4), (5.35, -5.6)),
+                               ("propuesta", (22.6, 18.95), (21.8, 18.95))):
     poner(*sitio, mesa)
     pasar(0.4)
     assert J.cl.objeto_cerca == id_objeto and J.cl.marca_objeto, (id_objeto, J.cl.objeto_cerca)
@@ -93,6 +107,9 @@ tecla("2", 0.2)
 assert s.en_mano == "despertador"
 tecla("5", 0.2)
 assert s.en_mano == "despertador", "un numero sin objeto no cambia nada"
+tecla("4", 0.1)
+tecla("left mouse down", 0.2)
+assert "propuesta" in s.inventario, "la propuesta no se lanza"
 foto("colegio_inventario")
 
 # Andar de pie a su espalda se oye; agachada, no.
@@ -100,13 +117,13 @@ from ursina import held_keys
 g = vigilante("archivo")
 g.x, g.z, g.rumbo = 7.0, 20.0, 0.0
 for agachada, oye in ((True, False), (False, True)):
-    g.atento = 0.0
+    g.modo = None
     poner(7.0, 18.2, (7.0, 10.0))
     held_keys["control"], held_keys["w"] = int(agachada), 1
     pasar(0.3)
     held_keys["control"] = held_keys["w"] = 0
-    assert (g.atento > 0) == oye, ("agachada" if agachada else "de pie", g.atento)
-g.atento = 0.0
+    assert (g.modo == "acude") == oye, ("agachada" if agachada else "de pie", g.modo)
+g.modo, g.camino = None, []
 pasar(0.3)
 s.sospecha = 0.0
 
@@ -141,8 +158,10 @@ assert j.cubierta is not None, "escondida no se anda"
 tecla("c", 0.3)
 assert j.cubierta is None and not j.agachado
 
-# Clic: la canica vuela por el pasillo central y el vigilante mira alli.
+# Clic: la canica vuela por el pasillo central y el vigilante corre alli,
+# rodeando los estantes, y se queda buscando.
 g.x, g.z, g.rumbo = 4.0, 23.0, 180.0
+del g.avanzar
 tecla("1", 0.1)
 poner(-1.0, 15.0, (-1.0, 25.0))
 pasar(0.2)
@@ -150,6 +169,12 @@ tecla("left mouse down", 0.2)
 assert s.cantidades["canicas"] == 4
 pasar(1.0)
 assert g.hacia_ruido is not None and abs(g.hacia_ruido[1] - 23.0) < 0.5, g.hacia_ruido
+assert g.modo == "acude" and g.corriendo, g.modo
+assert J.cl.vigilantes["archivo"][0].getCurrentAnim() == "correr"
+foto("colegio_guardia_corre")
+pasar(2.5)
+assert g.modo == "busca" and math.hypot(g.x - g.hacia_ruido[0], g.z - g.hacia_ruido[1]) < 0.1, (g.modo, g.x, g.z)
+g.avanzar = lambda dt: None
 # El petardo: vuela, chisporrotea y estalla.
 tecla("3", 0.1)
 tecla("left mouse down", 0.1)
@@ -193,10 +218,9 @@ for n in range(1, AVISOS_MAXIMOS + 1):
     tecla("enter", 0.6)
     if n < AVISOS_MAXIMOS:
         assert estado() == "libre", estado()
-assert s.expulsada and estado() == "juego", estado()
-
-# Al cerrar el dia queda en la memoria de la partida.
-J.cl.partida._cerrar_dia()
+# Sin telefono: la expulsion cierra el dia y queda en la memoria.
+assert s.expulsada and estado() == "juego" and J.cl.dia_cerrado, estado()
 assert "te_sacaron_del_colegio" in J.cl.partida.banderas
+assert "sacaste_la_propuesta" not in J.cl.partida.banderas
 informe()
 print("colegio: todo bien")

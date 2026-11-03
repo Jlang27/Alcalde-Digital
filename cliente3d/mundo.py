@@ -1709,6 +1709,9 @@ def _obra_colegio():
     _archivador(o, "x", XA_OESTE + 0.1, 1, 20.0, 20.9)
     for a in (10.0, 10.9, 11.8, 12.7):
         _archivador(o, "x", XA_ESTE - 0.1, -1, a, a + 0.85)
+    # El de la propuesta de Ospina: pegado al estante del medio, bajo la
+    # lampara y junto a la ronda (contenido.OBJETOS_CAPITULO_2).
+    _archivador(o, "x", 21.5, 1, 18.5, 19.4)
     # Separadas del muro: detras de ellas se esconde uno agachado, y con
     # menos de un metro la camara no cabia y se metia en la pared.
     _mesa(o, 4.2, 6.4, 9.0, 10.2)
@@ -2765,8 +2768,12 @@ def cambiar_escenario(mundo, escenario):
     # cleanup() las deja corriendo sobre un modelo que ya no existe.
     for actor in _ACTUAL.pop("actores", ()):
         actor.cleanup()
+    # Sus piezas ya se fueron con _ENTIDADES; quedan los nodos que las colgaban.
     for usado in _ACTUAL.get("usados", ()):
-        usado["nodo"].removeNode()      # sus piezas ya se fueron con _ENTIDADES
+        usado["nodo"].removeNode()
+    for _piezas, _brillo, nodo in _ACTUAL.get("objetos", {}).values():
+        if nodo is not None:
+            nodo.removeNode()
     for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo", "lluvia",
                   "sirenas", "fase_sirena", "luz_sirena", "reloj",
                   "luz_ambiente", "objetos", "usados"):
@@ -3254,6 +3261,7 @@ def vigilante(mundo):
     actor.reparentTo(mundo)
     _quitar_mapa_de_brillo(actor)
     actor.setPlayRate(RITMO_RONDA, "caminar")
+    actor.setPlayRate(0.75, "correr")     # corre a 3,4 m/s, no a lo que pide el clip
     # El brillo de la linterna a la altura del pecho; el modelo mira a -z.
     # No va por _pieza: esa lo apunta al escenario, y este se va con el actor.
     foco = Entity(model="sphere", scale=0.09, position=(0.0, 1.15, -0.35))
@@ -3287,14 +3295,15 @@ def _abanico(entidad, centro, rayos, y_rayos, rgb, alfa_centro, alfa_borde):
     malla.generate()
 
 
-def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta):
+def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta, corriendo=False):
     """Lo pone donde dicen las reglas y le redibuja la luz.
 
     rayos: los extremos del cono (sigilo.Vigilante.rayos), ya cortados
     contra muros y estantes. alerta: te esta viendo; la luz vira a rojo.
+    corriendo: va hacia un ruido que oyo.
     """
     actor, abanico, _foco, haz = par
-    mover_actor(actor, x, z, rumbo, andando)
+    mover_actor(actor, x, z, rumbo, andando, corriendo)
     rgb = LINTERNA_ALERTA if alerta else LINTERNA
     # Fuerte al pie de la linterna y casi nada en el borde: se lee como luz.
     _abanico(abanico, (x, 0.03, z), rayos, 0.03, rgb, 0.42, 0.05)
@@ -3304,11 +3313,13 @@ def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta):
     _abanico(haz, pecho, rayos, 0.03, rgb, 0.22, 0.0)
 
 
-def mover_actor(actor, x, z, rumbo, andando):
-    """Pone a alguien que hace una ronda donde le toca, andando o parado."""
+def mover_actor(actor, x, z, rumbo, andando, corriendo=False):
+    """Pone a alguien que hace una ronda donde le toca, andando, corriendo
+    o parado."""
     actor.setPos(x, 0, z)
     actor.setH(180.0 - rumbo)            # el convenio de jugador.py
-    clip = "caminar" if andando else "idle"
+    clip = ("correr" if corriendo and "correr" in actor.getAnimNames()
+            else "caminar" if andando else "idle")
     if actor.getCurrentAnim() != clip:
         actor.loop(clip)
 
@@ -3573,6 +3584,38 @@ def _petardo(mundo, x, y, z):
     mecha.setTwoSided(True)
 
 
+def _pintar_carpeta(img):
+    """La carpeta de la propuesta: cartulina, franja del equipo de Ospina,
+    etiqueta y el sello rojo que dice por que no deberia salir de aqui."""
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(214, 178, 112, 255))
+    d.rectangle((0, 0, w, h * 0.16), fill=(29, 95, 168, 255))      # tinta de Ospina
+    d.text((w / 2, h * 0.08), "EQUIPO OSPINA", font=_letra(int(h * 0.06)),
+           fill=(242, 239, 231, 255), anchor="mm")
+    d.rectangle((w * 0.12, h * 0.30, w * 0.88, h * 0.56), fill=(242, 239, 231, 255),
+                outline=(60, 50, 40, 255), width=3)
+    d.text((w / 2, h * 0.39), "PROPUESTA", font=_letra(int(h * 0.075)),
+           fill=(23, 24, 26, 255), anchor="mm")
+    d.text((w / 2, h * 0.49), "Reorganización educativa", font=_letra(int(h * 0.04), False),
+           fill=(60, 58, 54, 255), anchor="mm")
+    sello = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    ds = ImageDraw.Draw(sello)
+    ds.rectangle((w * 0.16, h * 0.70, w * 0.84, h * 0.82), outline=(195, 59, 51, 230), width=5)
+    ds.text((w / 2, h * 0.76), "CONFIDENCIAL", font=_letra(int(h * 0.06)),
+            fill=(195, 59, 51, 230), anchor="mm")
+    img.alpha_composite(sello.rotate(-10, resample=Image.BICUBIC))
+
+
+def _propuesta(mundo, x, y, z):
+    """La carpeta, con los folios asomando por el borde."""
+    papel = _material((0.75, 0.73, 0.66, 1), rugosidad=0.9)
+    _pieza(mundo, "cube", papel, (0.22, 0.022, 0.30), (x + 0.012, y + 0.012, z))
+    carpeta = _con_textura(_pieza(mundo, "cube", _material((1, 1, 1, 1), rugosidad=0.85),
+                                  (0.23, 0.03, 0.31), (x, y + 0.016, z)),
+                           _textura("carpeta_propuesta", _pintar_carpeta, 256, 340))
+    carpeta.rotation_y = 8
+
+
 def _caja_requisados(mundo, x0, y0, z0):
     """La caja de lo requisado en el mostrador del hall: de ahi sale el petardo."""
     x1, y1, z1 = x0 + 0.34, y0 + 0.20, z0 + 0.26
@@ -3584,24 +3627,33 @@ def _caja_requisados(mundo, x0, y0, z0):
                  _textura("carton_tapa", _pintar_carton(None), 128, 128))
 
 
-_OBJETOS = {"canicas": _canicas, "despertador": _despertador, "petardo": _petardo}
+_OBJETOS = {"canicas": _canicas, "despertador": _despertador, "petardo": _petardo,
+            "propuesta": _propuesta}
+# El destello de cada uno; el objetivo, en el azul de Ospina para que se distinga.
+BRILLOS = {"propuesta": (0.55, 0.78, 1.0)}
 
 
 def objetos_sueltos(mundo, objetos):
-    """Dibuja lo que queda por agarrar. objetos: id -> (x, alto, z).
+    """Dibuja lo que queda por agarrar (contenido.OBJETOS_CAPITULO_2):
+    id -> {"pos": (x, alto, z), "giro": grados}.
 
-    Cada uno lleva un destello encima (fuera del PBR, sin luz): en un
-    colegio a oscuras una cosa de cinco centimetros no se encontraba.
+    Cada uno cuelga de su nodo, girado para que mire a quien llega, y
+    lleva un destello encima (fuera del PBR, sin luz): en un colegio a
+    oscuras una cosa de cinco centimetros no se encontraba.
     """
     _ACTUAL["objetos"] = {}
     antes = len(_ENTIDADES)
     _caja_requisados(mundo, 5.65, 1.1, -5.73)
-    _ACTUAL["objetos"]["requisados"] = (_ENTIDADES[antes:], None)
-    for id_objeto, (x, y, z) in objetos.items():
+    _ACTUAL["objetos"]["requisados"] = (_ENTIDADES[antes:], None, None)
+    for id_objeto, o in objetos.items():
+        x, y, z = o["pos"]
+        nodo = mundo.attachNewNode(f"objeto_{id_objeto}")
+        nodo.setPos(x, y, z)
+        nodo.setH(o.get("giro", 0.0))
         antes = len(_ENTIDADES)
-        _OBJETOS[id_objeto](mundo, x, y, z)
+        _OBJETOS[id_objeto](nodo, 0, 0, 0)
         brillo = Entity(parent=scene, model="quad", position=(x, y + 0.2, z), scale=0.3,
-                        color=color.Color(1.0, 0.80, 0.45, 0.4))
+                        color=color.Color(*BRILLOS.get(id_objeto, (1.0, 0.80, 0.45)), 0.4))
         # No con billboard=True: Ursina lo pasa como desplazamiento y acerca
         # el destello un metro a la camara, por delante de quien lo tape.
         brillo.setBillboardPointEye()
@@ -3609,12 +3661,12 @@ def objetos_sueltos(mundo, objetos):
         brillo.setTransparency(TransparencyAttrib.MAlpha)
         brillo.setDepthWrite(False)
         _ENTIDADES.append(brillo)
-        _ACTUAL["objetos"][id_objeto] = (_ENTIDADES[antes:], brillo)
+        _ACTUAL["objetos"][id_objeto] = (_ENTIDADES[antes:], brillo, nodo)
 
 
 def brillar_objetos(cerca, t):
     """Late despacio; el que esta al alcance de la mano brilla del todo."""
-    for i, (_piezas, brillo) in _ACTUAL.get("objetos", {}).items():
+    for i, (_piezas, brillo, _nodo) in _ACTUAL.get("objetos", {}).items():
         if brillo is None:
             continue
         pulso = 0.5 + 0.5 * math.sin(t * 2.6 + len(i))
@@ -3623,10 +3675,12 @@ def brillar_objetos(cerca, t):
 
 
 def quitar_objeto(id_objeto):
-    piezas, _ = _ACTUAL.get("objetos", {}).pop(id_objeto, ((), None))
+    piezas, _brillo, nodo = _ACTUAL.get("objetos", {}).pop(id_objeto, ((), None, None))
     for e in piezas:
         destroy(e)
         _ENTIDADES.remove(e)
+    if nodo is not None:
+        nodo.removeNode()
 
 
 def quitar_objetos():

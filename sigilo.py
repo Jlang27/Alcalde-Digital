@@ -7,10 +7,12 @@ correra en el servidor; el cliente solo dibuja lo que esto calcula.
 Todo es geometria del suelo (x, z) en metros, la misma de mundo.py. El
 rumbo se mide como en jugador.py: el vector (sin a, cos a), 0 mira a +z.
 
-    python -I sigilo.py      # pruebas
+    python sigilo.py      # pruebas (sin -I: necesita grafo.py al lado)
 """
 
 import math
+
+from grafo import Grafo
 
 ALCANCE = 7.0              # hasta donde llega la linterna
 ALCANCE_AGACHADO = 4.0     # agachada solo te ven de cerca
@@ -20,8 +22,11 @@ OIDO_ANDANDO = 2.5         # y andar de pie tambien, mas de cerca; agachada, no
 # Oir no es ver: lo que oye sube la sospecha a la mitad de ritmo, pero el
 # vigilante se gira hacia el ruido y ahi ya te puede ver.
 OIDO_LENTO = 2.0
-ATENCION = 3.0             # segundos que se queda mirando hacia lo que oyo
+ATENCION = 3.0             # segundos que se queda buscando donde oyo algo
 GIRO_ATENTO = 160.0        # grados por segundo al girarse hacia un ruido
+CARRERA = 3.4              # lo que corre un vigilante hacia un ruido (tu: 5,2)
+CASILLA = 0.5              # lado de cada casilla del plano por el que corren
+HOLGURA = 0.3              # su bulto: no rozan los muebles al correr
 CERCA = 1.0                # tropezarse con el vigilante
 # Segundos de vista seguida para que te pillen: a quemarropa la mitad,
 # en el borde del cono vez y media. Da tiempo a esconderse si reaccionas.
@@ -55,6 +60,94 @@ def _giro_corto(desde, hasta):
     return (hasta - desde + 180.0) % 360.0 - 180.0
 
 
+class Plano:
+    """El suelo como grafo de casillas, para correr hacia un ruido sin
+    atravesar estantes.
+
+    Cada casilla libre es un vertice y cada vecina libre (tambien en
+    diagonal, si no hay esquina por medio) una arista en los dos sentidos.
+    El camino es grafo.camino: BFS, el mas corto en saltos, que en una
+    rejilla es casi el mas corto en metros. Luego se estira: de cada punto
+    se salta al mas lejano que se ve en linea recta, para que no corra en
+    zigzag de casilla en casilla.
+    """
+
+    def __init__(self, bloqueos, limites, lado=CASILLA, holgura=HOLGURA):
+        self.x0, x1, self.z0, z1 = limites
+        self.lado = lado
+        self.nx, self.nz = int((x1 - self.x0) / lado), int((z1 - self.z0) / lado)
+        # Se pinta cada rectangulo sobre la rejilla, en vez de preguntar a
+        # cada casilla por los mil rectangulos del colegio.
+        self.ocupadas = set()
+        for a, b, c, d in bloqueos:
+            for i in range(max(0, int((a - holgura - self.x0) / lado - 0.5)),
+                           min(self.nx, int((b + holgura - self.x0) / lado + 0.5) + 1)):
+                for k in range(max(0, int((c - holgura - self.z0) / lado - 0.5)),
+                               min(self.nz, int((d + holgura - self.z0) / lado + 0.5) + 1)):
+                    x, z = self.centro((i, k))
+                    if a - holgura < x < b + holgura and c - holgura < z < d + holgura:
+                        self.ocupadas.add((i, k))
+        self.grafo = Grafo()
+        for i in range(self.nx):
+            for k in range(self.nz):
+                if self.libre((i, k)):
+                    self.grafo.agregar_vertice((i, k))
+                    for di, dk in ((1, 0), (0, 1), (1, 1), (1, -1)):
+                        w = (i + di, k + dk)
+                        if self.libre(w) and (not (di and dk) or (
+                                self.libre((i + di, k)) and self.libre((i, k + dk)))):
+                            self.grafo.agregar_arista((i, k), w)
+                            self.grafo.agregar_arista(w, (i, k))
+
+    def libre(self, c):
+        return 0 <= c[0] < self.nx and 0 <= c[1] < self.nz and c not in self.ocupadas
+
+    def centro(self, c):
+        return self.x0 + (c[0] + 0.5) * self.lado, self.z0 + (c[1] + 0.5) * self.lado
+
+    def casilla(self, x, z):
+        """La casilla libre mas cercana a (x, z), o None si no hay cerca."""
+        i, k = int((x - self.x0) / self.lado), int((z - self.z0) / self.lado)
+        for radio in range(4):
+            cerca = [(i + a, k + b) for a in range(-radio, radio + 1)
+                     for b in range(-radio, radio + 1) if self.libre((i + a, k + b))]
+            if cerca:
+                return min(cerca, key=lambda c: math.hypot(self.centro(c)[0] - x,
+                                                           self.centro(c)[1] - z))
+        return None
+
+    def _se_ve(self, p, q):
+        """True si de p a q se corre en linea recta sin pisar casilla ocupada."""
+        pasos = max(1, int(math.hypot(q[0] - p[0], q[1] - p[1]) / (self.lado / 3)))
+        for n in range(pasos + 1):
+            x = p[0] + (q[0] - p[0]) * n / pasos
+            z = p[1] + (q[1] - p[1]) * n / pasos
+            if not self.libre((int((x - self.x0) / self.lado), int((z - self.z0) / self.lado))):
+                return False
+        return True
+
+    def ruta(self, desde, hasta):
+        """Puntos (x, z) para ir de desde a hasta, o None si no se llega."""
+        a, b = self.casilla(*desde), self.casilla(*hasta)
+        if a is None or b is None:
+            return None
+        casillas = self.grafo.camino(a, b)
+        if casillas is None:
+            return None
+        puntos = [self.centro(c) for c in casillas]
+        if self.libre((int((hasta[0] - self.x0) / self.lado),
+                       int((hasta[1] - self.z0) / self.lado))):
+            puntos[-1] = tuple(hasta)
+        estirada, i = [], 0
+        while i < len(puntos) - 1:
+            j = len(puntos) - 1
+            while j > i + 1 and not self._se_ve(puntos[i], puntos[j]):
+                j -= 1
+            estirada.append(puntos[j])
+            i = j
+        return estirada or puntos[-1:]
+
+
 class Vigilante:
     """Va y viene por su ruta y se para en cada punto a mirar."""
 
@@ -70,6 +163,13 @@ class Vigilante:
         self.andando = True
         self.atento = 0.0             # segundos que le quedan mirando un ruido
         self.hacia_ruido = None       # (x, z) de lo que oyo
+        # Con plano, lo que oye no solo lo mira: corre hasta alli ("acude"),
+        # busca con la linterna ("busca") y vuelve andando a su ronda.
+        self.plano = None
+        self.modo = None
+        self.camino = []
+        self.buscar = 0.0
+        self.corriendo = False
 
     def _hacia(self, p):
         return math.degrees(math.atan2(p[0] - self.x, p[1] - self.z))
@@ -83,7 +183,61 @@ class Vigilante:
         self.hacia_ruido = (x, z)
         self.atento = max(self.atento, segundos)
 
+    def oir(self, x, z, segundos):
+        """Oyo algo en (x, z). Con plano corre hasta alli y busca; sin el
+        (o si no hay por donde llegar), se gira a mirar."""
+        if (self.modo == "acude" and self.hacia_ruido is not None
+                and math.hypot(x - self.hacia_ruido[0], z - self.hacia_ruido[1]) < 1.5):
+            self.buscar = max(self.buscar, segundos)   # el mismo ruido: ya va
+            return
+        camino = self.plano.ruta((self.x, self.z), (x, z)) if self.plano else None
+        if not camino:
+            self.atender(x, z, segundos)
+            return
+        self.hacia_ruido = (x, z)
+        self.modo, self.camino, self.buscar = "acude", camino, segundos
+        self.atento = self.espera = 0.0
+
+    def _seguir_camino(self, dt, velocidad):
+        """Un paso por el camino. True al llegar al final."""
+        paso = velocidad * dt
+        while self.camino and paso > 0:
+            tx, tz = self.camino[0]
+            dx, dz = tx - self.x, tz - self.z
+            dist = math.hypot(dx, dz)
+            if dist > paso:
+                self.x += dx / dist * paso
+                self.z += dz / dist * paso
+                self.rumbo = math.degrees(math.atan2(dx, dz))
+                return False
+            self.x, self.z = tx, tz
+            paso -= dist
+            self.camino.pop(0)
+        return not self.camino
+
+    def _investigar(self, dt):
+        self.corriendo = self.modo == "acude"
+        if self.modo == "busca":
+            # Donde oyo el ruido: barre a un lado y a otro con la linterna.
+            self.andando = False
+            self.buscar = max(0.0, self.buscar - dt)
+            self.rumbo = self.desde + 70.0 * math.sin(self.buscar * 2.2)
+            if self.buscar == 0.0:
+                vuelta = self.plano.ruta((self.x, self.z), self.ruta[self.destino])
+                self.modo, self.camino = "vuelve", vuelta or [self.ruta[self.destino]]
+            return
+        self.andando = True
+        if self._seguir_camino(dt, CARRERA if self.modo == "acude" else self.velocidad):
+            if self.modo == "acude":
+                self.modo, self.desde = "busca", self.rumbo
+            else:
+                self.modo = None              # de vuelta en su ronda
+                self.corriendo = False
+
     def avanzar(self, dt):
+        if self.modo is not None:
+            self._investigar(dt)
+            return
         if self.atento > 0:
             # Parado y girandose hacia el ruido, no de golpe: se ve venir.
             self.atento = max(0.0, self.atento - dt)
@@ -156,9 +310,16 @@ class Vigilante:
 class Sigilo:
     """La ronda entera y lo que sabe de ti: sospecha, avisos y lo que llevas."""
 
-    def __init__(self, rutas, regreso, objetos=None, zonas_seguras=()):
+    def __init__(self, rutas, regreso, objetos=None, zonas_seguras=(),
+                 salida=None, objetivo=None):
         self.vigilantes = [Vigilante(i, r) for i, r in rutas.items()]
         self.regreso = regreso        # (x, z, rumbo): a donde te llevan al pillarte
+        # La noche acaba al llegar a la salida (x0, x1, z0, z1) con el
+        # objetivo en la mano; sin el, la salida solo avisa de que falta.
+        self.salida = salida
+        self.objetivo = objetivo
+        self.en_la_salida = False
+        self.escapo = False
         self.sospecha = 0.0           # 0..1
         self.avisos = 0
         self.quien = None             # el que te esta viendo ahora
@@ -187,17 +348,46 @@ class Sigilo:
     def expulsada(self):
         return self.avisos >= AVISOS_MAXIMOS
 
+    @property
+    def tiene_objetivo(self):
+        return self.objetivo in self.inventario
+
+    def preparar_plano(self, bloqueos, limites):
+        """El suelo por el que corren los vigilantes hacia un ruido.
+        shortcut: lo pone el cliente desde mundo.py, como tapan_de_pie."""
+        plano = Plano(bloqueos, limites)
+        for v in self.vigilantes:
+            v.plano = plano
+
+    def _llegar_a_salida(self, x, z):
+        """«escapada» o «sin_objetivo» al ENTRAR en la salida; si no, None."""
+        dentro = self.salida is not None and (
+            self.salida[0] < x < self.salida[1] and self.salida[2] < z < self.salida[3])
+        entra = dentro and not self.en_la_salida
+        self.en_la_salida = dentro
+        if not entra:
+            return None
+        if self.tiene_objetivo:
+            self.escapo = True
+            return "escapada"
+        return "sin_objetivo"
+
     def en_zona_segura(self, x, z):
         return any(x0 < x < x1 and z0 < z < z1 for x0, x1, z0, z1 in self.zonas_seguras)
 
     def actualizar(self, dt, x, z, agachado, corriendo, moviendose=False):
-        """Un paso de la ronda. Devuelve None, "pillada" o "expulsada".
+        """Un paso de la ronda. Devuelve None, "pillada", "expulsada",
+        "escapada" (salio con el objetivo) o "sin_objetivo" (llego a la
+        salida sin el).
 
         moviendose: si se esta desplazando (quieta no hace ruido). De pie
         se la oye de cerca; corriendo, de mas lejos; agachada, nada.
         """
-        if self.expulsada:
+        if self.expulsada or self.escapo:
             return None
+        salida = self._llegar_a_salida(x, z)
+        if salida:
+            return salida
         self._sonar(dt)
         tapan = self.tapan_agachado if agachado else self.tapan_de_pie
         self.a_salvo = self.en_zona_segura(x, z)
@@ -213,7 +403,7 @@ class Sigilo:
             if dist is None and oye:
                 oido = math.hypot(x - v.x, z - v.z)
                 if oido < oye:
-                    v.atender(x, z, ATENCION)
+                    v.oir(x, z, ATENCION)
                     dist, lento = oido, OIDO_LENTO
             if dist is not None:
                 t = TIEMPO_PILLAR * (0.5 + dist / ALCANCE) * lento
@@ -272,8 +462,8 @@ class Sigilo:
         hay que dibujar, o None si no llevas nada en la mano.
         """
         i = self.en_mano
-        if i is None:
-            return None
+        if i is None or self.objetos[i].get("uso") is None:
+            return None               # la propuesta no se lanza: se saca de aqui
         o = self.objetos[i]
         if o["uso"] == "lanzar":
             hasta = self._caida(x, z, rumbo, o["alcance"])
@@ -301,7 +491,7 @@ class Sigilo:
                 continue
             for v in self.vigilantes:
                 if math.hypot(v.x - r["x"], v.z - r["z"]) < r["radio"]:
-                    v.atender(r["x"], r["z"], r["dura"])
+                    v.oir(r["x"], r["z"], r["dura"])
             self.sonaron.append(r)
         self.ruidos = pendientes
 
@@ -397,6 +587,40 @@ if __name__ == "__main__":
     assert s.inventario == ["canicas"] and s.en_mano == "canicas"
     assert s.usar(0.0, 0.0, 0.0)["objeto"] == "canicas" and s.en_mano is None
     assert s.usar(0.0, 0.0, 0.0) is None
+
+    # El plano: un muro con puerta. Al otro lado se llega por la puerta.
+    pared = [(4.8, 5.2, -5.0, -1.0), (4.8, 5.2, 1.0, 5.0)]
+    plano = Plano(pared, (-5.0, 15.0, -5.0, 5.0))
+    camino = plano.ruta((0.0, 3.0), (10.0, 3.0))
+    assert camino[-1] == (10.0, 3.0)
+    tramos = list(zip([(0.0, 3.0)] + camino, camino))
+    assert not any(_entrada(p, q, r) is not None for p, q in tramos for r in pared), camino
+    assert plano.ruta((0.0, 3.0), (5.0, 3.0))[-1] != (5.0, 3.0), "dentro del muro no"
+
+    # Lo oye, corre hasta alli por la puerta, busca y vuelve a su ronda.
+    s = Sigilo({"g": [(0.0, -3.0), (0.0, 3.0)]}, (0, 0, 0))
+    s.preparar_plano(pared, (-5.0, 15.0, -5.0, 5.0))
+    g = s.vigilantes[0]
+    g.oir(10.0, 3.0, 2.0)
+    modos, llego = [], False
+    for _ in range(600):
+        g.avanzar(0.05)
+        assert not any(r[0] < g.x < r[1] and r[2] < g.z < r[3] for r in pared)
+        llego = llego or math.hypot(g.x - 10.0, g.z - 3.0) < 0.05
+        if not modos or modos[-1] != g.modo:
+            modos.append(g.modo)
+    assert llego and modos == ["acude", "busca", "vuelve", None], modos
+    assert g.x < 1.0, "volvio a su lado del muro"
+
+    # La salida: sin la propuesta avisa una vez; con ella, se acaba la noche.
+    s = Sigilo({}, (0, 0, 0), {"propuesta": {"pos": (1.0, 1.0, 0.0)}},
+               salida=(5.0, 6.0, -1.0, 1.0), objetivo="propuesta")
+    assert s.actualizar(0.1, 5.5, 0.0, False, False) == "sin_objetivo"
+    assert s.actualizar(0.1, 5.5, 0.0, False, False) is None, "no repite dentro"
+    s.actualizar(0.1, 3.0, 0.0, False, False)
+    assert s.agarrar(1.0, 0.0) == "propuesta" and s.usar(1.0, 0.0, 0.0) is None
+    assert s.actualizar(0.1, 5.5, 0.0, False, False) == "escapada" and s.escapo
+    assert s.actualizar(0.1, 5.5, 0.0, False, False) is None
 
     # Se agarra de cerca, se lleva en orden y se elige con el numero.
     s = Sigilo({}, (0, 0, 0), {"canicas": {"pos": (1.0, 0.8, 0.0), "cantidad": 5},

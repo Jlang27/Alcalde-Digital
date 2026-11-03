@@ -490,6 +490,9 @@ VOTOS_POR_NODO = {
     "d_bots": {"Hugo Bravo": -3},
     "b_nova": {"Hugo Bravo": -3},
     "b_cuentas": {"Daniel Ospina": -1, "Elena Ruiz": 1},
+    # capitulo 2: la propuesta desmiente el rumor de los colegios... si sale
+    "p_result": {"Daniel Ospina": 5, "Hugo Bravo": -2},
+    "g_result": {"Daniel Ospina": -4, "Hugo Bravo": 2},
 }
 
 # Las hojas que frenan el rumor: protegen a los vecinos a los que aun no
@@ -507,6 +510,9 @@ TEXTO_BANDERA = {
     "rastreaste_el_origen": "Que llegaste hasta @NovaAlerta.",
     "llegaste_tarde": "Que el rumor te ganó la carrera.",
     "te_sacaron_del_colegio": "Que te sacaron del colegio de noche.",
+    "sacaste_la_propuesta": "Que sacaste del colegio la propuesta del equipo de Ospina.",
+    "publicaste_la_propuesta": "Que publicaste la propuesta aunque te amenazaron.",
+    "guardaste_la_propuesta": "Que te callaste la propuesta por miedo a perder el trabajo.",
 }
 
 # Nombre y oficio de los que hablan en la cafeteria.
@@ -588,17 +594,20 @@ RONDAS_CAPITULO_2 = {
     # sube junto a la zona de mesas (folio 2), cruza el fondo y baja por el
     # pasillo central de los estantes, que pasa al lado del folio 1
     "archivo": [(7.0, 11.5), (7.0, 28.5), (-1.0, 28.5), (-1.0, 11.5)],
-    # por delante del mostrador (folio 3), sube por el lado este y vuelve
-    # por el fondo, junto a la mesa del folio 4
-    "restringido": [(13.5, 8.5), (28.5, 8.5), (28.5, 28.8), (18.5, 28.8)],
-    # cubre la puerta de la sala de profesores al pasillo de salida
-    "sala": [(20.8, 1.9), (20.8, -2.9)],
+    # por delante del mostrador (folio 3) y de la puerta del pasillo, sube
+    # por el pasillo del medio, junto a la propuesta, y vuelve por el fondo
+    "restringido": [(13.5, 8.5), (24.9, 8.5), (24.9, 28.8), (18.5, 28.8)],
+    # el pasillo central de punta a punta: delante del despacho, del aula,
+    # de la sala de profesores y de las dos puertas de los archivos
+    "pasillo": [(23.2, 5.6), (-3.6, 5.6)],
 }
-# A donde te llevan cuando te pillan: el pasillo, frente a la rectoria.
-REGRESO_CAPITULO_2 = (3.9, 5.6, 90.0)
+# A donde te llevan cuando te pillan: el hall, mirando a la rectoria. No
+# al pasillo: con su vigilante, te volvian a pillar nada mas soltarte.
+REGRESO_CAPITULO_2 = (1.0, -8.0, 0.0)
 # Lo que se puede agarrar con E, cada cosa donde tendria sentido
 # encontrarla. pos = (x, alto, z) del plano de mundo.py: el alto es el de
-# la mesa o el mostrador sobre el que esta.
+# la mesa o el mostrador sobre el que esta. giro: grados para que mire a
+# quien llega (el despertador tiene esfera).
 # Con clic se usa el de la mano: «lanzar» vuela hasta alcance metros hacia
 # donde mira la camara; «dejar» se queda a tus pies. Al sonar, cada
 # vigilante a menos de ruido metros se para a mirar alli atencion segundos.
@@ -607,14 +616,23 @@ OBJETOS_CAPITULO_2 = {
     # requisadas en clase: en la mesa de la profesora del aula 2B
     "canicas": {"nombre": "canicas", "cantidad": 5, "pos": (6.3, 0.76, 0.85),
                 "uso": "lanzar", "alcance": 8.0, "ruido": 6.0, "atencion": 4.0},
-    # el de la sala de profesores, junto al monitor
-    "despertador": {"nombre": "despertador", "cantidad": 1, "pos": (19.85, 0.76, 2.85),
+    # olvidado en el primer peldaño de la escalera, de cara a quien llega
+    "despertador": {"nombre": "despertador", "cantidad": 1, "pos": (9.3, 0.2, -8.75),
+                    "giro": 180.0,
                     "uso": "dejar", "mecha": 4.0, "ruido": 9.0, "atencion": 8.0},
     # junto a la caja de requisados del mostrador del hall
     "petardo": {"nombre": "petardo", "cantidad": 1, "pos": (5.35, 1.1, -5.6),
                 "uso": "lanzar", "alcance": 7.0, "mecha": 2.5, "ruido": 16.0,
                 "atencion": 9.0},
+    # El objetivo de la noche: en el restringido, encima del archivador del
+    # pasillo del medio, bajo la lampara y en la ronda. No se usa: se saca.
+    "propuesta": {"nombre": "propuesta de Ospina", "cantidad": 1,
+                  "pos": (21.8, 1.35, 18.95)},
 }
+# Sin la propuesta no se acaba la noche; con ella, al llegar a la salida
+# (x0, x1, z0, z1: delante de la puerta verde, junto a las taquillas rojas).
+OBJETIVO_CAPITULO_2 = "propuesta"
+SALIDA_CAPITULO_2 = (23.4, 24.6, -8.4, -6.2)
 # Un rincon al fondo de cada archivo donde nadie te ve ni te oye
 # (x0, x1, z0, z1). mundo.py lo cierra con cajas apiladas y lo marca.
 ZONAS_SEGURAS_CAPITULO_2 = ((-11.2, -8.6, 27.4, 30.7), (12.1, 14.4, 27.4, 30.7))
@@ -723,6 +741,46 @@ EVENTOS_ALEATORIOS = [
 # ===================================================================
 #  CONSTRUCCION DEL ARBOL DE DECISION DE UNA PUBLICACION
 # ===================================================================
+
+# El mensaje que le llega a Valeria al salir del colegio con la propuesta.
+MENSAJE_ANONIMO = "Si publicas eso, perderás tu trabajo."
+
+
+def construir_arbol_capitulo_2():
+    """El dilema del capitulo 2, que no sale de una publicacion de Civitas
+    sino de lo que Valeria se lleva del archivo:
+
+        raiz (el mensaje anonimo)
+        |- Publicar la informacion -> represalias en Nova (hoja)
+        |- Guardarla               -> el ataque sigue (hoja)
+
+    Sin ramas de habilidades ni de banderas: es una amenaza a ella, no una
+    publicacion que cualquiera pueda contestar.
+    """
+    raiz = NodoDecision("raiz", f"«{MENSAJE_ANONIMO}»", corto="MENSAJE ANÓNIMO")
+    arbol = ArbolDecision(raiz)
+    publicar = raiz.agregar_hijo(NodoDecision(
+        "publicar", "Publicar la información", rasgo="rigor", puntos=2,
+        detalle="Liberas la investigación en Nova Noticias.", corto="PUBLICAR"))
+    publicar.agregar_hijo(NodoDecision(
+        "p_result", "Represalias en Nova",
+        efectos={"info_verificada": 12, "desinformacion": -10, "confianza": 6},
+        rasgo="rigor", bandera="publicaste_la_propuesta",
+        detalle="Aclaras la verdad y limpias el nombre de Ospina, pero en "
+                "Nova Noticias empiezan las represalias contra ti.",
+        corto="REPRESALIAS"))
+    guardar = raiz.agregar_hijo(NodoDecision(
+        "guardar", "Guardarla", detalle="Callas para proteger tu estabilidad.",
+        corto="GUARDAR"))
+    guardar.agregar_hijo(NodoDecision(
+        "g_result", "El ataque sigue",
+        efectos={"desinformacion": 10, "confianza": -6, "info_verificada": -4},
+        bandera="guardaste_la_propuesta",
+        detalle="Salvas tu puesto, pero el ataque infundado contra Ospina "
+                "sigue escalando.",
+        corto="SIGUE EL ATAQUE"))
+    return arbol
+
 
 def construir_arbol_decision(pub):
     """Arma el arbol de decision base de una publicacion.

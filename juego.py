@@ -39,8 +39,9 @@ from contenido import (
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
     OPCIONES_QUE_PROTEGEN, DIA_SIGILO, RONDAS_CAPITULO_2, REGRESO_CAPITULO_2,
-    OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2,
-    construir_arbol_habilidades, construir_arbol_decision,
+    OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2, OBJETIVO_CAPITULO_2,
+    SALIDA_CAPITULO_2,
+    construir_arbol_habilidades, construir_arbol_decision, construir_arbol_capitulo_2,
     aplicar_habilidades, aplicar_banderas,
 )
 from sigilo import Sigilo
@@ -325,19 +326,24 @@ class Partida:
         self.publicacion = self.publicaciones[indice]
         prota = self.protagonista
 
-        # 1. arbol base de la publicacion
-        self.arbol_decision = construir_arbol_decision(self.publicacion)
-        # 2. las habilidades del PROTAGONISTA insertan sus ramas
-        propias = aplicar_habilidades(self.arbol_decision,
-                                      prota.habilidades_activas())
-        # 3. lo que paso en dias anteriores inserta las suyas
-        memoria = aplicar_banderas(self.arbol_decision, self.banderas)
+        # 1. arbol base de la publicacion (el capitulo 2 trae su dilema)
+        if indice == DIA_SIGILO:
+            self.arbol_decision = construir_arbol_capitulo_2()
+            propias = memoria = 0
+        else:
+            self.arbol_decision = construir_arbol_decision(self.publicacion)
+            # 2. las habilidades del PROTAGONISTA insertan sus ramas
+            propias = aplicar_habilidades(self.arbol_decision,
+                                          prota.habilidades_activas())
+            # 3. lo que paso en dias anteriores inserta las suyas
+            memoria = aplicar_banderas(self.arbol_decision, self.banderas)
         # 3b. el dia 1 esconde lo que hay que ganarse (despues de 2 y 3,
         #     para que las ramas de habilidades viajen con su subarbol)
         self.compartidos = self.publicacion["compartidos"]
         self._preparar_investigacion()
         self.sigilo = (Sigilo(RONDAS_CAPITULO_2, REGRESO_CAPITULO_2,
-                              OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2)
+                              OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2,
+                              SALIDA_CAPITULO_2, OBJETIVO_CAPITULO_2)
                        if indice == DIA_SIGILO else None)
         # El reloj del dia se fija antes de repartir: las cartas se
         # programan contra el, no contra el de serie.
@@ -394,6 +400,13 @@ class Partida:
         if self.sigilo is not None and self.sigilo.expulsada:
             self.banderas_del_dia.append("te_sacaron_del_colegio")
             self.banderas.add("te_sacaron_del_colegio")
+            # el dia se cierra por «guardar», pero sin propuesta no hubo nada que callar
+            if "guardaste_la_propuesta" in self.banderas_del_dia:
+                self.banderas_del_dia.remove("guardaste_la_propuesta")
+                self.banderas.discard("guardaste_la_propuesta")
+        if self.sigilo is not None and self.sigilo.escapo:
+            self.banderas_del_dia.append("sacaste_la_propuesta")
+            self.banderas.add("sacaste_la_propuesta")
 
         self._cerrar_red()
         self._mover_encuesta()
@@ -906,16 +919,31 @@ class Partida:
             self._cerrar_dia()
         return nodo
 
+    def _por_defecto(self):
+        """La opcion que se toma si nadie elige: dejar pasar, si la hay."""
+        opciones = self.arbol_decision.opciones_actuales()
+        # guardar: si te sacaron del colegio no hay nada que publicar
+        return next((o for o in opciones if o.id in ("ignorar", "i_result", "guardar")),
+                    opciones[0] if opciones else None)
+
     def tiempo_agotado(self):
         if self.arbol_decision is None or self.arbol_decision.termino():
             return
-        opciones = self.arbol_decision.opciones_actuales()
-        por_defecto = next((o for o in opciones if o.id in ("ignorar", "i_result")),
-                           opciones[0] if opciones else None)
+        por_defecto = self._por_defecto()
         if por_defecto is None:
             return
         self.avisar("Se acabó el tiempo: la publicación siguió su camino.", "mal")
         self.elegir(por_defecto.id)
+
+    def terminar_noche(self):
+        """El capitulo 2 no tiene telefono: acaba al salir del colegio (o
+        al ser expulsada) y el dia se cierra por el camino por omision."""
+        while self.arbol_decision is not None and not self.arbol_decision.termino():
+            por_defecto = self._por_defecto()
+            if por_defecto is None:
+                self._cerrar_dia()
+                return
+            self.elegir(por_defecto.id)
 
     def _aplicar_efectos(self, efectos):
         for clave, delta in efectos.items():

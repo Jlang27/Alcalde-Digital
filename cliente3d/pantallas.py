@@ -350,7 +350,8 @@ class Contexto:
 class AvisoLibre:
     """El rotulito de cuando te devuelven el control del personaje."""
 
-    def __init__(self):
+    def __init__(self, telefono=True):
+        """telefono: si se puede sacar (el capitulo 2 no lo tiene)."""
         self.piezas = []
         self.piezas += E.degradado_vertical(-0.52, -0.36, alfa=210)
         self.piezas.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
@@ -358,10 +359,10 @@ class AvisoLibre:
         self.piezas += E.leyenda((("wasd", "moverse"),
                                   ("shift", "correr"),
                                   ("ctrl", "agacharse"),
-                                  ("ratón", "mirar"),
-                                  ("enter", "teléfono"),
-                                  ("tab", "libreta"),
-                                  ("esc", "menú")), -0.458)
+                                  ("ratón", "mirar"))
+                                 + ((("enter", "teléfono"),) if telefono else ())
+                                 + (("tab", "libreta"),
+                                    ("esc", "menú")), -0.458)
 
     def cerrar(self):
         _limpiar(self.piezas)
