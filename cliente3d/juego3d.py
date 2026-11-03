@@ -897,6 +897,11 @@ def iniciar_dia(indice):
     # Solo el capitulo 2 tiene escenario propio; los demas siguen en la
     # cafeteria hasta que se construya el suyo.
     mundo.cambiar_escenario(cl.mundo, ESCENARIO_DIA.get(indice, "cafeteria"))
+    # Cada dia empieza en la marca: el anterior pudo dejar al protagonista
+    # en cualquier sitio (la calle del colegio, tras la decision del cap. 2)
+    # y en el escenario nuevo eso cae fuera de las paredes.
+    cl.actor.setPos(0, 0, 0)
+    cl.actor.setH(0)
     # Aqui y no al soltar al personaje: cargar los .glb da un tiron, y
     # detras del rotulo opaco no se ve.
     preparar_npcs()

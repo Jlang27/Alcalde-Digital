@@ -62,5 +62,14 @@ assert {"sacaste_la_propuesta", eleccion} <= J.cl.partida.banderas, J.cl.partida
 assert hasta_estado("juego", 10) and J.cl.dia_cerrado, estado()
 pasar(3.0)
 foto("salida_5_cierre")
+
+# El capitulo 3 que sigue empieza en su marca, no en la acera del colegio.
+for _ in range(8):
+    if estado() == "rotulo":
+        break
+    tecla("enter", 1.2)
+assert estado() == "rotulo" and J.mundo._ACTUAL["nombre"] == "campana", estado()
+assert J.cl.actor.getPos().length() < 0.01, J.cl.actor.getPos()
+foto("salida_6_capitulo_3")
 informe()
 print("colegio_salida: todo bien")
