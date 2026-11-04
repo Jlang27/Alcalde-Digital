@@ -608,30 +608,36 @@ REGRESO_CAPITULO_2 = (1.0, -8.0, 0.0)
 # encontrarla. pos = (x, alto, z) del plano de mundo.py: el alto es el de
 # la mesa o el mostrador sobre el que esta. giro: grados para que mire a
 # quien llega (el despertador tiene esfera).
-# Con clic se usa el de la mano: «lanzar» vuela hasta alcance metros hacia
-# donde mira la camara; «dejar» se queda a tus pies. Al sonar, cada
+# Con clic se usa el de la mano: «lanzar» se apunta manteniendolo (el arco
+# lo calcula sigilo.trayectoria) y vuela al soltar; «dejar» se queda a tus
+# pies. Al sonar, cada
 # vigilante a menos de ruido metros se para a mirar alli atencion segundos.
 # mecha: lo que tarda en sonar despues de caer.
 OBJETOS_CAPITULO_2 = {
     # requisadas en clase: en la mesa de la profesora del aula 2B
     "canicas": {"nombre": "canicas", "cantidad": 5, "pos": (6.3, 0.76, 0.85),
-                "uso": "lanzar", "alcance": 8.0, "ruido": 6.0, "atencion": 4.0},
+                "uso": "lanzar", "ruido": 6.0, "atencion": 4.0},
     # olvidado en el primer peldaño de la escalera, de cara a quien llega
     "despertador": {"nombre": "despertador", "cantidad": 1, "pos": (9.3, 0.2, -8.75),
                     "giro": 180.0,
                     "uso": "dejar", "mecha": 4.0, "ruido": 9.0, "atencion": 8.0},
     # junto a la caja de requisados del mostrador del hall
     "petardo": {"nombre": "petardo", "cantidad": 1, "pos": (5.35, 1.1, -5.6),
-                "uso": "lanzar", "alcance": 7.0, "mecha": 2.5, "ruido": 16.0,
-                "atencion": 9.0},
-    # El objetivo de la noche: en el restringido, encima del archivador del
-    # pasillo del medio, bajo la lampara y en la ronda. No se usa: se saca.
-    "propuesta": {"nombre": "propuesta de Ospina", "cantidad": 1,
-                  "pos": (21.8, 1.35, 18.95)},
+                "uso": "lanzar", "mecha": 2.5, "ruido": 16.0, "atencion": 9.0},
+    # El objetivo de la noche, partido en dos carpetas, una en cada archivo
+    # y las dos en una ronda. No se usan: se sacan del colegio.
+    # La 1, en el general: en el archivador del estante largo, a un metro
+    # del paso del vigilante.
+    "propuesta_1": {"nombre": "propuesta · parte 1", "cantidad": 1,
+                    "pos": (8.2, 1.35, 19.45)},
+    # La 2, en el restringido: encima del archivador del pasillo del
+    # medio, bajo la lampara.
+    "propuesta_2": {"nombre": "propuesta · parte 2", "cantidad": 1,
+                    "pos": (21.8, 1.35, 18.95)},
 }
-# Sin la propuesta no se acaba la noche; con ella, al llegar a la salida
+# Sin las dos partes no se acaba la noche; con ellas, al llegar a la salida
 # (x0, x1, z0, z1: delante de la puerta verde, junto a las taquillas rojas).
-OBJETIVO_CAPITULO_2 = "propuesta"
+OBJETIVOS_CAPITULO_2 = ("propuesta_1", "propuesta_2")
 SALIDA_CAPITULO_2 = (23.4, 24.6, -8.4, -6.2)
 # Un rincon al fondo de cada archivo donde nadie te ve ni te oye
 # (x0, x1, z0, z1). mundo.py lo cierra con cajas apiladas y lo marca.

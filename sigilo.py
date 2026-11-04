@@ -25,6 +25,13 @@ OIDO_LENTO = 2.0
 ATENCION = 3.0             # segundos que se queda buscando donde oyo algo
 GIRO_ATENTO = 160.0        # grados por segundo al girarse hacia un ruido
 CARRERA = 3.4              # lo que corre un vigilante hacia un ruido (tu: 5,2)
+# Lanzar: tiro parabolico desde la mano en alto. A 8,5 m/s y con la
+# elevacion tope (38 grados) la cumbre queda bajo el techo de 3,2 m.
+V_LANZAR = 8.5
+ALTO_MANO = 1.6
+GRAVEDAD = 9.8
+DT_VUELO = 1 / 30
+ELEVACION = (-10.0, 38.0)
 CASILLA = 0.5              # lado de cada casilla del plano por el que corren
 HOLGURA = 0.3              # su bulto: no rozan los muebles al correr
 CERCA = 1.0                # tropezarse con el vigilante
@@ -311,13 +318,13 @@ class Sigilo:
     """La ronda entera y lo que sabe de ti: sospecha, avisos y lo que llevas."""
 
     def __init__(self, rutas, regreso, objetos=None, zonas_seguras=(),
-                 salida=None, objetivo=None):
+                 salida=None, objetivos=()):
         self.vigilantes = [Vigilante(i, r) for i, r in rutas.items()]
         self.regreso = regreso        # (x, z, rumbo): a donde te llevan al pillarte
         # La noche acaba al llegar a la salida (x0, x1, z0, z1) con el
         # objetivo en la mano; sin el, la salida solo avisa de que falta.
         self.salida = salida
-        self.objetivo = objetivo
+        self.objetivos = tuple(objetivos)
         self.en_la_salida = False
         self.escapo = False
         self.sospecha = 0.0           # 0..1
@@ -343,6 +350,9 @@ class Sigilo:
         # shortcut: viene de mundo.py; con servidor, el mapa pasara a datos compartidos.
         self.tapan_de_pie = []
         self.tapan_agachado = []
+        # Lo que frena algo lanzado, con su alto: (x0, x1, z0, z1, alto). Sin
+        # esto, lo alto de tapan_de_pie cuenta como muro hasta el techo.
+        self.obstaculos = []
 
     @property
     def expulsada(self):
@@ -350,7 +360,11 @@ class Sigilo:
 
     @property
     def tiene_objetivo(self):
-        return self.objetivo in self.inventario
+        return not self.falta()
+
+    def falta(self):
+        """Las partes del objetivo que aun no llevas."""
+        return [o for o in self.objetivos if o not in self.inventario]
 
     def preparar_plano(self, bloqueos, limites):
         """El suelo por el que corren los vigilantes hacia un ruido.
@@ -444,32 +458,61 @@ class Sigilo:
         self.en_mano = self.inventario[n - 1]
         return True
 
-    def _caida(self, x, z, rumbo, alcance):
-        """Donde cae algo lanzado hacia rumbo: lo frena lo alto (muros y
-        estantes), y rebota un palmo hacia atras."""
+    def trayectoria(self, x, z, rumbo, elevacion):
+        """El arco de algo lanzado desde (x, z) hacia rumbo, con elevacion
+        en grados (la del apunte): puntos (x, y, z) cada DT_VUELO y donde
+        cae (x, z). Lo para el suelo o un mueble mas alto que el en ese
+        momento: pasa por encima de una mesa, no de un muro.
+        """
         a = math.radians(rumbo)
-        q = (x + math.sin(a) * alcance, z + math.cos(a) * alcance)
-        t = min((e for r in self.tapan_de_pie
-                 if (e := _entrada((x, z), q, r)) is not None), default=1.0)
-        t = max(0.0, t - 0.3 / alcance)
-        return x + (q[0] - x) * t, z + (q[1] - z) * t
+        e = math.radians(max(ELEVACION[0], min(ELEVACION[1], elevacion)))
+        sa, ca = math.sin(a), math.cos(a)
+        vx, vy, vz = sa * math.cos(e) * V_LANZAR, math.sin(e) * V_LANZAR, ca * math.cos(e) * V_LANZAR
+        px, py, pz = x + sa * 0.3, ALTO_MANO, z + ca * 0.3
+        alcance = V_LANZAR * 2.0
+        obstaculos = [o for o in (self.obstaculos or [(*r, 99.0) for r in self.tapan_de_pie])
+                      if o[0] - alcance < x < o[1] + alcance and o[2] - alcance < z < o[3] + alcance]
+        puntos = [(px, py, pz)]
+        for _ in range(int(3.0 / DT_VUELO)):
+            nx, ny, nz = px + vx * DT_VUELO, py + vy * DT_VUELO, pz + vz * DT_VUELO
+            vy -= GRAVEDAD * DT_VUELO
+            golpe = min((t for x0, x1, z0, z1, alto in obstaculos
+                         if ny < alto and min(px, nx) < x1 and max(px, nx) > x0
+                         and min(pz, nz) < z1 and max(pz, nz) > z0
+                         and (t := _entrada((px, pz), (nx, nz), (x0, x1, z0, z1))) is not None),
+                        default=None)
+            if golpe is not None:
+                # Choca y cae a plomo, un palmo antes de la pared.
+                largo = max(1e-6, math.hypot(nx - px, nz - pz))
+                hx = px + (nx - px) * golpe - (nx - px) / largo * 0.15
+                hz = pz + (nz - pz) * golpe - (nz - pz) / largo * 0.15
+                puntos += [(hx, py, hz), (hx, 0.0, hz)]
+                return puntos, (hx, hz)
+            if ny <= 0.0:
+                f = py / (py - ny)
+                cx, cz = px + (nx - px) * f, pz + (nz - pz) * f
+                puntos.append((cx, 0.0, cz))
+                return puntos, (cx, cz)
+            px, py, pz = nx, ny, nz
+            puntos.append((px, py, pz))
+        return puntos, (px, pz)
 
-    def usar(self, x, z, rumbo):
+    def usar(self, x, z, rumbo, elevacion=0.0):
         """Usa lo que hay en la mano hacia rumbo (el de la camara).
 
-        Lo lanzable vuela y suena donde cae; lo que se deja (el
-        despertador) se queda a tus pies y suena despues. Devuelve lo que
-        hay que dibujar, o None si no llevas nada en la mano.
+        Lo lanzable sigue trayectoria() y suena donde cae; lo que se deja
+        (el despertador) se queda a tus pies y suena despues. Devuelve lo
+        que hay que dibujar, o None si no llevas nada en la mano.
         """
         i = self.en_mano
         if i is None or self.objetos[i].get("uso") is None:
             return None               # la propuesta no se lanza: se saca de aqui
         o = self.objetos[i]
         if o["uso"] == "lanzar":
-            hasta = self._caida(x, z, rumbo, o["alcance"])
-            vuelo = 0.25 + 0.06 * math.hypot(hasta[0] - x, hasta[1] - z)
+            arco, hasta = self.trayectoria(x, z, rumbo, elevacion)
+            vuelo = (len(arco) - 1) * DT_VUELO
         else:
-            hasta, vuelo = (x, z), 0.0
+            arco, hasta, vuelo = [], (x, z), 0.0
         retraso = vuelo + o.get("mecha", 0.0)
         self.ruidos.append({"objeto": i, "x": hasta[0], "z": hasta[1],
                             "radio": o["ruido"], "dura": o["atencion"],
@@ -479,7 +522,7 @@ class Sigilo:
             self.inventario.remove(i)
             self.en_mano = self.inventario[0] if self.inventario else None
         return {"objeto": i, "desde": (x, z), "hasta": hasta, "vuelo": vuelo,
-                "retraso": retraso, "dura": o["atencion"]}
+                "retraso": retraso, "dura": o["atencion"], "arco": arco}
 
     def _sonar(self, dt):
         """Hace sonar lo que toca: cada vigilante que lo oye se gira hacia alli."""
@@ -569,14 +612,15 @@ if __name__ == "__main__":
     # Una canica vuela, se frena en el muro y el vigilante mira alli.
     s, g = de_espaldas()
     s.tapan_de_pie = [muro]
-    s.objetos = {"canicas": {"uso": "lanzar", "alcance": 8.0, "ruido": 6.0,
+    s.objetos = {"canicas": {"uso": "lanzar", "ruido": 6.0,
                              "atencion": 4.0},
                  "despertador": {"uso": "dejar", "mecha": 3.0, "ruido": 9.0,
                                  "atencion": 8.0}}
     s.inventario, s.cantidades = ["canicas", "despertador"], {"canicas": 2, "despertador": 1}
     s.en_mano = "canicas"
     ev = s.usar(1.0, 0.0, 90.0)
-    assert abs(ev["hasta"][0] - 4.7) < 1e-6 and s.cantidades["canicas"] == 1
+    assert abs(ev["hasta"][0] - 4.85) < 1e-6 and s.cantidades["canicas"] == 1
+    assert ev["arco"][-1][1] == 0.0, "choca y cae al suelo"
     s.actualizar(ev["vuelo"] / 2, -9.0, 9.0, False, False)
     assert g.atento == 0.0, "aun vuela"
     s.actualizar(ev["vuelo"], -9.0, 9.0, False, False)
@@ -587,6 +631,18 @@ if __name__ == "__main__":
     assert s.inventario == ["canicas"] and s.en_mano == "canicas"
     assert s.usar(0.0, 0.0, 0.0)["objeto"] == "canicas" and s.en_mano is None
     assert s.usar(0.0, 0.0, 0.0) is None
+
+    # El arco: pasa por encima de lo bajo, no de lo alto, y mas
+    # elevacion (hasta el tope) es mas lejos.
+    s = Sigilo({}, (0, 0, 0))
+    s.obstaculos = [(3.0, 3.5, -1.0, 1.0, 0.8)]                  # una mesa
+    arco, caida = s.trayectoria(0.0, 0.0, 90.0, 20.0)
+    assert caida[0] > 3.5 and arco[-1][1] == 0.0 and max(p[1] for p in arco) > ALTO_MANO
+    s.obstaculos.append((3.0, 3.5, -1.0, 1.0, 4.0))              # y un muro
+    assert s.trayectoria(0.0, 0.0, 90.0, 20.0)[1][0] < 3.0
+    s.obstaculos = []
+    lejos = [s.trayectoria(0.0, 0.0, 0.0, e)[1][1] for e in (-10.0, 10.0, 38.0, 80.0)]
+    assert lejos[0] < lejos[1] < lejos[2] == lejos[3], lejos     # 80 se queda en el tope
 
     # El plano: un muro con puerta. Al otro lado se llega por la puerta.
     pared = [(4.8, 5.2, -5.0, -1.0), (4.8, 5.2, 1.0, 5.0)]
@@ -613,12 +669,15 @@ if __name__ == "__main__":
     assert g.x < 1.0, "volvio a su lado del muro"
 
     # La salida: sin la propuesta avisa una vez; con ella, se acaba la noche.
-    s = Sigilo({}, (0, 0, 0), {"propuesta": {"pos": (1.0, 1.0, 0.0)}},
-               salida=(5.0, 6.0, -1.0, 1.0), objetivo="propuesta")
+    s = Sigilo({}, (0, 0, 0), {"p1": {"pos": (1.0, 1.0, 0.0)}, "p2": {"pos": (1.0, 1.0, 3.0)}},
+               salida=(5.0, 6.0, -1.0, 1.0), objetivos=("p1", "p2"))
     assert s.actualizar(0.1, 5.5, 0.0, False, False) == "sin_objetivo"
     assert s.actualizar(0.1, 5.5, 0.0, False, False) is None, "no repite dentro"
     s.actualizar(0.1, 3.0, 0.0, False, False)
-    assert s.agarrar(1.0, 0.0) == "propuesta" and s.usar(1.0, 0.0, 0.0) is None
+    assert s.agarrar(1.0, 0.0) == "p1" and s.usar(1.0, 0.0, 0.0) is None
+    assert s.actualizar(0.1, 5.5, 0.0, False, False) == "sin_objetivo" and s.falta() == ["p2"]
+    s.actualizar(0.1, 3.0, 0.0, False, False)
+    assert s.agarrar(1.0, 3.0) == "p2"
     assert s.actualizar(0.1, 5.5, 0.0, False, False) == "escapada" and s.escapo
     assert s.actualizar(0.1, 5.5, 0.0, False, False) is None
 

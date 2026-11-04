@@ -1066,6 +1066,8 @@ def abrir_libre():
 
 def cerrar_libre():
     cl.mapa.mostrar(False)
+    mundo.quitar_arco()           # apuntando y te pillan: el arco no se queda
+    mundo.quitar_en_mano()
     if cl.inventario is not None:
         # actualizar_mapa lo apaga, pero una escena que no pasa por el no
         cl.inventario.mostrar(False)
@@ -1185,7 +1187,7 @@ TEXTO_NOCHE = (
     "hay teléfono que valga: si te ven tres veces, te sacan del colegio.")
 TEXTO_SIN_PROPUESTA = (
     "Todavía no puedes irte: tienes que encontrar el archivo «Propuesta de "
-    "Ospina». Está en algún lugar del archivo.")
+    "Ospina». Te falta la {partes}: hay una carpeta en cada archivo.")
 # El momento de audio.py que suena cuando cada objeto hace su ruido.
 SONIDO_OBJETO = {"canicas": "canica", "despertador": "despertador",
                  "petardo": "petardo"}
@@ -1200,6 +1202,7 @@ def preparar_vigilantes():
         return
     s.tapan_de_pie, s.tapan_agachado = mundo.coberturas()
     s.preparar_plano(mundo.bloqueos(), mundo.limites())
+    s.obstaculos = mundo.obstaculos()
     for v in s.vigilantes:
         cl.vigilantes[v.id] = mundo.vigilante(cl.mundo)
     cl.sospecha = pantallas.Sospecha()
@@ -1273,8 +1276,10 @@ def ronda(dt):
     s.sonaron.clear()
     mundo.animar_usados(dt)
     if evento == "sin_objetivo":
-        abrir_aviso_papel("TODAVÍA NO", "Falta la propuesta de Ospina",
-                          TEXTO_SIN_PROPUESTA, abrir_libre)
+        partes = " y la ".join(OBJETOS_CAPITULO_2[i]["nombre"].split("· ")[-1]
+                            for i in cl.partida.sigilo.falta())
+        abrir_aviso_papel("TODAVÍA NO", f"Te falta la {partes}",
+                          TEXTO_SIN_PROPUESTA.format(partes=partes), abrir_libre)
     elif evento == "escapada":
         abrir_salida()
     elif evento:
@@ -1393,10 +1398,46 @@ def senalar_cobertura():
                                         -0.30, x0=-0.12)
 
 
-def usar():
-    """Clic: usa lo que hay en la mano hacia donde mira la camara."""
+def elevacion():
+    """Hacia donde se apunta, en grados sobre el horizonte: mirar mas arriba
+    lanza mas lejos, como en Fortnite. Las reglas la recortan a su tope."""
+    return 32.0 - 1.6 * cl.jugador.pitch
+
+
+def clic_abajo():
+    """Lo lanzable se apunta mientras se mantiene; lo demas se usa ya."""
     s = cl.partida.sigilo
-    evento = s.usar(cl.actor.getX(), cl.actor.getZ(), cl.jugador.yaw)
+    if s.en_mano is None:
+        return
+    if OBJETOS_CAPITULO_2[s.en_mano].get("uso") == "lanzar":
+        cl.jugador.apuntar()
+        mundo.objeto_en_mano(cl.mundo, s.en_mano)
+    else:
+        usar()
+
+
+def apuntar_paso():
+    """Mientras se apunta: el arco de las reglas y el objeto en la mano."""
+    s = cl.partida.sigilo
+    puntos, caida = s.trayectoria(cl.actor.getX(), cl.actor.getZ(),
+                                  cl.jugador.yaw, elevacion())
+    mundo.dibujar_arco(puntos, caida)
+    mano = cl.jugador.mano()
+    if mano is not None:
+        mundo.mover_en_mano(mano, cl.actor.getH())
+
+
+def usar():
+    """Suelta lo que hay en la mano: lo lanzado vuela por el arco que se
+    estaba viendo; el despertador se deja a los pies."""
+    s = cl.partida.sigilo
+    apuntando = cl.jugador.apuntando
+    if apuntando:
+        cl.jugador.lanzar()
+    mundo.quitar_arco()
+    mundo.quitar_en_mano()
+    evento = s.usar(cl.actor.getX(), cl.actor.getZ(), cl.jugador.yaw,
+                    elevacion() if apuntando else 0.0)
     if evento is None:
         return
     mundo.usar_objeto(cl.mundo, evento)
@@ -2272,6 +2313,8 @@ def update():
             if cl.estado == "libre":
                 senalar_objeto()
                 senalar_cobertura()
+                if cl.jugador.apuntando:
+                    apuntar_paso()
         if cl.npcs:
             senalar_cercano()
         return
@@ -2524,6 +2567,8 @@ def input(tecla):
         elif tecla == "c":
             cl.jugador.cubrirse()
         elif tecla == "left mouse down" and cl.partida.sigilo is not None:
+            clic_abajo()
+        elif tecla == "left mouse up" and cl.jugador.apuntando:
             usar()
         elif (tecla.isdigit() and tecla != "0" and cl.partida.sigilo is not None
               and cl.partida.sigilo.elegir(int(tecla))):

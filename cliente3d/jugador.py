@@ -16,7 +16,7 @@ Si no se separan, o no puedes mirar o no puedes hacer clic.
 
 import math
 
-from panda3d.core import TransparencyAttrib
+from panda3d.core import LMatrix3f, LMatrix4f, LVector3f, TransparencyAttrib, rotate_to
 from ursina import Vec3, camera, held_keys, mouse
 
 RADIO = 0.34                 # el bulto del personaje visto desde arriba
@@ -78,6 +78,25 @@ RITMO_ASOMAR = 6.0           # lo rapido que entra y sale del asomo
 # lo dobla hacia delante; los dos primeros, positivos hacia su izquierda.
 # La cabeza se endereza un poco: quien espia mantiene los ojos a nivel.
 GIROS_ASOMAR = (("Spine1", 12.0, 8.0), ("Spine2", 12.0, 8.0), ("Head", 30.0, -6.0))
+
+# Lanzar como una granada: mantener el clic apunta (brazo derecho arriba
+# con el objeto, el izquierdo senalando, la camara se acerca) y soltarlo
+# lanza (el brazo barre hacia delante y vuelve). No hay clip de lanzar:
+# cada hueso del brazo se orienta hacia una direccion dada en
+# (derecha, arriba, delante) de ella, encima de la pose que llevaba.
+BRAZOS = (("RightArm", "RightForeArm", "RightShoulder"),
+          ("RightForeArm", "RightHand", "RightArm"),
+          ("LeftArm", "LeftForeArm", "LeftShoulder"),
+          ("LeftForeArm", "LeftHand", "LeftArm"))
+POSE_APUNTAR = {"RightArm": (0.55, 0.55, -0.35), "RightForeArm": (0.05, 1.0, 0.1),
+                "LeftArm": (-0.15, 0.25, 0.9), "LeftForeArm": (-0.05, 0.3, 1.0)}
+POSE_SOLTAR = {"RightArm": (0.15, -0.1, 1.0), "RightForeArm": (0.05, -0.45, 1.0),
+               "LeftArm": (-0.5, -0.6, 0.3), "LeftForeArm": (-0.3, -0.8, 0.3)}
+SUBIR_BRAZO = 0.18           # segundos hasta tener el brazo arriba
+BARRIDO_BRAZO = 0.14         # el golpe de lanzar
+VOLVER_BRAZO = 0.36          # y lo que tarda en bajar
+DISTANCIA_APUNTAR = 2.6      # la camara se acerca al hombro para apuntar
+CERRAR_APUNTAR = 8.0         # y cierra la lente
 FOV_EXPLORACION = 40         # igual que mundo.FOV_BASE: horizontal, cerrada
 ABRIR_CORRER = 6             # abrir un poco la lente al correr da sensacion de velocidad
 
@@ -171,6 +190,13 @@ class Jugador:
         self.lado = Vec3(0, 0, 0)
         self.asomada = 0.0
         self._huesos = []               # (hueso, nodo controlado, matriz base, giro, inclinacion)
+        # Lanzar: apuntando mientras se mantiene el clic; lanzado = segundos
+        # desde que se solto (None si no hay lanzamiento en curso).
+        self.apuntando = False
+        self.lanzado = None
+        self.t_brazo = 0.0
+        self._brazos = []               # (nombre, nodo controlado, base, hijo, padre)
+        self._mano = None
 
         self.pivote = None              # lo que sigue la camara, con retardo
         self.distancia = DISTANCIA
@@ -211,6 +237,7 @@ class Jugador:
         """Modo decision: el raton vuelve a ser cursor."""
         self.explorando = False
         self.salir_de_cobertura()
+        self.cancelar_lanzamiento()
         self.agachado = self.corriendo = self.moviendose = self.agachado_fijo = False
         _raton(False)
         self._animar("quieto")
@@ -243,12 +270,18 @@ class Jugador:
             lado = held_keys["d"] - held_keys["a"]
             if self.cubierta is not None:
                 self._asomarse(lado, dt)
-                return
-            # Ursina junta izquierda y derecha en «control» y «shift».
-            # Agachado gana: con Ctrl pulsado no se puede correr.
-            self.agachado = bool(held_keys["control"]) or self.agachado_fijo
-            self.corriendo = bool(held_keys["shift"]) and not self.agachado
-            self._caminar(avance, lado, dt)
+            else:
+                # Ursina junta izquierda y derecha en «control» y «shift».
+                # Agachado gana: con Ctrl pulsado no se puede correr.
+                self.agachado = bool(held_keys["control"]) or self.agachado_fijo
+                self.corriendo = (bool(held_keys["shift"]) and not self.agachado
+                                  and not self.apuntando)
+                self._caminar(avance, lado, dt)
+            if self.apuntando or self.lanzado is not None:
+                # Apuntando mira a donde mira la camara, ande hacia donde ande.
+                self.rumbo = 180.0 - self.yaw
+                self.actor.setH(self.rumbo)
+            self._mover_brazos(dt)
         # La camara la mueve quien llama a seguir() una vez por fotograma.
         # Antes tambien se llamaba aqui y el retardo corria al doble.
 
@@ -317,6 +350,113 @@ class Jugador:
         for nombre, *_ in self._huesos:
             self.actor.releaseJoint("modelRoot", nombre)
         self._huesos = []
+
+    # ----------------------------------------------------------------
+    #  lanzar
+    # ----------------------------------------------------------------
+
+    def apuntar(self):
+        """Clic mantenido: sube el brazo con el objeto."""
+        if self.apuntando:
+            return
+        self.apuntando, self.lanzado = True, None
+        if not self._brazos:
+            self.t_brazo = 0.0
+            self._tomar_brazos()
+
+    def lanzar(self):
+        """Se solto el clic: el brazo barre hacia delante y vuelve."""
+        self.apuntando, self.lanzado = False, 0.0
+
+    def cancelar_lanzamiento(self):
+        self.apuntando, self.lanzado = False, None
+        self._soltar_brazos()
+
+    def mano(self):
+        """Donde esta la mano derecha, en el mundo (para el objeto)."""
+        return self._mano.getPos(self.actor.getTop()) if self._mano else None
+
+    def _tomar_brazos(self):
+        """Toma los huesos de los brazos con la pose que llevan ahora."""
+        self.actor.update(force=True)
+        huesos = {j.getName().split(":")[-1]: j for j in self.actor.getJoints()}
+        self._brazos = []
+        for nombre, hijo, padre in BRAZOS:
+            if not all(n in huesos for n in (nombre, hijo, padre)):
+                continue
+            base = LMatrix4f(huesos[nombre].getTransformState().getMat())
+            hacia_hijo = huesos[hijo].getTransformState().getMat().getRow3(3)
+            # El hombro no se toca: se lee de el. El antebrazo cuelga del
+            # brazo que se acaba de mover, y se compone a mano.
+            visto = (self.actor.exposeJoint(None, "modelRoot", huesos[padre].getName())
+                     if padre.endswith("Shoulder") else padre)
+            control = self.actor.controlJoint(None, "modelRoot", huesos[nombre].getName())
+            control.setMat(base)
+            self._brazos.append((huesos[nombre].getName(), control, base, hacia_hijo, visto))
+        if "RightHand" in huesos:
+            self._mano = self.actor.exposeJoint(None, "modelRoot", huesos["RightHand"].getName())
+
+    def _soltar_brazos(self):
+        for nombre, _control, _base, _hijo, visto in self._brazos:
+            self.actor.releaseJoint("modelRoot", nombre)
+            if not isinstance(visto, str):
+                visto.removeNode()
+        self._brazos = []
+        if self._mano is not None:
+            self._mano.removeNode()
+            self._mano = None
+
+    def _mover_brazos(self, dt):
+        """Sube, barre y baja el brazo segun el momento del lanzamiento."""
+        if not self._brazos:
+            return
+        if self.apuntando:
+            self.t_brazo = min(1.0, self.t_brazo + dt / SUBIR_BRAZO)
+            desde, hasta, f = None, POSE_APUNTAR, self.t_brazo
+        elif self.lanzado is not None:
+            self.lanzado += dt
+            if self.lanzado < BARRIDO_BRAZO:
+                desde, hasta, f = POSE_APUNTAR, POSE_SOLTAR, self.lanzado / BARRIDO_BRAZO
+            elif self.lanzado < BARRIDO_BRAZO + VOLVER_BRAZO:
+                desde, hasta = POSE_SOLTAR, None
+                f = (self.lanzado - BARRIDO_BRAZO) / VOLVER_BRAZO
+            else:
+                self.lanzado = None
+                self._soltar_brazos()
+                return
+        else:
+            return
+        f = f * f * (3 - 2 * f)
+        rad = math.radians(self.yaw)
+        ejes = (Vec3(math.cos(rad), 0, -math.sin(rad)), Vec3(0, 1, 0),
+                Vec3(math.sin(rad), 0, math.cos(rad)))
+        arriba = self.actor.getTop()
+
+        def direccion(pose, corto, en_actor):
+            if pose is None:
+                return en_actor
+            d = Vec3(0, 0, 0)
+            for eje, k in zip(ejes, pose[corto]):
+                d += eje * k
+            return self.actor.getRelativeVector(arriba, d).normalized()
+
+        nuevas = {}
+        for nombre, control, base, hacia_hijo, visto in self._brazos:
+            corto = nombre.split(":")[-1]
+            padre = (nuevas[visto] if isinstance(visto, str) else visto.getMat(self.actor))
+            inversa = LMatrix4f(padre)
+            inversa.invertInPlace()
+            hueso = base.xformVec(hacia_hijo).normalized()      # en el espacio del padre
+            en_actor = padre.xformVec(hueso).normalized()
+            d = (direccion(desde, corto, en_actor) * (1 - f)
+                 + direccion(hasta, corto, en_actor) * f).normalized()
+            giro = LMatrix3f()
+            # LVector3f y no LVecBase3f: con este ultimo rotate_to devuelve la identidad
+            rotate_to(giro, LVector3f(hueso), LVector3f(inversa.xformVec(d).normalized()))
+            m = LMatrix4f(base)
+            m.setUpper3(base.getUpper3() * giro)
+            control.setMat(m)
+            nuevas[corto] = m * padre
 
     def _tomar_columna(self):
         """Toma el control de columna y cabeza con la pose que tienen ahora
@@ -506,6 +646,8 @@ class Jugador:
         agache = 1.0 if self.agachado else 0.0
         self.agache = agache if inmediato else _acercar(self.agache, agache, factor)
         maximo = DISTANCIA + (DISTANCIA_AGACHADO - DISTANCIA) * self.agache
+        if self.apuntando:
+            maximo = min(maximo, DISTANCIA_APUNTAR)
         pitch = self.pitch + PICADO_AGACHADO * self.agache
 
         rad = math.radians(self.yaw)
@@ -558,7 +700,7 @@ class Jugador:
         camera.position = pos
         camera.rotation = Vec3(pitch + PICADO * self.cerca, self.yaw, 0)
         lente = (self.fov + (ABRIR_CORRER if self.corriendo else 0)
-                 + ABRIR_CERCA * self.cerca)
+                 + ABRIR_CERCA * self.cerca - (CERRAR_APUNTAR if self.apuntando else 0))
         camera.fov = lente if inmediato else _acercar(camera.fov, lente, factor * 0.6)
 
     def encuadrar(self):

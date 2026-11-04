@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec3
 
 from contenido import ZONAS_SEGURAS_CAPITULO_2
+from sigilo import DT_VUELO
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUTA_PERSONAJE = os.path.join(RAIZ, "assets", "personajes", "prueba.glb")
@@ -1308,6 +1309,7 @@ class _Obra:
         self.paso = []        # rectangulos que no se dejan pisar
         self.vista = []       # rectangulos que ademas tapan la camara
         self.cobertura = []   # los que esconden a alguien agachado
+        self.alturas = []     # (x0, x1, z0, z1, alto): lo que frena algo lanzado
 
     def caja(self, mat, x0, x1, y0, y1, z0, z1, bloquea=False):
         self.cajas.append((mat, x0, x1, y0, y1, z0, z1))
@@ -1316,6 +1318,7 @@ class _Obra:
 
     def solido(self, rect, alto):
         self.paso.append(rect)
+        self.alturas.append((*rect, alto))
         if alto >= ALTO_CAMARA:
             self.vista.append(rect)
         if alto >= ALTO_COBERTURA:
@@ -1712,6 +1715,9 @@ def _obra_colegio():
     # El de la propuesta de Ospina: pegado al estante del medio, bajo la
     # lampara y junto a la ronda (contenido.OBJETOS_CAPITULO_2).
     _archivador(o, "x", 21.5, 1, 18.5, 19.4)
+    # Y el de la parte 1, en el general: contra el estante largo, a un
+    # metro del paso del vigilante.
+    _archivador(o, "x", 8.5, -1, 19.0, 19.9)
     # Separadas del muro: detras de ellas se esconde uno agachado, y con
     # menos de un metro la camara no cabia y se metia en la pared.
     _mesa(o, 4.2, 6.4, 9.0, 10.2)
@@ -2725,6 +2731,11 @@ def lente():
     return LENTES.get(_ACTUAL["nombre"], FOV_BASE)
 
 
+def obstaculos():
+    """Lo que frena algo lanzado, con su alto (sigilo.Sigilo.obstaculos)."""
+    return list(OBRA_COLEGIO.alturas) if _ACTUAL["nombre"] == "rectoria" else []
+
+
 def coberturas():
     """Lo que corta la vista de un vigilante: (de pie, agachada)."""
     if _ACTUAL["nombre"] != "rectoria":
@@ -2774,9 +2785,11 @@ def cambiar_escenario(mundo, escenario):
     for _piezas, _brillo, nodo in _ACTUAL.get("objetos", {}).values():
         if nodo is not None:
             nodo.removeNode()
+    if "en_mano" in _ACTUAL:
+        _ACTUAL["en_mano"][0].removeNode()
     for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo", "lluvia",
                   "sirenas", "fase_sirena", "luz_sirena", "reloj",
-                  "luz_ambiente", "objetos", "usados"):
+                  "luz_ambiente", "objetos", "usados", "arco", "en_mano"):
         _ACTUAL.pop(clave, None)
     if _ACTUAL["contenedor"] is not None:
         _ACTUAL["contenedor"].removeNode()
@@ -3584,9 +3597,16 @@ def _petardo(mundo, x, y, z):
     mecha.setTwoSided(True)
 
 
-def _pintar_carpeta(img):
-    """La carpeta de la propuesta: cartulina, franja del equipo de Ospina,
-    etiqueta y el sello rojo que dice por que no deberia salir de aqui."""
+def _pintar_carpeta(parte):
+    """La carpeta de cada parte de la propuesta: cartulina, franja del
+    equipo de Ospina, etiqueta y el sello rojo que dice por que no deberia
+    salir de aqui."""
+    def pintar(img):
+        _pintar_carpeta_parte(img, parte)
+    return pintar
+
+
+def _pintar_carpeta_parte(img, parte):
     d, (w, h) = ImageDraw.Draw(img), img.size
     d.rectangle((0, 0, w, h), fill=(214, 178, 112, 255))
     d.rectangle((0, 0, w, h * 0.16), fill=(29, 95, 168, 255))      # tinta de Ospina
@@ -3596,8 +3616,10 @@ def _pintar_carpeta(img):
                 outline=(60, 50, 40, 255), width=3)
     d.text((w / 2, h * 0.39), "PROPUESTA", font=_letra(int(h * 0.075)),
            fill=(23, 24, 26, 255), anchor="mm")
-    d.text((w / 2, h * 0.49), "Reorganización educativa", font=_letra(int(h * 0.04), False),
-           fill=(60, 58, 54, 255), anchor="mm")
+    d.text((w / 2, h * 0.49), f"Reorganización educativa · parte {parte}",
+           font=_letra(int(h * 0.036), False), fill=(60, 58, 54, 255), anchor="mm")
+    d.text((w * 0.86, h * 0.22), str(parte), font=_letra(int(h * 0.09)),
+           fill=(29, 95, 168, 255), anchor="mm")
     sello = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     ds = ImageDraw.Draw(sello)
     ds.rectangle((w * 0.16, h * 0.70, w * 0.84, h * 0.82), outline=(195, 59, 51, 230), width=5)
@@ -3606,13 +3628,14 @@ def _pintar_carpeta(img):
     img.alpha_composite(sello.rotate(-10, resample=Image.BICUBIC))
 
 
-def _propuesta(mundo, x, y, z):
+def _propuesta(mundo, x, y, z, parte=1):
     """La carpeta, con los folios asomando por el borde."""
     papel = _material((0.75, 0.73, 0.66, 1), rugosidad=0.9)
     _pieza(mundo, "cube", papel, (0.22, 0.022, 0.30), (x + 0.012, y + 0.012, z))
     carpeta = _con_textura(_pieza(mundo, "cube", _material((1, 1, 1, 1), rugosidad=0.85),
                                   (0.23, 0.03, 0.31), (x, y + 0.016, z)),
-                           _textura("carpeta_propuesta", _pintar_carpeta, 256, 340))
+                           _textura(f"carpeta_propuesta_{parte}", _pintar_carpeta(parte),
+                                    256, 340))
     carpeta.rotation_y = 8
 
 
@@ -3628,9 +3651,10 @@ def _caja_requisados(mundo, x0, y0, z0):
 
 
 _OBJETOS = {"canicas": _canicas, "despertador": _despertador, "petardo": _petardo,
-            "propuesta": _propuesta}
+            "propuesta_1": lambda m, x, y, z: _propuesta(m, x, y, z, 1),
+            "propuesta_2": lambda m, x, y, z: _propuesta(m, x, y, z, 2)}
 # El destello de cada uno; el objetivo, en el azul de Ospina para que se distinga.
-BRILLOS = {"propuesta": (0.55, 0.78, 1.0)}
+BRILLOS = {"propuesta_1": (0.55, 0.78, 1.0), "propuesta_2": (0.55, 0.78, 1.0)}
 
 
 def objetos_sueltos(mundo, objetos):
@@ -3689,6 +3713,8 @@ def quitar_objetos():
     for u in _ACTUAL.pop("usados", ()):
         _quitar_piezas(u["piezas"])
         u["nodo"].removeNode()
+    quitar_arco()
+    quitar_en_mano()
 
 
 def _quitar_piezas(piezas):
@@ -3711,17 +3737,8 @@ def _destello_suelto(posicion, escala, rgb, alfa):
     return e
 
 
-ALTO_MANO = 1.1         # de donde sale lo que se lanza
-
-
-def usar_objeto(mundo, evento):
-    """Dibuja lo que se acaba de usar (sigilo.Sigilo.usar): una canica o el
-    petardo vuelan hasta donde caen; el despertador se queda a los pies.
-
-    Va colgado de un nodo propio para moverlo entero mientras vuela.
-    """
-    i = evento["objeto"]
-    nodo = mundo.attachNewNode(f"usado_{i}")
+def _modelo_de(nodo, i):
+    """El objeto i colgado de nodo, en su origen. De las canicas, una sola."""
     antes = len(_ENTIDADES)
     if i == "canicas":
         k = random.randrange(len(TINTES_CANICAS))
@@ -3732,16 +3749,86 @@ def usar_objeto(mundo, evento):
                      _textura(f"canica{k}", _pintar_canica(tinte), 64, 32))
     else:
         _OBJETOS[i](nodo, 0, 0, 0)
-    x, z = evento["desde"]
-    nodo.setPos(x, ALTO_MANO if evento["vuelo"] else 0.0, z)
-    if evento["vuelo"] == 0:
-        # Dejado en el suelo, mirando hacia donde se dejo.
-        nodo.setH(random.uniform(0, 360))
+    return _ENTIDADES[antes:]
+
+
+def usar_objeto(mundo, evento):
+    """Dibuja lo que se acaba de usar (sigilo.Sigilo.usar): una canica o el
+    petardo siguen el arco de las reglas; el despertador se queda a los pies.
+
+    Va colgado de un nodo propio para moverlo entero mientras vuela.
+    """
+    i = evento["objeto"]
+    nodo = mundo.attachNewNode(f"usado_{i}")
+    piezas = _modelo_de(nodo, i)
+    if evento["arco"]:
+        nodo.setPos(*evento["arco"][0])
+    else:
+        x, z = evento["desde"]
+        nodo.setPos(x, 0.0, z)
+        nodo.setH(random.uniform(0, 360))      # dejado en el suelo, de cualquier lado
     _ACTUAL.setdefault("usados", []).append({
-        "objeto": i, "nodo": nodo, "piezas": _ENTIDADES[antes:], "t": 0.0,
-        "desde": evento["desde"], "hasta": evento["hasta"],
+        "objeto": i, "nodo": nodo, "piezas": piezas, "t": 0.0,
+        "desde": evento["desde"], "hasta": evento["hasta"], "arco": evento["arco"],
         "vuelo": evento["vuelo"], "mecha": evento["retraso"] - evento["vuelo"],
         "chispa": None, "suena": 0.0, "fogonazo": None})
+
+
+# ---------------- apuntar: el arco y el objeto en la mano ----------------
+
+ARCO = (0.95, 0.22, 0.16)          # el rojo del trazo de una granada
+
+
+def _linea(puntos, rgb, alfa=0.95):
+    e = Entity(parent=scene, model=Mesh(vertices=puntos, mode="line", thickness=3,
+                                        static=False),
+               color=color.Color(*rgb, alfa))
+    e.setLightOff()
+    e.setTransparency(TransparencyAttrib.MAlpha)
+    _ENTIDADES.append(e)
+    return e
+
+
+def dibujar_arco(puntos, caida):
+    """Por donde ira lo que vas a lanzar y una marca donde cae, sin luz:
+    en un pasillo a oscuras es lo que tiene que leerse."""
+    cx, cz = caida
+    aro = [(cx + math.sin(a) * 0.32, 0.03, cz + math.cos(a) * 0.32)
+           for a in (2 * math.pi * k / 24 for k in range(25))]
+    if "arco" not in _ACTUAL:
+        _ACTUAL["arco"] = (_linea(puntos, ARCO), _linea(aro, ARCO),
+                           _destello_suelto((cx, 0.05, cz), 0.35, ARCO, 0.8))
+        return
+    linea, marca, punto = _ACTUAL["arco"]
+    for e, vertices in ((linea, puntos), (marca, aro)):
+        e.model.vertices = vertices
+        e.model.generate()
+    punto.position = (cx, 0.05, cz)
+
+
+def quitar_arco():
+    _quitar_piezas(list(_ACTUAL.pop("arco", ())))
+
+
+def objeto_en_mano(mundo, i):
+    """Lo que se va a lanzar, en la mano mientras se apunta."""
+    quitar_en_mano()
+    nodo = mundo.attachNewNode(f"en_mano_{i}")
+    _ACTUAL["en_mano"] = (nodo, _modelo_de(nodo, i))
+
+
+def mover_en_mano(posicion, giro):
+    if "en_mano" in _ACTUAL:
+        nodo = _ACTUAL["en_mano"][0]
+        nodo.setPos(posicion)
+        nodo.setH(giro)
+
+
+def quitar_en_mano():
+    if "en_mano" in _ACTUAL:
+        nodo, piezas = _ACTUAL.pop("en_mano")
+        _quitar_piezas(piezas)
+        nodo.removeNode()
 
 
 def sonar_objeto(ruido):
@@ -3768,10 +3855,12 @@ def animar_usados(dt):
         t, vuelo, nodo = u["t"], u["vuelo"], u["nodo"]
         (x0, z0), (x1, z1) = u["desde"], u["hasta"]
         if vuelo and t <= vuelo:
-            # Parabola de la mano al suelo, girando en el aire.
-            f = t / vuelo
-            nodo.setPos(x0 + (x1 - x0) * f, ALTO_MANO * (1 - f) + 2.4 * f * (1 - f),
-                        z0 + (z1 - z0) * f)
+            # Por el arco de las reglas, girando en el aire.
+            arco = u["arco"]
+            k = min(len(arco) - 2, int(t / DT_VUELO))
+            f = t / DT_VUELO - k
+            (ax, ay, az), (bx, by, bz) = arco[k], arco[k + 1]
+            nodo.setPos(ax + (bx - ax) * f, ay + (by - ay) * f, az + (bz - az) * f)
             nodo.setH(nodo.getH() + 600 * dt)
         elif vuelo and not u.get("posada"):
             u["posada"] = True

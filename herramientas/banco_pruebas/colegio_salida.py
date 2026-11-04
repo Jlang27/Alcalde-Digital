@@ -33,11 +33,12 @@ s = J.cl.partida.sigilo
 for v in s.vigilantes:                    # la ronda, quieta y de espaldas
     v.avanzar = lambda dt: None
     v.x, v.z, v.rumbo = 18.5, 28.8, 0.0
-J.cl.actor.setPos(22.6, 0, 18.95)
-pasar(0.4)
-assert J.cl.objeto_cerca == "propuesta", J.cl.objeto_cerca
-foto("salida_propuesta")
-tecla("e", 0.3)
+for parte, (x, z) in (("propuesta_1", (7.45, 19.45)), ("propuesta_2", (22.6, 18.95))):
+    J.cl.actor.setPos(x, 0, z)
+    pasar(0.4)
+    assert J.cl.objeto_cerca == parte, J.cl.objeto_cerca
+    foto(f"salida_{parte}")
+    tecla("e", 0.3)
 assert s.tiene_objetivo
 
 J.cl.actor.setPos(24.0, 0, -7.3)

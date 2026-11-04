@@ -11,7 +11,7 @@ import math
 
 from banco import *
 from banco import J
-from sigilo import AVISOS_MAXIMOS
+from sigilo import AVISOS_MAXIMOS, VELOCIDAD
 
 
 def poner(x, z, mirar_a=None):
@@ -81,7 +81,8 @@ for v in s.vigilantes:
 vigilante("pasillo").x, vigilante("pasillo").z, vigilante("pasillo").rumbo = -3.6, 5.6, -90.0
 r = vigilante("restringido")
 r.x, r.z, r.rumbo = 18.5, 28.8, 0.0
-assert set(s.sueltos) == {"canicas", "despertador", "petardo", "propuesta"}
+vigilante("archivo").x, vigilante("archivo").z, vigilante("archivo").rumbo = -1.0, 28.5, -90.0
+assert set(s.sueltos) == {"canicas", "despertador", "petardo", "propuesta_1", "propuesta_2"}
 
 # Sin la propuesta, la salida solo avisa de que falta.
 poner(24.0, -7.3, (25.0, -7.3))
@@ -94,7 +95,8 @@ assert estado() == "libre" and not s.escapo
 for id_objeto, sitio, mesa in (("canicas", (7.3, 0.85), (6.3, 0.85)),
                                ("despertador", (9.3, -8.0), (9.3, -8.75)),
                                ("petardo", (5.35, -6.4), (5.35, -5.6)),
-                               ("propuesta", (22.6, 18.95), (21.8, 18.95))):
+                               ("propuesta_1", (7.45, 19.45), (8.2, 19.45)),
+                               ("propuesta_2", (22.6, 18.95), (21.8, 18.95))):
     poner(*sitio, mesa)
     pasar(0.4)
     assert J.cl.objeto_cerca == id_objeto and J.cl.marca_objeto, (id_objeto, J.cl.objeto_cerca)
@@ -105,11 +107,12 @@ for id_objeto, sitio, mesa in (("canicas", (7.3, 0.85), (6.3, 0.85)),
     assert J.cl.objeto_cerca is None and not J.cl.marca_objeto
 tecla("2", 0.2)
 assert s.en_mano == "despertador"
-tecla("5", 0.2)
+tecla("6", 0.2)
 assert s.en_mano == "despertador", "un numero sin objeto no cambia nada"
 tecla("4", 0.1)
 tecla("left mouse down", 0.2)
-assert "propuesta" in s.inventario, "la propuesta no se lanza"
+tecla("left mouse up", 0.2)
+assert "propuesta_1" in s.inventario and not J.cl.jugador.apuntando, "la propuesta no se lanza"
 foto("colegio_inventario")
 
 # Andar de pie a su espalda se oye; agachada, no.
@@ -162,22 +165,33 @@ assert j.cubierta is None and not j.agachado
 # rodeando los estantes, y se queda buscando.
 g.x, g.z, g.rumbo = 4.0, 23.0, 180.0
 del g.avanzar
+g.velocidad = 0.0                 # que no se vaya de ronda mientras se apunta
 tecla("1", 0.1)
 poner(-1.0, 15.0, (-1.0, 25.0))
 pasar(0.2)
-tecla("left mouse down", 0.2)
-assert s.cantidades["canicas"] == 4
+tecla("left mouse down", 0.4)            # mantener: apunta, con el arco
+assert J.cl.jugador.apuntando and "arco" in J.mundo._ACTUAL and "en_mano" in J.mundo._ACTUAL
+assert s.cantidades["canicas"] == 5, "apuntar no gasta"
+foto("colegio_apuntar")
+caida = s.trayectoria(J.cl.actor.getX(), J.cl.actor.getZ(), J.cl.jugador.yaw, J.elevacion())[1]
+tecla("left mouse up", 0.12)             # soltar: lanza por ese arco
+assert s.cantidades["canicas"] == 4 and "arco" not in J.mundo._ACTUAL
+foto("colegio_lanzar")
 pasar(1.0)
-assert g.hacia_ruido is not None and abs(g.hacia_ruido[1] - 23.0) < 0.5, g.hacia_ruido
+assert g.hacia_ruido is not None and math.dist(g.hacia_ruido, caida) < 0.01, (g.hacia_ruido, caida)
 assert g.modo == "acude" and g.corriendo, g.modo
 assert J.cl.vigilantes["archivo"][0].getCurrentAnim() == "correr"
 foto("colegio_guardia_corre")
 pasar(2.5)
 assert g.modo == "busca" and math.hypot(g.x - g.hacia_ruido[0], g.z - g.hacia_ruido[1]) < 0.1, (g.modo, g.x, g.z)
 g.avanzar = lambda dt: None
+g.velocidad = VELOCIDAD
+g.x, g.z, g.rumbo = 7.0, 28.0, 0.0       # lejos y de espaldas: el petardo es otra prueba
+s.sospecha = 0.0
 # El petardo: vuela, chisporrotea y estalla.
 tecla("3", 0.1)
-tecla("left mouse down", 0.1)
+tecla("left mouse down", 0.3)
+tecla("left mouse up", 0.1)
 assert "petardo" not in s.inventario
 t = 0.0
 while not s.sonaron and t < 4.0 and not any(u.get("sono") for u in J.mundo._ACTUAL.get("usados", ())
@@ -187,8 +201,16 @@ while not s.sonaron and t < 4.0 and not any(u.get("sono") for u in J.mundo._ACTU
 pasar(frames=2)
 foto("colegio_petardo")
 pasar(1.0)
+# Calma otra vez: el petardo los mando a todos a buscar. El del pasillo se
+# queda al fondo, de cara a la pared: si no, pillaba a la protagonista en
+# la puerta del archivo antes de tiempo.
 for v in s.vigilantes:
-    del v.avanzar
+    v.modo, v.camino, v.atento = None, [], 0.0
+    if v.id != "pasillo":
+        del v.avanzar
+vigilante("pasillo").x, vigilante("pasillo").z, vigilante("pasillo").rumbo = 23.2, 5.6, 90.0
+s.sospecha = 0.0
+assert estado() == "libre", estado()
 
 # La ronda vista desde la puerta del archivo, sin que te vean.
 v = vigilante("archivo")
@@ -213,7 +235,7 @@ for n in range(1, AVISOS_MAXIMOS + 1):
     assert dejarse_ver("archivo") == "aviso_papel", estado()
     assert s.avisos == n, s.avisos
     x, z, _ = s.regreso
-    assert abs(J.cl.actor.getX() - x) < 0.01 and abs(J.cl.actor.getZ() - z) < 0.01
+    assert abs(J.cl.actor.getX() - x) < 0.01 and abs(J.cl.actor.getZ() - z) < 0.01, (J.cl.actor.getPos(), s.regreso, J.cl.aviso_papel and [getattr(e, "text", "") for e in J.cl.aviso_papel.piezas][:4])
     foto(f"colegio_aviso_{n}")
     tecla("enter", 0.6)
     if n < AVISOS_MAXIMOS:
