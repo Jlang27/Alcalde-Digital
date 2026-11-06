@@ -493,6 +493,14 @@ VOTOS_POR_NODO = {
     # capitulo 2: la propuesta desmiente el rumor de los colegios... si sale
     "p_result": {"Daniel Ospina": 5, "Hugo Bravo": -2},
     "g_result": {"Daniel Ospina": -4, "Hugo Bravo": 2},
+    # capitulo 3: el expediente sobre Bravo
+    "r3_rumor": {"Daniel Ospina": 6, "Hugo Bravo": -6},
+    "r3_prensa": {"Daniel Ospina": 1},
+    "r3_espiar": {},
+    # capitulo 4: el montaje contra Bravo que le ofrecen a Santiago
+    "a4_dinero": {"Hugo Bravo": -5, "Daniel Ospina": 2, "Juan Medina": 2, "Elena Ruiz": 1},
+    "a4_rechazo": {},
+    "a4_rastreo": {"Hugo Bravo": 1},
 }
 
 # Las hojas que frenan el rumor: protegen a los vecinos a los que aun no
@@ -513,6 +521,14 @@ TEXTO_BANDERA = {
     "sacaste_la_propuesta": "Que sacaste del colegio la propuesta del equipo de Ospina.",
     "publicaste_la_propuesta": "Que publicaste la propuesta aunque te amenazaron.",
     "guardaste_la_propuesta": "Que te callaste la propuesta por miedo a perder el trabajo.",
+    "ospina_jugo_sucio": "Que Ospina publicó un rumor sobre Bravo.",
+    "ospina_dio_la_cara": "Que Ospina rechazó la guerra sucia y dio la cara en vivo.",
+    "asesor_a_tus_espaldas": "Que el asesor de Ospina empezó a actuar a sus espaldas.",
+    "vendiste_tu_directo": "Que transmitiste por dinero un montaje contra Bravo.",
+    "rechazaste_el_soborno": "Que rechazaste el soborno aunque perdiste patrocinadores.",
+    "expusiste_la_red_fantasma": "Que expusiste en vivo a la red que pagaba montajes.",
+    "cuidaste_tu_chat": "Que cuidaste tu chat: respondiste dudas y borraste bulos.",
+    "tu_chat_se_desbordo": "Que en tu directo los bulos corrieron sin control.",
 }
 
 # Nombre y oficio de los que hablan en la cafeteria.
@@ -587,6 +603,12 @@ RONDAS_POR_NIVEL = 2
 # El capitulo 2, «La propuesta» (pantallas.CAPITULOS), es de noche en el
 # Colegio Tecnico Nova: se entra a los archivos esquivando la ronda.
 DIA_SIGILO = 1
+# El capitulo 3, «La primera jugada sucia», en el comando de campana: se
+# mira la oficina y se decide en la mesa de conferencias, sin telefono.
+DIA_CAMPANA = 2
+# El capitulo 4, «La oferta», en el estudio de Santiago: un directo con el
+# chat a toda velocidad (transmision.py) y la oferta en un privado cifrado.
+DIA_ESTUDIO = 3
 
 # La ronda de cada vigilante, ida y vuelta, en puntos (x, z) del plano de
 # mundo.py. Cada una pasa junto a un folio: no hay foto gratis.
@@ -750,6 +772,190 @@ EVENTOS_ALEATORIOS = [
 
 # El mensaje que le llega a Valeria al salir del colegio con la propuesta.
 MENSAJE_ANONIMO = "Si publicas eso, perderás tu trabajo."
+
+
+# Lo que se puede mirar con E en la oficina del capitulo 3: la zona
+# (x0, x1, z0, z1, del plano de mundo.py) desde la que se alcanza y lo
+# que dice el aviso. La mesa no tiene aviso: abre la escena del expediente.
+PUNTOS_CAPITULO_3 = {
+    "encuestas": {"verbo": "mirar las encuestas", "zona": (4.4, 12.2, -4.4, -2.6)},
+    "mapa": {"verbo": "mirar el mapa de distritos", "zona": (6.0, 11.4, -2.4, 1.4)},
+    "mesa": {"verbo": "ir a la mesa", "zona": (15.6, 21.8, -2.3, 1.7)},
+}
+TEXTO_MAPA_DISTRITOS = (
+    "Desde el rumor del colegio, Bravo te gana los distritos del sur, los "
+    "del Colegio Técnico Nova. Si no reaccionas, el mapa se tiñe de rojo "
+    "antes del debate.")
+# (quien, lo que dice, segundos) al empezar el capitulo 3: el asesor entra
+# en el despacho de Daniel, preocupado, y lo cita en su oficina (la sala de
+# conferencias, donde luego le enseña el expediente).
+DIALOGO_ASESOR_PREOCUPADO = (
+    ("asesor", "Daniel... ¿ya viste cómo vamos?", 2.6),
+    ("daniel", "Algo vi en el teléfono.", 2.0),
+    ("asesor", "Es peor. Lo del colegio nos está hundiendo, y rápido.", 3.2),
+    ("asesor", "Tenemos que hablar, pero aquí no. En mi oficina, en conferencias.", 3.6),
+    ("daniel", "¿Qué tan grave es?", 1.8),
+    ("asesor", "Te espero allá. No tardes.", 2.4),
+)
+# (quien, lo que dice, segundos) en la mesa de conferencias.
+DIALOGO_EXPEDIENTE = (
+    ("asesor", "Daniel, las encuestas por la mentira del colegio cayeron 10 puntos.", 3.2),
+    ("asesor", "Tenemos que reaccionar. Podemos publicar esto sobre Bravo.", 3.0),
+    ("daniel", "¿Es verdad?", 2.0),
+    ("asesor", "No completamente... Nadie lo va a comprobar.", 3.0),
+)
+
+
+# --- Capitulo 4: el directo de Santiago (reglas en transmision.py) ---
+# El chat que pasa solo: (autor, texto). Sin preguntas: lo que pregunta
+# algo espera en la cola y hay que atenderlo.
+RELLENO_CHAT_4 = (
+    ("lunita_07", "holaaa santi"), ("el_pibe_nova", "primera vez que llego a tiempo jaja"),
+    ("caro.mtz", "saludos desde Nova Sur"), ("dagoberto", "ese setup está brutal"),
+    ("juanes_rx", "jajajaja"), ("mafe_dibuja", "qué bonita la luz del estudio"),
+    ("tavo_99", "SANTIIII"), ("lau.parra", "llegué, llegué"), ("kevin_ok", "+1"),
+    ("valen_r", "te quiero santi jaja"), ("el_profe_g", "buenas noches a todos"),
+    ("nico_beats", "pon otra vez la canción del intro"), ("sofi.gg", "jajaja no puedo"),
+    ("pipe_cr7", "grande santi"), ("andre_m", "saludos a mi mamá que me está viendo"),
+    ("bryan.nova", "los del colegio técnico presentes"),
+    ("dani_ela", "ese aro de luz ilumina más que mi futuro"),
+    ("mono_lopez", "aguante el barrio"), ("isa_canta", "holiii"),
+    ("la_negra_t", "te veo desde el bus"), ("ferchito", "qué nivel"),
+    ("majo.b", "eso no me lo esperaba"), ("toto_88", "el chat va rapidísimo"),
+    ("cami.lo", "jajaja el de atrás"), ("santi_fan_1", "te sigo desde el primer video"),
+)
+# Los que piden algo, en el orden en que entran. tipo: pregunta (se
+# responde), bulo, odio o estafa (se borran): transmision.ACCION_DE.
+PEDIDOS_CHAT_4 = (
+    {"autor": "mateo_estudia", "tipo": "pregunta",
+     "texto": "¿Cómo sé si una noticia del colegio es falsa?"},
+    {"autor": "NovaAlerta_oficial", "tipo": "bulo",
+     "texto": "COMPARTAN YA: Ospina cierra el colegio el lunes. Pásenlo antes de que lo borren."},
+    {"autor": "laura.vota", "tipo": "pregunta",
+     "texto": "¿Vas a hablar de la elección en el directo de hoy?"},
+    {"autor": "gana_facil_ya", "tipo": "estafa",
+     "texto": "Gana 500 000 diarios desde tu casa: entra al enlace de mi perfil."},
+    {"autor": "don_jorge_58", "tipo": "pregunta",
+     "texto": "¿Dónde puedo leer las propuestas de los cuatro candidatos?"},
+    {"autor": "verdad_oculta", "tipo": "bulo",
+     "texto": "Audio filtrado de Medina comprando votos. Escúchenlo antes de que lo bajen."},
+    {"autor": "x_anonimo_x", "tipo": "odio",
+     "texto": "Los de Nova Sur no deberían ni votar, son unos vagos."},
+    {"autor": "camila_r", "tipo": "pregunta",
+     "texto": "¿Tú a quién le crees cuando ves algo en Civitas?"},
+    {"autor": "la_verdad_de_bravo", "tipo": "bulo",
+     "texto": "Bravo se robó la plata de las vías, todo el mundo lo sabe."},
+    {"autor": "sorteo_civitas", "tipo": "estafa",
+     "texto": "¡Ganaste un celular! Manda tus datos y tu clave para reclamarlo."},
+)
+# Lo que se mira con E en el estudio (zonas en el plano de mundo.py). La
+# consola no tiene aviso: empieza el directo.
+PUNTOS_CAPITULO_4 = {
+    "consola": {"verbo": "empezar el directo", "zona": (-1.3, 1.3, -0.35, 1.1)},
+    "patrocinadores": {"verbo": "mirar los patrocinadores", "zona": (3.5, 4.8, -3.6, -0.9)},
+}
+TEXTO_PATROCINADORES = (
+    "Kola Nova, TecnoBarrio y Moto Ya pagan el estudio, las luces y medio "
+    "arriendo. El contrato dice que si el canal se mete en un escándalo, "
+    "se van ese mismo día.")
+# (quien, lo que dice, segundos) en el privado cifrado que corta el directo.
+MENSAJE_CIFRADO = (
+    ("privado", "Tenemos información que puede destruir a Bravo.", 3.0),
+    ("privado", "Si la publicas hoy en tu directo, son 40 millones.", 3.0),
+    ("santiago", "¿Y si es falsa?", 2.0),
+    ("privado", "Eso no importa. Lo importante es que la gente la crea.", 3.4),
+)
+
+
+def construir_arbol_capitulo_4():
+    """La oferta del privado cifrado:
+
+        raiz (el montaje contra Bravo)
+        |- Aceptar el dinero           -> el montaje, en vivo (hoja)
+        |- Rechazar                    -> sin patrocinadores (hoja)
+        |- Aceptar y rastrear la red   -> un enemigo cibernetico (hoja)
+
+    Como los de los capitulos 2 y 3, sin ramas de habilidades ni de
+    banderas: es la decision de Santiago frente a una oferta, no una
+    publicacion de Civitas.
+    """
+    raiz = NodoDecision("raiz", "«Tenemos información que puede destruir a Bravo.»",
+                        corto="LA OFERTA")
+    arbol = ArbolDecision(raiz)
+    aceptar = raiz.agregar_hijo(NodoDecision(
+        "aceptar", "Aceptar el dinero", rasgo="impulso",
+        detalle="Transmites el montaje a tus cientos de miles de seguidores.",
+        corto="ACEPTAR"))
+    aceptar.agregar_hijo(NodoDecision(
+        "a4_dinero", "El montaje, en vivo",
+        efectos={"desinformacion": 15, "confianza": -8, "conflictos": 6},
+        rasgo="impulso", bandera="vendiste_tu_directo",
+        detalle="Ganas recursos, pero perjudicas la campaña.", corto="EN VIVO"))
+    rechazar = raiz.agregar_hijo(NodoDecision(
+        "rechazar", "Rechazar", rasgo="rigor", puntos=3,
+        detalle="Bloqueas el pago y la oferta.", corto="RECHAZAR"))
+    rechazar.agregar_hijo(NodoDecision(
+        "a4_rechazo", "Sin patrocinadores",
+        efectos={"confianza": 8, "desinformacion": -4},
+        rasgo="rigor", bandera="rechazaste_el_soborno",
+        detalle="Mantienes la integridad, pero pierdes patrocinadores.",
+        corto="ÍNTEGRO"))
+    rastrear = raiz.agregar_hijo(NodoDecision(
+        "rastrear", "Aceptar y descubrir quién está detrás",
+        detalle="Aceptas la transferencia y rastreas en vivo a la red fantasma.",
+        corto="RASTREAR"))
+    rastrear.agregar_hijo(NodoDecision(
+        "a4_rastreo", "La red fantasma, expuesta",
+        efectos={"desinformacion": -8, "info_verificada": 6, "conflictos": 4},
+        bandera="expusiste_la_red_fantasma",
+        detalle="Expones a la red en directo, pero te ganas un poderoso enemigo cibernético.",
+        corto="UN ENEMIGO"))
+    return arbol
+
+
+def construir_arbol_capitulo_3():
+    """El dilema de Daniel con el expediente sobre Bravo:
+
+        raiz (el expediente)
+        |- Publicar el rumor            -> violencia en las calles (hoja)
+        |- No publicarlo: rueda prensa  -> frente a los microfonos (hoja)
+        |- Investigar a Bravo           -> el asesor se adelanta (hoja)
+
+    Como el del capitulo 2, sin ramas de habilidades ni de banderas: es
+    una decision de Daniel, no una publicacion de Civitas.
+    """
+    raiz = NodoDecision("raiz", "«Podemos publicar esto sobre Bravo.»", corto="EL EXPEDIENTE")
+    arbol = ArbolDecision(raiz)
+    rumor = raiz.agregar_hijo(NodoDecision(
+        "rumor", "Publicar el rumor", rasgo="impulso",
+        detalle="Das luz verde a la campaña sucia en Civitas.", corto="PUBLICAR"))
+    rumor.agregar_hijo(NodoDecision(
+        "r3_rumor", "Indignación en la calle",
+        efectos={"desinformacion": 14, "conflictos": 10, "convivencia": -8, "confianza": -6},
+        rasgo="impulso", bandera="ospina_jugo_sucio",
+        detalle="Ganas apoyo electoral inmediato, pero desatas violencia e indignación.",
+        corto="INDIGNACIÓN"))
+    prensa = raiz.agregar_hijo(NodoDecision(
+        "prensa", "No publicarlo y dar rueda de prensa", rasgo="rigor", puntos=3,
+        detalle="Rechazas la guerra sucia y explicas tu propuesta en vivo.",
+        corto="RUEDA DE PRENSA"))
+    prensa.agregar_hijo(NodoDecision(
+        "r3_prensa", "Frente a los micrófonos",
+        efectos={"confianza": 12, "info_verificada": 8, "desinformacion": -6},
+        rasgo="rigor", bandera="ospina_dio_la_cara",
+        detalle="Tu liderazgo y la confianza suben con fuerza, aunque pierdes "
+                "la ventaja rápida.",
+        corto="DA LA CARA"))
+    espiar = raiz.agregar_hijo(NodoDecision(
+        "espiar", "Investigar a Bravo",
+        detalle="Mandas a espiar sin lanzar el ataque aún.", corto="INVESTIGAR"))
+    espiar.agregar_hijo(NodoDecision(
+        "r3_espiar", "El asesor se adelanta",
+        efectos={"conflictos": 3, "confianza": -2},
+        bandera="asesor_a_tus_espaldas",
+        detalle="Ganas tiempo, pero tu asesor empieza a actuar a tus espaldas.",
+        corto="A TUS ESPALDAS"))
+    return arbol
 
 
 def construir_arbol_capitulo_2():

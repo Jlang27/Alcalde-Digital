@@ -25,6 +25,8 @@ from ursina import (Ursina, Entity, Text, Button, Func, Texture, Vec3,
 import ajustes as A
 import audio
 import cierre
+import cine_campana
+import cine_estudio
 import cine_colegio
 import estilo as E
 import intro
@@ -36,7 +38,11 @@ from contenido import INDICADORES_META
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
                        HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
-                       MENSAJE_ANONIMO)
+                       MENSAJE_ANONIMO, DIA_CAMPANA, PUNTOS_CAPITULO_3,
+                       TEXTO_MAPA_DISTRITOS, DIALOGO_EXPEDIENTE,
+                       DIALOGO_ASESOR_PREOCUPADO, DIA_ESTUDIO, PUNTOS_CAPITULO_4,
+                       TEXTO_PATROCINADORES, MENSAJE_CIFRADO)
+from transmision import BORRAR, RESPONDER
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
 from sigilo import AVISOS_MAXIMOS, Vigilante
@@ -94,6 +100,7 @@ class Cliente:
         self.escena = None            # la salida del colegio, con su decision
         self.asesor = None            # el asesor de Daniel (dia 3)
         self.ronda_asesor = None      # su ida y vuelta (sigilo.Vigilante)
+        self.directo = None           # la interfaz del directo de Santiago (dia 4)
         self.sospecha = None          # el medidor de «te estan viendo»
         self.vio_aviso = False        # el aviso de «hablar cuesta», una vez
         self.dia_avisado = None       # el aviso de la jornada, una vez por dia
@@ -112,6 +119,8 @@ class Cliente:
         self.objeto_cerca = None      # id del objeto al alcance (capitulo 2)
         self.marca_objeto = []        # el «E  agarrar» de abajo
         self.marca_cobertura = []     # «C esconderse» o «A D asomarse · C salir»
+        self.punto_cerca = None       # lo de la oficina del cap. 3 al alcance
+        self.marca_punto = []         # su «E mirar…»
         self.marca_cobertura_estado = None
         self.inventario = None        # lo que llevas, abajo a la derecha
         self.dialogo = None
@@ -272,15 +281,15 @@ def rehacer_ajustes(_clave):
 
 # Los siete dias del guion; los primeros se pueden jugar sueltos desde el
 # menu. Antes la lista llegaba a doce, que nunca existieron.
-CAPITULOS_JUGABLES = 3
+CAPITULOS_JUGABLES = 4
 CAPITULOS = [(f"{i + 1:02d}",
               titulo if i < CAPITULOS_JUGABLES else f"{titulo} · próximamente",
               i < CAPITULOS_JUGABLES)
              for i, (titulo, _lugar) in enumerate(pantallas.CAPITULOS)]
 # Quien protagoniza un capitulo jugado suelto, segun el guion. El 1 lo
-# juega el rol que ya tengas; el 2 es de Valeria, la periodista, y el 3
-# de Daniel Ospina, el candidato.
-ROL_CAPITULO = {1: "periodista", 2: "candidato"}
+# juega el rol que ya tengas; el 2 es de Valeria, la periodista; el 3,
+# de Daniel Ospina, el candidato, y el 4, de Santiago, el influencer.
+ROL_CAPITULO = {1: "periodista", 2: "candidato", 3: "influencer"}
 
 
 def abrir_capitulos(seleccion=0):
@@ -873,7 +882,7 @@ def capitulo_de(indice):
     return titulo, pantallas.dias_que_faltan(indice), lugar
 
 
-ESCENARIO_DIA = {1: "rectoria", 2: "campana"}   # indice de dia -> escenario
+ESCENARIO_DIA = {1: "rectoria", 2: "campana", 3: "estudio"}   # indice de dia -> escenario
 
 
 def iniciar_dia(indice):
@@ -922,6 +931,8 @@ def iniciar_dia(indice):
 SONIDO_LUGAR = {
     "rectoria": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_LLUVIA),
     "campana": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_CALLE),
+    # El estudio: musica tranquila de directo y la ciudad tras la ventana.
+    "estudio": (audio.MUSICA_CAFETERIA, 0.5, audio.AMBIENTE_CALLE),
 }
 
 
@@ -932,7 +943,12 @@ def sonido_del_lugar():
 
 # La cinematica con la que abre cada escenario, si la tiene. Va antes del
 # rotulo del dia, como la de «7 días» antes del dia 1.
-CINEMATICAS = {"rectoria": cine_colegio.CineColegio}
+CINEMATICAS = {
+    "rectoria": cine_colegio.CineColegio,
+    # El asesor entra preocupado y cita a Daniel en su oficina.
+    "campana": lambda actor, nombre: cine_campana.LlegadaCampana(
+        actor, nombre, cl.asesor, DIALOGO_ASESOR_PREOCUPADO),
+}
 
 
 def abrir_cinematica(indice):
@@ -1037,6 +1053,16 @@ def abrir_libre():
         abrir_aviso_papel("TU NOCHE", "Saca la propuesta del colegio", TEXTO_NOCHE,
                           abrir_libre)
         return
+    if p is not None and p.dia_actual == DIA_CAMPANA and cl.dia_avisado != p.dia_actual:
+        cl.dia_avisado = p.dia_actual
+        abrir_aviso_papel("TU TARDE", "Las encuestas se hunden", TEXTO_CAMPANA,
+                          abrir_libre)
+        return
+    if p is not None and p.dia_actual == DIA_ESTUDIO and cl.dia_avisado != p.dia_actual:
+        cl.dia_avisado = p.dia_actual
+        abrir_aviso_papel("TU DIRECTO", "Cien mil personas te esperan", TEXTO_ESTUDIO,
+                          abrir_libre)
+        return
     cl.estado = "libre"
     animar("idle")
     audio.agachar(False)
@@ -1059,7 +1085,7 @@ def abrir_libre():
                              if p is not None and p.sigilo is not None else [])
     cl.jugador.encuadrar()
     cl.jugador.activar()
-    cl.aviso = pantallas.AvisoLibre(telefono=p is None or p.sigilo is None)
+    cl.aviso = pantallas.AvisoLibre(telefono=p is None or p.con_telefono)
     cl.mapa.preparar(mundo.escenario(), mundo.limites(), mundo.bloqueos())
     pintar_reloj_manana()
 
@@ -1077,6 +1103,8 @@ def cerrar_libre():
     cl.objeto_cerca = None
     limpiar(cl.marca_cobertura)
     cl.marca_cobertura_estado = None
+    limpiar(cl.marca_punto)
+    cl.punto_cerca = None
     if cl.sospecha is not None:
         cl.sospecha.poner(0.0, 0, 0)      # fuera de la ronda no se avisa
     if cl.jugador is not None:
@@ -1185,6 +1213,15 @@ TEXTO_NOCHE = (
     "Busca en el archivo la carpeta «Propuesta de Ospina» y sácala por la "
     "puerta verde de SALIDA, junto a las taquillas rojas. Esta noche no "
     "hay teléfono que valga: si te ven tres veces, te sacan del colegio.")
+TEXTO_CAMPANA = (
+    "Mira las pantallas de encuestas y el mapa de distritos de la sala de "
+    "guerra. Cuando estés listo, ve a la oficina de tu asesor, la sala de "
+    "conferencias: te espera en la mesa con algo.")
+TEXTO_ESTUDIO = (
+    "Tus seguidores ya están conectados. Ve a la consola y empieza el "
+    "directo: responde (1) las preguntas de buena fe y borra (2) los "
+    "bulos, el odio y las estafas. Ojo: responder un bulo lo hace más "
+    "visible, y lo que dejas pasar se queda en tu chat.")
 TEXTO_SIN_PROPUESTA = (
     "Todavía no puedes irte: tienes que encontrar el archivo «Propuesta de "
     "Ospina». Te falta la {partes}: hay una carpeta en cada archivo.")
@@ -1286,17 +1323,87 @@ def ronda(dt):
         pillada(evento)
 
 
+def opciones_del_dia():
+    return [(o.id, o.texto, o.detalle) for o in cl.partida.opciones()]
+
+
 def abrir_salida():
     """Fuera del colegio con la propuesta: el mensaje anonimo y la
     decision del capitulo 2 (el arbol lo pone la Partida)."""
     cerrar_libre()
-    cl.estado = "salida"
-    opciones = [(o.id, o.texto, o.detalle) for o in cl.partida.opciones()]
-    cl.escena = cine_colegio.SalidaColegio(cl.actor, opciones, MENSAJE_ANONIMO)
+    cl.estado = "escena"
+    cl.escena = cine_colegio.SalidaColegio(cl.actor, opciones_del_dia(), MENSAJE_ANONIMO)
 
 
-def elegir_en_salida(i):
-    """1 o 2 en la calle: la opcion y, detras, su unica consecuencia."""
+def abrir_expediente():
+    """La mesa de conferencias del capitulo 3: el asesor trae el
+    expediente y Daniel decide. Mientras, el asesor deja su ronda."""
+    cerrar_libre()
+    cl.estado = "escena"
+    cl.escena = cine_campana.ExpedienteCampana(
+        cl.actor, cl.asesor, opciones_del_dia(), DIALOGO_EXPEDIENTE,
+        cl.partida.protagonista.nombre, cl.mundo)
+
+
+def abrir_directo():
+    """La consola del capitulo 4: Santiago vuelve a su marca y la camara
+    se pone donde la del tripode. Lo que pasa en el chat lo decide la
+    Transmision de la Partida."""
+    cerrar_libre()
+    cl.estado = "directo"
+    fundido = pantallas.Fundido()
+    cl.actor.setPos(0, 0, 0)
+    cl.actor.setH(0)
+    animar("hablar")
+    mundo.plano_directo()
+    fundido.desvanecer(0.45, retraso=0.1)
+    cl.directo = pantallas.Directo()
+
+
+def directo_paso(dt):
+    t = cl.partida.transmision
+    for evento, m in t.actualizar(dt):
+        if evento == "chat":
+            cl.directo.chat(m)
+        elif evento == "pedido":
+            cl.directo.chat(m)
+            audio.efecto("toque")
+        elif evento == "escapado":
+            cl.directo.explicar(m["por_que"], False)
+            audio.efecto("tiempo_agotado")
+        elif evento == "privado":
+            abrir_oferta()
+            return
+    cl.directo.poner(t.espectadores, t.confianza, t.atendiendo, t.plazo(), len(t.cola))
+
+
+def atender_chat(accion):
+    """1 responde y 2 borra el mensaje que pide atencion."""
+    p = cl.partida.transmision.atender(accion)
+    if p is None:
+        return
+    cl.directo.explicar(p["por_que"], p["acierto"])
+    audio.efecto("hecho" if p["acierto"] else "volver")
+    if p["acierto"] and accion == RESPONDER:
+        mundo.reaccionar(cl.actor, "asentir")
+
+
+def cerrar_directo():
+    if cl.directo is not None:
+        cl.directo.cerrar()
+        cl.directo = None
+
+
+def abrir_oferta():
+    """Entra el privado cifrado: se acaba el directo y empieza la escena."""
+    cerrar_directo()
+    cl.estado = "escena"
+    cl.escena = cine_estudio.OfertaEstudio(
+        cl.actor, opciones_del_dia(), MENSAJE_CIFRADO, cl.partida.protagonista.nombre)
+
+
+def elegir_en_escena(i):
+    """1-9 en una escena de decision: la opcion y, detras, su unica consecuencia."""
     id_opcion = cl.escena.elegir(i)
     if id_opcion is None:
         return
@@ -1306,11 +1413,62 @@ def elegir_en_salida(i):
     cl.escena.consecuencia(hoja.texto, cl.partida.ultimo_detalle)
 
 
-def terminar_salida():
+def terminar_escena():
     cl.escena.cerrar()
     cl.escena = None
     cl.estado = "juego"
-    cerrar_dia(plano=None)        # la foto del cierre es la calle, no el despacho
+    cerrar_dia(plano=None)        # la foto del cierre es el ultimo plano de la escena
+
+
+# Lo que se mira con E en cada capitulo con puntos (oficina y estudio).
+PUNTOS_DEL_DIA = {DIA_CAMPANA: PUNTOS_CAPITULO_3, DIA_ESTUDIO: PUNTOS_CAPITULO_4}
+
+
+def senalar_punto():
+    """«E mirar las encuestas», el mapa o ir a la mesa (capitulo 3); «E
+    empezar el directo» o los patrocinadores (capitulo 4)."""
+    x, z = cl.actor.getX(), cl.actor.getZ()
+    puntos = PUNTOS_DEL_DIA[cl.partida.dia_actual]
+    cerca = next((i for i, punto in puntos.items()
+                  if punto["zona"][0] < x < punto["zona"][1]
+                  and punto["zona"][2] < z < punto["zona"][3]), None)
+    if cerca == cl.punto_cerca:
+        return
+    cl.punto_cerca = cerca
+    limpiar(cl.marca_punto)
+    if cerca is not None:
+        cl.marca_punto += E.tecla("e", puntos[cerca]["verbo"], -0.12, -0.36)[0]
+
+
+def mirar_punto(punto):
+    """E junto a algo de la oficina: las encuestas o el mapa en una
+    tarjeta; la mesa, la escena del expediente."""
+    audio.efecto("confirmar")
+    if punto == "mesa":
+        abrir_expediente()
+        return
+    if punto == "consola":
+        abrir_directo()
+        return
+    if punto == "patrocinadores":
+        abrir_aviso_papel("PATROCINADORES", "Tres marcas pagan el estudio",
+                          TEXTO_PATROCINADORES, abrir_libre)
+        return
+    p = cl.partida
+    if punto == "encuestas":
+        # Los numeros de la Partida, no los del muro: si el capitulo 2 los
+        # movio, aqui se ve.
+        ospina = p.encuesta["Daniel Ospina"]
+        resto = "  ·  ".join(f"{n.split()[-1]} {v:.0f} %" for n, v in
+                             sorted(p.encuesta.items(), key=lambda kv: -kv[1])
+                             if n != "Daniel Ospina")
+        abrir_aviso_papel("INTENCIÓN DE VOTO", f"Ospina, {ospina:.0f} %",
+                          f"{resto}. En Civitas, #CierreDeColegios sigue siendo "
+                          f"tendencia: el video recortado ya lleva 40 000 compartidos.",
+                          abrir_libre)
+    else:
+        abrir_aviso_papel("MAPA DE DISTRITOS", "El rojo de Bravo avanza",
+                          TEXTO_MAPA_DISTRITOS, abrir_libre)
 
 
 def terminar_noche():
@@ -2264,7 +2422,8 @@ def update():
     # El fondo vive pase lo que pase en primer plano: el trafico tras los
     # ventanales y el asesor no se congelan al sacar el telefono.
     mundo.fondo_vivo(time.dt)
-    if cl.asesor is not None:
+    # En las escenas y en la llegada lo mueven ellas.
+    if cl.asesor is not None and cl.escena is None and cl.cine is None:
         v = cl.ronda_asesor
         v.avanzar(time.dt)
         mundo.mover_actor(cl.asesor, v.x, v.z, v.rumbo, v.andando)
@@ -2274,9 +2433,13 @@ def update():
             terminar_cinematica()
         return
 
-    if cl.estado == "salida" and cl.escena is not None:
+    if cl.estado == "escena" and cl.escena is not None:
         if cl.escena.actualizar(time.dt):
-            terminar_salida()
+            terminar_escena()
+        return
+
+    if cl.estado == "directo" and cl.directo is not None:
+        directo_paso(time.dt)
         return
 
     if cl.estado == "intro" and cl.intro is not None:
@@ -2317,6 +2480,8 @@ def update():
                     apuntar_paso()
         if cl.npcs:
             senalar_cercano()
+        if cl.partida.dia_actual in PUNTOS_DEL_DIA:
+            senalar_punto()
         return
 
     refrescar_zonas()
@@ -2428,6 +2593,7 @@ def volver_al_menu():
     quitar_vigilantes()
     quitar_asesor()
     quitar_figurantes()
+    cerrar_directo()
     if cl.cine is not None:
         cl.cine.cerrar()
         cl.cine = None
@@ -2480,10 +2646,16 @@ def input(tecla):
             cl.cine.saltar()
         return
 
-    elif cl.estado == "salida" and cl.escena is not None:
+    elif cl.estado == "directo":
+        # En directo no se pausa: 1 responde y 2 borra lo que pide atencion.
+        if tecla in ("1", "2"):
+            atender_chat(RESPONDER if tecla == "1" else BORRAR)
+        return
+
+    elif cl.estado == "escena" and cl.escena is not None:
         # 1-9 deciden, como en el telefono; Enter adelanta, pero no decide.
         if tecla.isdigit() and tecla != "0":
-            elegir_en_salida(int(tecla) - 1)
+            elegir_en_escena(int(tecla) - 1)
         elif tecla in ("enter", "space", "escape"):
             cl.escena.saltar()
         return
@@ -2564,6 +2736,8 @@ def input(tecla):
             abrir_dialogo(cl.cerca)
         elif tecla == "e" and cl.objeto_cerca is not None:
             agarrar()
+        elif tecla == "e" and cl.punto_cerca is not None:
+            mirar_punto(cl.punto_cerca)
         elif tecla == "c":
             cl.jugador.cubrirse()
         elif tecla == "left mouse down" and cl.partida.sigilo is not None:
@@ -2575,8 +2749,8 @@ def input(tecla):
             # 1-9 ponen en la mano lo que llevas, en el orden en que lo agarraste
             audio.efecto("mover")
             pintar_inventario()
-        elif tecla in ("enter", "space") and cl.partida.sigilo is None:
-            # el telefono es del capitulo 1: de noche en el colegio no se saca
+        elif tecla in ("enter", "space") and cl.partida.con_telefono:
+            # el telefono es del capitulo 1: el 2 y el 3 deciden en su escena
             p = cl.partida
             # el dia que se investiga, sacar el telefono es irreversible:
             # se pregunta. (A las 8:30 ya no hay nada que preguntar.)

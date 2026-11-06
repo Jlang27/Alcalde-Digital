@@ -43,12 +43,12 @@ assert s.tiene_objetivo
 
 J.cl.actor.setPos(24.0, 0, -7.3)
 pasar(0.3)
-assert estado() == "salida", estado()
+assert estado() == "escena", estado()
 pasar(2.5)
 foto("salida_1_acera")
 pasar(2.6)
 foto("salida_2_vibra")
-assert hasta_estado("salida", 1) and J.cl.escena.fase == "llega"
+assert hasta_estado("escena", 1) and J.cl.escena.fase == "llega"
 tecla("enter", 0.2)                       # Enter adelanta hasta la decision
 pasar(0.5)
 assert J.cl.escena.fase == "decide", J.cl.escena.fase

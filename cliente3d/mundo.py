@@ -1,16 +1,17 @@
 import math
 import os
 import random
+import textwrap
 
 import simplepbr
 from direct.actor.Actor import Actor
 from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
                           Geom, GeomLines, GeomNode, GeomVertexData,
                           GeomVertexFormat, GeomVertexWriter, LColor, Material,
-                          PNMImage, PointLight, SamplerState, Texture,
-                          TextureAttrib, TransparencyAttrib)
+                          PNMImage, PointLight, SamplerState, ShaderAttrib,
+                          Texture, TextureAttrib, TransparencyAttrib)
 from PIL import Image, ImageDraw, ImageFont
-from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec3
+from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec2, Vec3
 
 from contenido import ZONAS_SEGURAS_CAPITULO_2
 from sigilo import DT_VUELO
@@ -142,6 +143,11 @@ def _pieza(mundo, modelo, mat, escala, posicion, giro=0):
     _ENTIDADES.append(e)
     e.reparentTo(mundo)
     e.clearShader()
+    # Opaca: Ursina pone a toda Entity transparencia «dual», que pinta cada
+    # pieza dos veces, la manda al cajon de lo transparente (sin descarte
+    # por profundidad) e impide fundirla con sus iguales. Lo que de verdad
+    # transparenta (lluvia, linternas, destellos) la pone aparte.
+    e.model.setTransparency(TransparencyAttrib.M_none)     # la pone en el modelo, no en la Entity
     e.setMaterial(mat, 1)
     e.scale = escala
     e.position = posicion
@@ -1175,10 +1181,12 @@ def mover_trafico(dt):
     for vehiculo in _ACTUAL.get("vehiculos", ()):
         nodo, velocidad = vehiculo
         z = nodo.getZ() + velocidad * dt
+        # Restar el tramo, no volver al extremo: el carril del capitulo 3
+        # se mueve entero y perder el sobrante lo haria dar un tiron.
         if velocidad > 0 and z > z_max:
-            z = z_min
+            z -= z_max - z_min
         elif velocidad < 0 and z < z_min:
-            z = z_max
+            z += z_max - z_min
         nodo.setZ(z)
 
 
@@ -2207,9 +2215,9 @@ PLACAS_CAMPANA = (
 OFICINA_EN_CIUDAD = (2.0, 22.0, -75.0)
 GIRO_CIUDAD = -12.0
 
-# La ronda del asesor, ida y vuelta (la recorre un sigilo.Vigilante): de
-# la mesa de luz de la sala de guerra a la mesa de conferencias.
-RUTA_ASESOR = [(7.0, 1.6), (20.4, 1.6)]
+# La ronda del asesor, ida y vuelta (la recorre un sigilo.Vigilante): da
+# vueltas en su oficina, la sala de conferencias, donde cito a Daniel.
+RUTA_ASESOR = [(15.6, 1.6), (20.4, 1.6)]
 
 BLANCO = (0.96, 0.95, 0.92)
 CREMA = (0.95, 0.85, 0.55)
@@ -2326,8 +2334,7 @@ def _obra_campana():
         _silla(o, x, -1.45, "-z", "cuero")
         _silla(o, x, 0.85, "+z", "cuero")
     o.solido((16.2, 21.2, -1.7, 1.1), 0.9)
-    # El expediente que el asesor deja sobre la mesa.
-    o.caja("expediente", 18.4, 18.78, 0.76, 0.79, -0.45, -0.18)
+    # El expediente no esta: lo trae el asesor en la escena (mundo.expediente).
     for x in (16.7, 17.8, 20.3):
         o.caja("agua", x, x + 0.07, 0.76, 0.98, -0.6, -0.53)
     xf = CX1 - 0.1
@@ -2470,20 +2477,81 @@ def _ciudad_abajo(mundo):
     azar = random.Random(7)
     _cielo()
     _ACTUAL["cielo"].setH(GIRO_CIUDAD)
-    _calles(ciudad)
-    _edificios_ciudad(ciudad, azar)
-    _carteles_y_murales(ciudad)
-    _pantallas(ciudad)
-    _multitud(ciudad, azar)
+    # Lo quieto cuelga aparte para fundirlo: eran ~300 piezas sueltas, una
+    # llamada de dibujo cada una, y en una grafica integrada eso era casi
+    # todo el fotograma del capitulo 3. Fundidas quedan una por material.
+    quieto = ciudad.attachNewNode("ciudad_quieta")
+    _calles(quieto)
+    _edificios_ciudad(quieto, azar)
+    _carteles_y_murales(quieto)
+    _pantallas(quieto)
+    _multitud(quieto, azar)
     _trafico(ciudad, azar)
     # Dos patrullas en la acera del mitin: la manifestacion ya tiene policia.
     cuerpo = _material((0.02, 0.02, 0.025, 1), rugosidad=0.4, metalico=0.5)
     rojo = _material((0.02, 0.0, 0.0, 1), emision=(2.4, 0.1, 0.08, 1))
     azul = _material((0.0, 0.0, 0.02, 1), emision=(0.1, 0.3, 2.4, 1))
     for zc in (-49.0, -9.0):
-        _pieza(ciudad, "cube", cuerpo, (1.8, 1.3, 4.2), (-8.0, 0.8, zc))
-        _pieza(ciudad, "cube", rojo, (0.7, 0.15, 0.3), (-8.4, 1.55, zc))
-        _pieza(ciudad, "cube", azul, (0.7, 0.15, 0.3), (-7.6, 1.55, zc))
+        _pieza(quieto, "cube", cuerpo, (1.8, 1.3, 4.2), (-8.0, 0.8, zc))
+        _pieza(quieto, "cube", rojo, (0.7, 0.15, 0.3), (-8.4, 1.55, zc))
+        _pieza(quieto, "cube", azul, (0.7, 0.15, 0.3), (-7.6, 1.55, zc))
+    _fundir(quieto, ciudad)
+    _ACTUAL["vehiculos"] = _carriles(ciudad, _ACTUAL["vehiculos"])
+
+
+def _carriles(mundo, vehiculos):
+    """Funde los vehiculos de cada carril en un nodo que se mueve entero.
+
+    Los de un carril van a la misma velocidad: basta mover el carril. Para
+    que al dar la vuelta no salten todos a la vez, lleva su trafico dos
+    veces, separado el tramo entero: la copia entra por un extremo cuando
+    el original sale por el otro, los dos lejos de la oficina. Eran ~190
+    llamadas de dibujo, una por pieza y coche: la mitad del fotograma.
+    """
+    z_min, z_max = Z_TRAFICO
+    carriles = []
+    for _x, velocidad in CARRILES:
+        carril = mundo.attachNewNode("carril")
+        carril.setZ(z_min if velocidad > 0 else z_max)   # de donde sale
+        for nodo, v in vehiculos:
+            if v == velocidad:
+                nodo.wrtReparentTo(carril)
+        paso = (z_max - z_min) * (1 if velocidad > 0 else -1)
+        _fundir(carril, carril, (0.0, -paso))
+        carriles.append([carril, velocidad])
+    return carriles
+
+
+def _fundir(origen, destino, copias_z=(0.0,)):
+    """Funde la geometria quieta que cuelga de origen en una malla por
+    material, colgada de destino.
+
+    flattenStrong no junta las Entity de Ursina (llevan etiquetas que
+    respeta): se copian sus GeomNode, con la posicion y el estado que
+    heredaban, a un nodo limpio, se funde ese y se descuelgan los de
+    origen. Copiar y no mover: Ursina comparte la malla de un modelo entre
+    piezas (instancias) y un nodo con varios padres no se puede mover.
+    Los Text no son GeomNode y se quedan donde estaban. copias_z pone la
+    geometria varias veces, corrida en z (los carriles).
+
+    Del estado se quita el ShaderAttrib: cada Entity lleva sus propias
+    entradas de shader, iguales en valor pero distintas para Panda3D, y
+    con ellas no se juntaba ninguna malla. El pbr lo sigue dando render,
+    asi que solo vale para piezas sin shader propio (las de _pieza).
+    """
+    fundido = destino.attachNewNode("fundido")
+    base = fundido.getNetState()
+    piezas = list(origen.findAllMatches("**/+GeomNode"))
+    for geom in piezas:
+        estado = base.invertCompose(geom.getNetState()).removeAttrib(ShaderAttrib)
+        for dz in copias_z:
+            copia = geom.copyTo(fundido)
+            copia.setTransform(geom.getTransform(fundido))
+            copia.setZ(copia.getZ() + dz)
+            copia.setState(estado)
+    for geom in piezas:
+        geom.detachNode()
+    fundido.flattenStrong()
 
 
 def _luces_campana(mundo):
@@ -2528,12 +2596,466 @@ PLANOS_CAMPANA = {
 }
 
 
+# ===================================================================
+#  ESCENARIO 6: EL ESTUDIO DE SANTIAGO (capitulo 4, «La oferta»)
+# ===================================================================
+
+# Un estudio de streaming de noche. La marca (Santiago de pie en la
+# consola) queda en el origen mirando a -z, hacia la camara del directo;
+# detras de el, en z = SZ_DECORADO, el fondo que ven sus seguidores:
+# espuma acustica, neon y estantes. Neon magenta y cian contra el aro de
+# luz calido: el ambar contra el azul de siempre, en version de estudio.
+SX0, SX1 = -5.0, 5.0
+SZ_FONDO, SZ_DECORADO = -6.0, 2.6
+ALTO_ESTUDIO = 3.0
+MUROS_ESTUDIO = (
+    ("z", SZ_FONDO, SX0, SX1, ()),
+    ("z", SZ_DECORADO, SX0, SX1, ()),
+    ("x", SX0, SZ_FONDO, SZ_DECORADO, ()),
+    ("x", SX1, SZ_FONDO, SZ_DECORADO, ()),
+)
+CONSOLA = (-1.15, 1.15, -0.95, -0.4)          # x0, x1, z0, z1
+ALTO_CONSOLA = 1.0                             # de pie, como en los directos largos
+# Los dos monitores de la consola, mirando a Santiago: (x, y, z) del centro
+# de la imagen. El de su izquierda (+x) lleva los privados; el otro, el chat.
+MONITOR_PRIVADO = (0.62, 1.31, -0.715)
+MONITOR_CHAT = (-0.62, 1.31, -0.715)
+CAMARA_DIRECTO = (0.0, 1.55, -2.2)             # el tripode, dentro del aro de luz
+# El plano del directo: lo que ven los seguidores, desde la camara del tripode.
+PLANO_DIRECTO = (Vec3(0.0, 1.62, -2.0), Vec3(0.0, 1.42, 0.0), 52)
+MAGENTA = (0.98, 0.32, 0.86)
+
+
+def _obra_estudio():
+    o = _Obra()
+    azar = random.Random(4)
+    g = GROSOR_MURO / 2
+    _levantar_muros(o, MUROS_ESTUDIO, ALTO_ESTUDIO, "muro_estudio", "marco_metal",
+                    (("rodapie", 0, 0.10),))
+    o.caja("vinilo", SX0, SX1, 0, 0.004, SZ_FONDO, SZ_DECORADO)
+    o.caja("alfombra_neon", -2.0, 2.0, 0, 0.012, -2.9, 1.7)
+    # Tiras de LED cian por todo el borde del techo.
+    y = ALTO_ESTUDIO - 0.06
+    for eje, plano, signo, a0, a1 in (("z", SZ_DECORADO - g, -1, SX0, SX1),
+                                      ("z", SZ_FONDO + g, 1, SX0, SX1),
+                                      ("x", SX0 + g, 1, SZ_FONDO, SZ_DECORADO),
+                                      ("x", SX1 - g, -1, SZ_FONDO, SZ_DECORADO)):
+        o.pared("neon_cian", eje, plano, signo, a0, a1, y - 0.03, y, 0, 0.05)
+
+    # ================= EL FONDO DEL DIRECTO =================
+    zd = SZ_DECORADO - g                 # cara de dentro del muro del fondo
+    # Espuma acustica en damero, justo detras de la cabeza de Santiago, y
+    # mas a los lados, que es lo que se ve en el plano general.
+    for x0, x1, n in ((-0.75, 0.75, 6), (-4.6, -2.6, 8), (2.6, 4.6, 8)):
+        lado = (x1 - x0) / n
+        for i in range(n):
+            for k in range(5):
+                a, yy = x0 + i * lado, 0.85 + k * 0.25
+                mat = "espuma_b" if (i + k) % 2 else "espuma_a"
+                o.pared(mat, "z", zd, -1, a + 0.01, a + lado - 0.01, yy, yy + 0.24, 0, 0.06)
+    # Neon: dos barras magenta que enmarcan a Santiago y una cian encima.
+    for a in (-0.97, 0.92):
+        o.pared("neon_magenta", "z", zd, -1, a, a + 0.05, 0.6, 2.3, 0, 0.04)
+    o.pared("neon_cian", "z", zd, -1, -2.6, 2.6, 2.48, 2.52, 0, 0.04)
+    for a in (-2.45, 2.4):
+        o.pared("neon_cian", "z", zd, -1, a, a + 0.05, 0.4, 2.48, 0, 0.04)
+    # El nombre del canal, con su halo.
+    o.pared("neon_halo", "z", zd, -1, -1.0, 1.0, 2.1, 2.38, 0, 0.02)
+    o.letrero("SANTI LLERAS", "z", zd - 0.03, -1, 0.0, 2.24, 0.15, MAGENTA)
+    # Estanteria de la izquierda (de la camara): figuras de coleccion.
+    for yy in (1.0, 1.45, 1.9):
+        o.pared("madera_oscura", "z", zd, -1, -1.78, -1.1, yy - 0.03, yy, 0, 0.26)
+        a = -1.72
+        while a < -1.2:
+            ancho = azar.uniform(0.07, 0.12)
+            o.pared(azar.choice(("figura_a", "figura_b", "figura_c")), "z", zd, -1,
+                    a, a + ancho, yy, yy + azar.uniform(0.14, 0.3), 0.06, 0.06 + ancho)
+            a += ancho + 0.04
+    o.pared("neon_cian", "z", zd, -1, -1.78, -1.1, 0.95, 0.97, 0.24, 0.26)
+    # A la derecha, el boton de plata de los cien mil y el letrero EN VIVO.
+    o.pared("placa_oscura", "z", zd, -1, 1.1, 1.66, 1.42, 2.02, 0, 0.03)
+    o.pared("plata", "z", zd, -1, 1.15, 1.61, 1.47, 1.97, 0.03, 0.05)
+    o.letrero("100 MIL", "z", zd - 0.06, -1, 1.38, 1.6, 0.06, (0.12, 0.12, 0.14))
+    o.pared("neon_rojo", "z", zd, -1, 1.08, 1.13, 1.06, 1.18, 0, 0.04)
+    o.letrero("EN VIVO", "z", zd - 0.03, -1, 1.42, 1.12, 0.08, (1.0, 0.30, 0.25))
+    _planta(o, -4.4, 2.0)
+    _planta(o, 4.4, 2.0)
+
+    # ================= LA CONSOLA =================
+    x0, x1, z0, z1 = CONSOLA
+    o.caja("consola", x0, x1, ALTO_CONSOLA - 0.05, ALTO_CONSOLA, z0, z1, bloquea=True)
+    o.caja("consola", x0 + 0.04, x1 - 0.04, 0.12, ALTO_CONSOLA - 0.05, z0 + 0.02, z0 + 0.06)
+    for xp in (x0 + 0.05, x1 - 0.1):
+        o.caja("metal", xp, xp + 0.05, 0, 0.12, z0 + 0.05, z1 - 0.05)
+    o.caja("neon_magenta", x0 + 0.06, x1 - 0.06, 0.13, 0.16, z0 + 0.012, z0 + 0.02)
+    # La mesa de mezclas, con sus pilotos.
+    o.caja("mezclador", -0.36, 0.36, ALTO_CONSOLA, ALTO_CONSOLA + 0.045, -0.78, -0.5)
+    for i in range(9):
+        xl = -0.31 + i * 0.075
+        o.caja("led_ambar" if i % 3 else "led_verde", xl, xl + 0.03, ALTO_CONSOLA + 0.045,
+               ALTO_CONSOLA + 0.055, -0.62, -0.6)
+        o.caja("metal", xl + 0.005, xl + 0.025, ALTO_CONSOLA + 0.045,
+               ALTO_CONSOLA + 0.07, -0.72, -0.7)
+    # Los dos monitores: marco y pie (la imagen la pone _pantallas_estudio).
+    for xm, _y, zm in (MONITOR_PRIVADO, MONITOR_CHAT):
+        o.caja("tele", xm - 0.31, xm + 0.31, 1.12, 1.5, zm - 0.045, zm - 0.005)
+        o.caja("metal", xm - 0.03, xm + 0.03, ALTO_CONSOLA, 1.12, zm - 0.04, zm - 0.01)
+    # El microfono en su brazo, a la derecha de la boca.
+    # A la altura del pecho: a la de la boca le tapaba la cara en el directo.
+    o.caja("metal", 0.33, 0.36, ALTO_CONSOLA, 1.26, -0.56, -0.53)
+    o.caja("metal", 0.16, 0.36, 1.24, 1.26, -0.56, -0.53)
+    o.caja("metal", 0.16, 0.18, 1.24, 1.26, -0.56, -0.3)
+    o.caja("microfono", 0.135, 0.205, 1.2, 1.32, -0.34, -0.27)
+
+    # ================= LA CAMARA DEL DIRECTO =================
+    cx, cy, cz = CAMARA_DIRECTO
+    o.caja("metal", cx - 0.025, cx + 0.025, 0, cy - 0.1, cz - 0.025, cz + 0.025)
+    o.caja("metal", cx - 0.4, cx + 0.4, 0, 0.03, cz - 0.02, cz + 0.02)
+    o.caja("metal", cx - 0.02, cx + 0.02, 0, 0.03, cz - 0.4, cz + 0.4)
+    o.caja("camara_cuerpo", cx - 0.12, cx + 0.12, cy - 0.1, cy + 0.1, cz - 0.16, cz + 0.08)
+    o.caja("tele", cx - 0.05, cx + 0.05, cy - 0.05, cy + 0.05, cz + 0.08, cz + 0.16)
+    # El aro de luz: tramos cortos en circulo alrededor del objetivo (con
+    # menos y mas gordos se leia como una cadena de cuadros).
+    for k in range(40):
+        ang = 2 * math.pi * k / 40
+        xa, ya = cx + 0.34 * math.sin(ang), cy + 0.34 * math.cos(ang)
+        o.caja("aro", xa - 0.028, xa + 0.028, ya - 0.028, ya + 0.028, cz + 0.02, cz + 0.05)
+    o.solido((cx - 0.45, cx + 0.45, cz - 0.45, cz + 0.45), 1.7)
+    # Dos softbox, uno a cada lado de la consola: mas atras tapaban el
+    # plano general.
+    for xs in (-2.5, 2.5):
+        o.caja("metal", xs - 0.025, xs + 0.025, 0, 1.6, -0.92, -0.87, bloquea=True)
+        o.caja("camara_cuerpo", xs - 0.34, xs + 0.34, 1.55, 2.25, -1.02, -0.92)
+        o.caja("softbox", xs - 0.3, xs + 0.3, 1.59, 2.21, -0.92, -0.9)
+
+    # ================= EL RESTO DEL ESTUDIO =================
+    # La ventana a la ciudad (la imagen, en _pantallas_estudio): marco y
+    # montantes pegados al muro de la izquierda.
+    xv = SX0 + g
+    z0v, z1v, y0v, y1v = VENTANA_ESTUDIO
+    o.pared("marco_metal", "x", xv, 1, z0v - 0.06, z1v + 0.06, y0v - 0.06, y0v, 0, 0.1)
+    o.pared("marco_metal", "x", xv, 1, z0v - 0.06, z1v + 0.06, y1v, y1v + 0.06, 0, 0.1)
+    za = z0v
+    while za <= z1v + 0.01:
+        o.pared("marco_metal", "x", xv, 1, za - 0.04, za + 0.04, y0v, y1v, 0, 0.08)
+        za += (z1v - z0v) / 4
+    # El sofa de las charlas largas, con su mesa baja.
+    o.caja("alfombra_neon", -4.7, -2.1, 0, 0.012, -5.8, -3.4)
+    o.caja("sofa", -4.6, -2.4, 0, 0.42, -5.75, -4.95, bloquea=True)
+    o.caja("sofa", -4.6, -2.4, 0.42, 0.88, -5.75, -5.52)
+    for xb in (-4.6, -2.62):
+        o.caja("sofa", xb, xb + 0.22, 0.42, 0.62, -5.75, -4.95)
+    o.caja("madera_oscura", -4.0, -3.0, 0.36, 0.4, -4.5, -3.9, bloquea=True)
+    o.caja("metal", -3.95, -3.05, 0, 0.36, -4.45, -3.95)
+    # La tele grande con el chat corriendo, sobre su mueble.
+    zf = SZ_FONDO + g
+    o.pared("consola", "z", zf, 1, 0.8, 3.6, 0, 0.5, 0, 0.45, bloquea=True)
+    o.pared("tele", "z", zf, 1, 0.6, 3.8, 0.95, 2.65, 0.02, 0.07)
+    o.pared("neon_magenta", "z", zf, 1, 0.85, 3.55, 0.5, 0.53, 0.42, 0.45)
+    # Los patrocinadores, en un tablero de la pared de la derecha.
+    o.pared("marco_metal", "x", SX1 - g, -1, -3.35, -1.05, 0.95, 2.45, 0, 0.04)
+    # La puerta del estudio, cerrada: el directo no se interrumpe.
+    o.pared("marco_metal", "x", SX1 - g, -1, -5.55, -4.35, 0, 2.3, 0, 0.03)
+    o.pared("puerta_estudio", "x", SX1 - g, -1, -5.47, -4.43, 0, 2.22, 0.03, 0.06)
+    o.pared("neon_rojo", "x", SX1 - g, -1, -5.2, -4.7, 2.36, 2.42, 0, 0.03)
+    _planta(o, 4.4, -5.4)
+    _planta(o, -4.4, -2.9)
+    return o
+
+
+VENTANA_ESTUDIO = (-3.9, 0.9, 0.85, 2.65)     # z0, z1, y0, y1 en el muro SX0
+OBRA_ESTUDIO = _obra_estudio()
+
+MATERIALES_ESTUDIO = {
+    **MATERIALES_CAMPANA,
+    "muro_estudio": ((0.045, 0.042, 0.055), 0.9, 0, None),
+    "vinilo": ((0.030, 0.030, 0.036), 0.45, 0, None),
+    "alfombra_neon": ((0.055, 0.020, 0.065), 0.95, 0, None),
+    "espuma_a": ((0.032, 0.032, 0.042), 1.0, 0, None),
+    "espuma_b": ((0.060, 0.026, 0.075), 1.0, 0, None),
+    "neon_magenta": ((0.10, 0.0, 0.08), 0.5, 0, (2.6, 0.20, 1.80)),
+    "neon_cian": ((0.0, 0.08, 0.10), 0.5, 0, (0.30, 1.90, 2.60)),
+    "neon_rojo": ((0.10, 0.0, 0.0), 0.5, 0, (2.6, 0.12, 0.10)),
+    "neon_halo": ((0.02, 0.0, 0.02), 0.6, 0, (0.30, 0.02, 0.22)),
+    "consola": ((0.025, 0.025, 0.030), 0.4, 0.3, None),
+    "mezclador": ((0.05, 0.05, 0.06), 0.35, 0.5, None),
+    "led_verde": ((0.0, 0.05, 0.0), 0.5, 0, (0.20, 1.60, 0.40)),
+    "led_ambar": ((0.05, 0.03, 0.0), 0.5, 0, (1.80, 0.90, 0.15)),
+    "microfono": ((0.02, 0.02, 0.02), 0.5, 0.6, None),
+    "tele": ((0.008, 0.008, 0.010), 0.3, 0.2, None),
+    "camara_cuerpo": ((0.020, 0.020, 0.022), 0.35, 0.4, None),
+    "aro": ((0.5, 0.5, 0.5), 0.4, 0, (2.40, 2.10, 1.70)),
+    "softbox": ((0.5, 0.5, 0.5), 0.6, 0, (1.40, 1.20, 0.95)),
+    "plata": ((0.70, 0.72, 0.75), 0.18, 1.0, None),
+    "figura_a": ((0.50, 0.08, 0.06), 0.6, 0, None),
+    "figura_b": ((0.06, 0.30, 0.50), 0.6, 0, None),
+    "figura_c": ((0.55, 0.40, 0.05), 0.6, 0, None),
+    "sofa": ((0.08, 0.06, 0.12), 0.9, 0, None),
+    "puerta_estudio": ((0.06, 0.06, 0.07), 0.6, 0.2, None),
+}
+
+
+def _estudio(mundo):
+    y = ALTO_ESTUDIO
+    caras = {"techo": [(((SX0, y, SZ_DECORADO), (SX1, y, SZ_DECORADO),
+                         (SX1, y, SZ_FONDO), (SX0, y, SZ_FONDO)), (0, -1, 0))]}
+    _volcar_obra(mundo, OBRA_ESTUDIO, MATERIALES_ESTUDIO, caras)
+    _pantallas_estudio()
+
+
+def _pantalla_plana(textura, centro, ancho, alto, mira):
+    """Una imagen que brilla sola (pantallas, la ciudad por la ventana).
+
+    Fuera del nodo PBR, como los destellos: una pantalla no la ilumina la
+    sala, la emite ella. mira: el punto hacia el que da la cara.
+    """
+    e = Entity(parent=scene, model="quad", position=centro, scale=(ancho, alto))
+    e.setTexture(textura, 1)
+    # El quad de Ursina da la cara a -z; se gira solo en y, hacia mira. Con
+    # look_at salia girado sobre si mismo y en espejo.
+    e.rotation_y = math.degrees(math.atan2(centro[0] - mira[0], centro[2] - mira[2]))
+    _ENTIDADES.append(e)
+    return e
+
+
+def _pantallas_estudio():
+    g = GROSOR_MURO / 2
+    chat = _textura("chat_directo", _pintar_chat, 512, 1024, srgb=False)
+    santiago = (0.0, 1.4, 0.0)
+    tele = _pantalla_plana(chat, (2.2, 1.8, SZ_FONDO + g + 0.08), 3.1, 1.6, (2.2, 1.8, 0.0))
+    monitor = _pantalla_plana(chat, MONITOR_CHAT, 0.56, 0.34, santiago)
+    # Se ve un trozo de la tira de chat, con la proporcion de cada pantalla.
+    # Por la entrada del shader de Ursina: el de estas pantallas no mira la
+    # matriz de textura de Panda3D.
+    for e, alto in ((tele, 0.5), (monitor, 0.33)):
+        e.set_shader_input("texture_scale", Vec2(1, alto))
+    _ACTUAL["pantallas_chat"] = [tele, monitor]
+    _ACTUAL["monitor_privado"] = _pantalla_plana(
+        _textura("privado_bandeja", _pintar_privado("bandeja"), 512, 320, srgb=False),
+        MONITOR_PRIVADO, 0.56, 0.34, santiago)
+    z0, z1, y0, y1 = VENTANA_ESTUDIO
+    _pantalla_plana(_textura("ciudad_noche", _pintar_ciudad_noche, 1024, 512, srgb=False),
+                    (SX0 + g + 0.01, (y0 + y1) / 2, (z0 + z1) / 2), z1 - z0, y1 - y0,
+                    (0.0, (y0 + y1) / 2, (z0 + z1) / 2))
+    _pantalla_plana(_textura("patrocinadores", _pintar_patrocinadores, 512, 384, srgb=False),
+                    (SX1 - g - 0.05, 1.7, -2.2), 2.2, 1.4, (0.0, 1.7, -2.2))
+
+
+def monitor_privado(estado):
+    """Lo que enseña el monitor de los privados de Santiago: bandeja,
+    cifrado, claro, respuesta, aceptado, bloqueado o rastreo."""
+    e = _ACTUAL.get("monitor_privado")
+    if e is not None:
+        e.setTexture(_textura(f"privado_{estado}", _pintar_privado(estado), 512, 320,
+                              srgb=False), 1)
+
+
+def plano_directo():
+    """La camara se pone donde el tripode: lo que ven los seguidores."""
+    pos, mira, fov = PLANO_DIRECTO
+    camera.fov = fov
+    camera.position = pos
+    camera.rotation = Vec3(0, 0, 0)
+    camera.look_at(mira)
+
+
+def _luces_estudio(mundo):
+    """Seis luces: ambiente, la luna por la ventana, el aro de luz (la
+    principal, calida), el neon del fondo (contraluz frio), el magenta de
+    la esquina y el brillo de la tele del fondo."""
+    ambiente = mundo.attachNewNode(AmbientLight("ambiente"))
+    ambiente.node().setColor((0.045, 0.038, 0.070, 1))
+    _encender(mundo, ambiente)
+    luna = mundo.attachNewNode(DirectionalLight("luna"))
+    luna.node().setColor((0.10, 0.14, 0.28, 1))
+    luna.setHpr(-70, -28, 0)
+    _encender(mundo, luna)
+    for nombre, pos, col, att in (
+            ("aro", (0.0, 1.6, -1.95), (1.7, 1.35, 1.0), (1, 0.10, 0.08)),
+            ("neon_fondo", (0.0, 2.2, 2.2), (0.35, 1.0, 1.5), (1, 0.25, 0.25)),
+            ("neon_esquina", (-3.2, 2.1, 1.2), (1.5, 0.15, 1.0), (1, 0.22, 0.22)),
+            ("tele", (2.2, 1.8, -5.0), (0.40, 0.55, 1.2), (1, 0.22, 0.30))):
+        luz = mundo.attachNewNode(PointLight(nombre))
+        luz.node().setColor((*col, 1))
+        luz.node().setAttenuation(att)
+        luz.setPos(*pos)
+        _encender(mundo, luz)
+
+
+# Planos medidos desde la marca, en la consola: la camara mira al fondo
+# de neon, que es lo que ven los seguidores.
+PLANOS_ESTUDIO = {
+    "PG":      (Vec3(2.60, 2.30, -3.60), 1.10, 0.0, 66),
+    "PM":      (Vec3(0.70, 1.55, -2.60), 1.30, 7.5),
+    "PP":      (Vec3(0.30, 1.62, -1.25), 1.57, 6.0),
+    "LATERAL": (Vec3(-2.20, 1.50, -1.70), 1.30, -6.0),
+    "AFICHE":  (Vec3(0.30, 1.46, -2.30), 1.30, -11.0),
+    "DOS":     (Vec3(-1.60, 1.78, -3.20), 1.22, 11.0),
+}
+
+
+# ---------------- lo que se ve en las pantallas del estudio ----------------
+
+TINTAS_CHAT = ((72, 198, 214), (224, 164, 42), (62, 190, 110), (232, 228, 218))
+
+
+def _pintar_chat(img):
+    """Una tira de chat que se repite sin costura: la tele y el monitor la
+    hacen correr (fondo_vivo), y asi el chat vuela sin pintar nada."""
+    from contenido import RELLENO_CHAT_4
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(14, 12, 24, 255))
+    paso, nombre, texto = 32, _letra(17, False), _letra(17, False)
+    for i in range(h // paso):
+        autor, frase = RELLENO_CHAT_4[(i * 7) % len(RELLENO_CHAT_4)]
+        y = i * paso + 8
+        d.text((18, y), autor, font=nombre, fill=(*TINTAS_CHAT[i % 4], 255))
+        ancho = d.textlength(autor + "  ", font=nombre)
+        d.text((18 + ancho, y), frase, font=texto, fill=(200, 196, 210, 255))
+
+
+def _burbuja(d, texto, y, derecha, fondo, tinta, w):
+    """Un mensaje del privado: burbuja a la izquierda (el remitente) o a la
+    derecha (Santiago). Devuelve donde acaba."""
+    letra = _letra(19, False)
+    lineas = textwrap.wrap(texto, 34)
+    alto = 14 + 25 * len(lineas)
+    ancho = max(d.textlength(l, font=letra) for l in lineas) + 28
+    x0 = w - 20 - ancho if derecha else 20
+    d.rounded_rectangle((x0, y, x0 + ancho, y + alto), 12, fill=fondo)
+    for k, linea in enumerate(lineas):
+        d.text((x0 + 14, y + 8 + 25 * k), linea, font=letra, fill=tinta)
+    return y + alto + 10
+
+
+def _pintar_privado(estado):
+    """La ventana de mensajes privados de Civitas Studio, en cada momento
+    de la escena de la oferta."""
+    from contenido import MENSAJE_CIFRADO
+    oferta = [texto for quien, texto, _ in MENSAJE_CIFRADO if quien == "privado"]
+    pregunta = next(texto for quien, texto, _ in MENSAJE_CIFRADO if quien == "santiago")
+
+    def pintar(img):
+        d, (w, h) = ImageDraw.Draw(img), img.size
+        d.rectangle((0, 0, w, h), fill=(16, 14, 26, 255))
+        cifrado = estado != "bandeja"
+        d.rectangle((0, 0, w, 44), fill=(60, 18, 66, 255) if cifrado else (30, 28, 46, 255))
+        cabecera = ("REMITENTE OCULTO  ·  CIFRADO" if cifrado
+                    else "MENSAJES PRIVADOS  ·  3 NUEVOS")
+        d.text((18, 22), cabecera, font=_letra(17), fill=(240, 236, 246, 255), anchor="lm")
+        gris, blanco = (44, 40, 62, 255), (236, 232, 242, 255)
+        if estado == "bandeja":
+            y = 60
+            for autor, texto in (("lunita_07", "santi te amo, saludame en el directo"),
+                                 ("Kola Nova", "Recuerda mencionarnos al empezar."),
+                                 ("dagoberto", "¿haces colaboración el viernes?")):
+                d.text((20, y), autor, font=_letra(16), fill=(*TINTAS_CHAT[1], 255))
+                y = _burbuja(d, texto, y + 22, False, gris, blanco, w)
+            return
+        if estado == "cifrado":
+            azar = random.Random(11)
+            signos = "ABCDEF0123456789#$%&@*+=?"
+            for k in range(7):
+                linea = "".join(azar.choice(signos) for _ in range(30))
+                d.text((22, 64 + 32 * k), linea, font=_letra(20, False),
+                       fill=(150, 255, 190, 255))
+            return
+        y = _burbuja(d, oferta[0], 58, False, gris, blanco, w)
+        y = _burbuja(d, oferta[1], y, False, gris, blanco, w)
+        if estado in ("respuesta", "aceptado", "bloqueado", "rastreo"):
+            y = _burbuja(d, pregunta, y, True, (150, 110, 20, 255), (20, 16, 10, 255), w)
+            _burbuja(d, oferta[2], y, False, gris, blanco, w)
+        if estado == "aceptado":
+            d.rectangle((0, h - 70, w, h), fill=(20, 90, 50, 245))
+            d.text((w / 2, h - 35), "TRANSFERENCIA RECIBIDA · $40 000 000",
+                   font=_letra(20), fill=(230, 255, 236, 255), anchor="mm")
+        elif estado == "bloqueado":
+            sello = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            ds = ImageDraw.Draw(sello)
+            ds.rectangle((40, h / 2 - 42, w - 40, h / 2 + 42), outline=(235, 70, 60, 255),
+                         width=6, fill=(30, 8, 10, 220))
+            ds.text((w / 2, h / 2), "OFERTA BLOQUEADA", font=_letra(34),
+                    fill=(235, 70, 60, 255), anchor="mm")
+            img.alpha_composite(sello.rotate(-8, resample=Image.BICUBIC))
+        elif estado == "rastreo":
+            # La red fantasma: cuentas unidas a un mismo origen, como el
+            # grafo del rumor del dia 1.
+            azar = random.Random(5)
+            d.rectangle((0, 44, w, h), fill=(8, 14, 20, 240))
+            centro = (w / 2, h / 2 + 30)
+            puntos = [(azar.uniform(40, w - 40), azar.uniform(70, h - 30)) for _ in range(14)]
+            for p in puntos:
+                d.line((centro, p), fill=(72, 198, 214, 200), width=2)
+            for p in puntos:
+                d.ellipse((p[0] - 7, p[1] - 7, p[0] + 7, p[1] + 7), fill=(224, 164, 42, 255))
+            d.ellipse((centro[0] - 14, centro[1] - 14, centro[0] + 14, centro[1] + 14),
+                      fill=(235, 70, 60, 255))
+            d.text((18, 62), "RASTREO EN VIVO · RED FANTASMA", font=_letra(18),
+                   fill=(72, 198, 214, 255))
+            d.text((18, 88), "14 cuentas · un mismo origen", font=_letra(17, False),
+                   fill=(220, 226, 236, 255))
+    return pintar
+
+
+def _pintar_ciudad_noche(img):
+    """Ciudad Nova de noche por la ventana: siluetas, ventanas encendidas
+    y algun neon, sobre un cielo que se enciende en magenta abajo."""
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    for y in range(h):
+        f = y / h
+        d.line((0, y, w, y), fill=(int(10 + 60 * f), int(10 + 12 * f), int(32 + 40 * f), 255))
+    azar = random.Random(9)
+    for capa, oscuro in ((0, (22, 20, 38)), (1, (10, 10, 18))):
+        x = -20
+        while x < w:
+            ancho = azar.randint(50, 120)
+            alto = azar.randint(140, 380) - capa * 60
+            top = h - alto
+            d.rectangle((x, top, x + ancho, h), fill=(*oscuro, 255))
+            for wy in range(top + 12, h - 10, 18):
+                for wx in range(x + 8, x + ancho - 10, 14):
+                    if azar.random() < (0.35 if capa else 0.2):
+                        tinta = (255, 196, 110) if azar.random() < 0.7 else (150, 196, 255)
+                        d.rectangle((wx, wy, wx + 6, wy + 8), fill=(*tinta, 255))
+            if azar.random() < 0.3:
+                neon = azar.choice(((250, 80, 220), (80, 230, 255), (255, 80, 70)))
+                d.rectangle((x + 10, top - 14, x + ancho - 10, top - 6), fill=(*neon, 255))
+            x += ancho + azar.randint(0, 12)
+
+
+def _pintar_patrocinadores(img):
+    """El tablero de patrocinadores del canal: tres marcas inventadas."""
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(20, 18, 30, 255))
+    d.text((w / 2, 34), "PATROCINADORES DEL CANAL", font=_letra(24),
+           fill=(240, 236, 246, 255), anchor="mm")
+    for k, (nombre, tinta) in enumerate((("KOLA NOVA", (205, 50, 45)),
+                                         ("TECNOBARRIO", (40, 170, 200)),
+                                         ("MOTO YA", (224, 164, 42)))):
+        y = 78 + k * 86
+        d.rounded_rectangle((40, y, w - 40, y + 70), 16, fill=(*tinta, 255))
+        d.text((w / 2, y + 35), nombre, font=_letra(32), fill=(250, 248, 244, 255),
+               anchor="mm")
+    d.text((w / 2, h - 22), "Contrato vigente · cláusula 7: escándalos",
+           font=_letra(16, False), fill=(160, 156, 176, 255), anchor="mm")
+
+
+# El chat de las pantallas del estudio sube a este ritmo (tira por segundo):
+# una linea cada 0,4 s, como el de verdad.
+RITMO_CHAT_PANTALLA = 0.08
+
+
 def fondo_vivo(dt):
     """Lo que se mueve solo en el fondo: la ciudad tras los ventanales
-    del capitulo 3; la lluvia y las sirenas del colegio del 2."""
+    del capitulo 3; la lluvia y las sirenas del colegio del 2; el chat en
+    las pantallas del estudio del 4."""
     if _ACTUAL["nombre"] == "campana":
         seguir_cielo()
         mover_trafico(dt)
+    elif _ACTUAL["nombre"] == "estudio":
+        t = _ACTUAL["reloj"] = _ACTUAL.get("reloj", 0.0) + dt
+        for e in _ACTUAL.get("pantallas_chat", ()):
+            e.set_shader_input("texture_offset", Vec2(0, -(t * RITMO_CHAT_PANTALLA) % 1.0))
     elif _ACTUAL["nombre"] == "rectoria" and "lluvia" in _ACTUAL:
         t = _ACTUAL["reloj"] = _ACTUAL.get("reloj", 0.0) + dt
         caida = (t * VELOCIDAD_LLUVIA) % LLUVIA[4]
@@ -2663,6 +3185,11 @@ def _montar(mundo, escenario):
         f.setColor(NIEBLA_CIUDAD)
         f.setExpDensity(DENSIDAD_CIUDAD)
         mundo.setFog(f)
+    elif escenario == "estudio":
+        PLANOS = PLANOS_ESTUDIO
+        _estudio(cont)
+        _luces_estudio(cont)
+        _niebla(mundo, 0.02)
     else:
         escenario = "cafeteria"
         PLANOS = PLANOS_CAFETERIA
@@ -2688,6 +3215,7 @@ LIMITES = {
     # La caja que envuelve la T: las esquinas de fuera las cierran los muros.
     "rectoria": (XA_OESTE + 0.3, XA_ESTE - 0.3, Z_SUR + 0.3, Z_NORTE - 0.3),
     "campana": (CX0 + 0.3, CX1 - 0.3, CZ_FONDO + 0.3, CZ_VENTANAL - 0.3),
+    "estudio": (SX0 + 0.3, SX1 - 0.3, SZ_FONDO + 0.3, SZ_DECORADO - 0.3),
 }
 BLOQUEOS = {
     "cafeteria": (
@@ -2697,6 +3225,7 @@ BLOQUEOS = {
     "plaza": (),
     "rectoria": tuple(OBRA_COLEGIO.paso),
     "campana": tuple(OBRA_CAMPANA.paso),
+    "estudio": tuple(OBRA_ESTUDIO.paso),
 }
 
 
@@ -2704,6 +3233,7 @@ BLOQUEOS = {
 MUROS_CAMARA = {
     "rectoria": tuple(OBRA_COLEGIO.vista),
     "campana": tuple(OBRA_CAMPANA.vista),
+    "estudio": tuple(OBRA_ESTUDIO.vista),
 }
 
 
@@ -2714,7 +3244,8 @@ def muros():
 
 # Hasta donde sube la camara de exploracion: el techo menos un dedo. La
 # cafeteria (el .glb) mide 2,5 m; colegio y oficina, 3,2.
-TECHOS = {"rectoria": ALTO_COLEGIO - 0.25, "campana": ALTO_CAMPANA - 0.25}
+TECHOS = {"rectoria": ALTO_COLEGIO - 0.25, "campana": ALTO_CAMPANA - 0.25,
+          "estudio": ALTO_ESTUDIO - 0.25}
 
 
 def techo():
@@ -2724,7 +3255,7 @@ def techo():
 # Lente de la camara de exploracion (grados horizontales). La cafeteria
 # usa la cerrada de cine; en el colegio hay que ver a los vigilantes a
 # los lados, y la oficina es grande y abierta.
-LENTES = {"rectoria": 56, "campana": 50}
+LENTES = {"rectoria": 56, "campana": 50, "estudio": 52}
 
 
 def lente():
@@ -2782,6 +3313,8 @@ def cambiar_escenario(mundo, escenario):
     # Sus piezas ya se fueron con _ENTIDADES; quedan los nodos que las colgaban.
     for usado in _ACTUAL.get("usados", ()):
         usado["nodo"].removeNode()
+    if "expediente" in _ACTUAL:
+        _ACTUAL["expediente"].removeNode()
     for _piezas, _brillo, nodo in _ACTUAL.get("objetos", {}).values():
         if nodo is not None:
             nodo.removeNode()
@@ -2789,7 +3322,8 @@ def cambiar_escenario(mundo, escenario):
         _ACTUAL["en_mano"][0].removeNode()
     for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo", "lluvia",
                   "sirenas", "fase_sirena", "luz_sirena", "reloj",
-                  "luz_ambiente", "objetos", "usados", "arco", "en_mano"):
+                  "luz_ambiente", "objetos", "usados", "arco", "en_mano",
+                  "expediente", "pantallas_chat", "monitor_privado"):
         _ACTUAL.pop(clave, None)
     if _ACTUAL["contenedor"] is not None:
         _ACTUAL["contenedor"].removeNode()
@@ -3340,11 +3874,12 @@ def mover_actor(actor, x, z, rumbo, andando, corriendo=False):
 def asesor(mundo):
     """El asesor de Daniel (capitulo 3), que va y viene preocupado.
 
-    Lleva el modelo del Alcalde: el de prueba ya es Daniel, y dos iguales
-    en el mismo plano se leerian como gemelos. Sin luces propias, como
-    cualquier NPC.
+    Lleva el modelo del ciudadano (jersey oscuro y camisa): el del Alcalde
+    resulto ser el mismo hombre de traje que el de prueba, que es Daniel,
+    y en el plano y contraplano de la mesa se leian como gemelos. Sin luces
+    propias, como cualquier NPC.
     """
-    actor = Actor(Filename.from_os_specific(ruta_personaje("alcalde")).getFullpath())
+    actor = Actor(Filename.from_os_specific(ruta_personaje("ciudadano")).getFullpath())
     actor.reparentTo(mundo)
     _quitar_mapa_de_brillo(actor)
     actor.setPlayRate(RITMO_RONDA, "caminar")
@@ -3597,46 +4132,61 @@ def _petardo(mundo, x, y, z):
     mecha.setTwoSided(True)
 
 
-def _pintar_carpeta(parte):
-    """La carpeta de cada parte de la propuesta: cartulina, franja del
-    equipo de Ospina, etiqueta y el sello rojo que dice por que no deberia
-    salir de aqui."""
+def _pintar_carpeta(cabecera, titulo, subtitulo, numero, franja):
+    """Portada de una carpeta de cartulina: franja con la tinta de quien la
+    firma, etiqueta, numero en la esquina y el sello rojo que dice por que
+    no deberia salir de donde esta."""
     def pintar(img):
-        _pintar_carpeta_parte(img, parte)
+        d, (w, h) = ImageDraw.Draw(img), img.size
+        d.rectangle((0, 0, w, h), fill=(214, 178, 112, 255))
+        d.rectangle((0, 0, w, h * 0.16), fill=(*franja, 255))
+        d.text((w / 2, h * 0.08), cabecera, font=_letra(int(h * 0.06)),
+               fill=(242, 239, 231, 255), anchor="mm")
+        d.rectangle((w * 0.12, h * 0.30, w * 0.88, h * 0.56), fill=(242, 239, 231, 255),
+                    outline=(60, 50, 40, 255), width=3)
+        d.text((w / 2, h * 0.39), titulo, font=_letra(int(h * 0.075)),
+               fill=(23, 24, 26, 255), anchor="mm")
+        d.text((w / 2, h * 0.49), subtitulo, font=_letra(int(h * 0.036), False),
+               fill=(60, 58, 54, 255), anchor="mm")
+        if numero:
+            d.text((w * 0.86, h * 0.22), numero, font=_letra(int(h * 0.09)),
+                   fill=(*franja, 255), anchor="mm")
+        sello = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        ds = ImageDraw.Draw(sello)
+        ds.rectangle((w * 0.16, h * 0.70, w * 0.84, h * 0.82), outline=(195, 59, 51, 230),
+                     width=5)
+        ds.text((w / 2, h * 0.76), "CONFIDENCIAL", font=_letra(int(h * 0.06)),
+                fill=(195, 59, 51, 230), anchor="mm")
+        img.alpha_composite(sello.rotate(-10, resample=Image.BICUBIC))
     return pintar
 
 
-def _pintar_carpeta_parte(img, parte):
-    d, (w, h) = ImageDraw.Draw(img), img.size
-    d.rectangle((0, 0, w, h), fill=(214, 178, 112, 255))
-    d.rectangle((0, 0, w, h * 0.16), fill=(29, 95, 168, 255))      # tinta de Ospina
-    d.text((w / 2, h * 0.08), "EQUIPO OSPINA", font=_letra(int(h * 0.06)),
-           fill=(242, 239, 231, 255), anchor="mm")
-    d.rectangle((w * 0.12, h * 0.30, w * 0.88, h * 0.56), fill=(242, 239, 231, 255),
-                outline=(60, 50, 40, 255), width=3)
-    d.text((w / 2, h * 0.39), "PROPUESTA", font=_letra(int(h * 0.075)),
-           fill=(23, 24, 26, 255), anchor="mm")
-    d.text((w / 2, h * 0.49), f"Reorganización educativa · parte {parte}",
-           font=_letra(int(h * 0.036), False), fill=(60, 58, 54, 255), anchor="mm")
-    d.text((w * 0.86, h * 0.22), str(parte), font=_letra(int(h * 0.09)),
-           fill=(29, 95, 168, 255), anchor="mm")
-    sello = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    ds = ImageDraw.Draw(sello)
-    ds.rectangle((w * 0.16, h * 0.70, w * 0.84, h * 0.82), outline=(195, 59, 51, 230), width=5)
-    ds.text((w / 2, h * 0.76), "CONFIDENCIAL", font=_letra(int(h * 0.06)),
-            fill=(195, 59, 51, 230), anchor="mm")
-    img.alpha_composite(sello.rotate(-10, resample=Image.BICUBIC))
-
-
-def _propuesta(mundo, x, y, z, parte=1):
-    """La carpeta, con los folios asomando por el borde."""
+def _carpeta(mundo, x, y, z, textura, pintar):
+    """Una carpeta sobre una mesa, con los folios asomando por el borde."""
     papel = _material((0.75, 0.73, 0.66, 1), rugosidad=0.9)
     _pieza(mundo, "cube", papel, (0.22, 0.022, 0.30), (x + 0.012, y + 0.012, z))
     carpeta = _con_textura(_pieza(mundo, "cube", _material((1, 1, 1, 1), rugosidad=0.85),
                                   (0.23, 0.03, 0.31), (x, y + 0.016, z)),
-                           _textura(f"carpeta_propuesta_{parte}", _pintar_carpeta(parte),
-                                    256, 340))
+                           _textura(textura, pintar, 256, 340))
     carpeta.rotation_y = 8
+
+
+def _propuesta(mundo, x, y, z, parte=1):
+    _carpeta(mundo, x, y, z, f"carpeta_propuesta_{parte}",
+             _pintar_carpeta("EQUIPO OSPINA", "PROPUESTA",
+                             f"Reorganización educativa · parte {parte}", str(parte),
+                             (29, 95, 168)))
+
+
+def expediente(mundo):
+    """El expediente sobre Bravo que el asesor deja en la mesa (capitulo
+    3). Devuelve su nodo, para que la escena lo baje hasta la mesa."""
+    nodo = mundo.attachNewNode("expediente")
+    _carpeta(nodo, 0, 0, 0, "carpeta_expediente",
+             _pintar_carpeta("CAMPAÑA OSPINA", "EXPEDIENTE", "Hugo Bravo · sin verificar", "",
+                             (195, 59, 51)))
+    _ACTUAL["expediente"] = nodo
+    return nodo
 
 
 def _caja_requisados(mundo, x0, y0, z0):

@@ -2,11 +2,15 @@
 
 Entra por el menu de Capitulos, comprueba que juega Daniel Ospina en la
 oficina del piso 8, que el asesor y el trafico de la ciudad se mueven, y
-saca capturas de cada sala y de la vista por los ventanales.
+saca capturas de cada sala y de la vista por los ventanales. Luego mira
+con E las encuestas y el mapa, va a la mesa de conferencias y decide en
+la escena del expediente: 1 publicar el rumor, 2 rueda de prensa,
+3 investigar a Bravo.
 
-    .venv/bin/python herramientas/banco_pruebas/campana.py
+    .venv/bin/python herramientas/banco_pruebas/campana.py [1|2|3]
 """
 import os
+import sys
 
 from banco import *
 from banco import J
@@ -38,13 +42,23 @@ tecla("down arrow", 0.3)
 tecla("down arrow", 0.3)
 assert J.cl.capitulo_sel == 2
 tecla("enter", 0.5)
-assert hasta_estado("rotulo", 20), estado()
+# La llegada: el asesor entra preocupado y cita a Daniel en su oficina.
+assert hasta_estado("cinematica", 20), estado()
+from cine_campana import PLANOS_LLEGADA, DURACION_LLEGADA
+inicio = 0.0
+for nombre, dura, *_ in PLANOS_LLEGADA:
+    pasar(inicio + dura * 0.75 - J.cl.cine.t)
+    foto(f"campana_llegada_{nombre}")
+    inicio += dura
+assert hasta_estado("rotulo", 5), estado()
+assert J.cl.actor.getPos().length() < 0.01 and abs(J.cl.actor.getH()) < 0.01, (
+    J.cl.actor.getPos(), J.cl.actor.getH())
 p = J.cl.partida
 assert p.dia_actual == 2 and p.protagonista.nombre == "Daniel Ospina", (
     p.dia_actual, p.protagonista.nombre)
 assert J.mundo._ACTUAL["nombre"] == "campana"
 foto("campana_rotulo")
-for _ in range(4):
+for _ in range(6):                  # rotulo, contexto y el aviso de la tarde
     if estado() == "libre":
         break
     tecla("enter", 0.6)
@@ -83,6 +97,46 @@ plano("campana_conferencias", (15.2, 2.2, -3.8), (21.0, 0.6, 1.0), 75)
 plano("campana_voluntarios", (21.5, 2.2, -5.0), (6.0, 0.6, -10.0), 75)
 plano("campana_recepcion", (6.8, 1.8, -11.6), (0.0, 1.2, -14.6), 75)
 plano("campana_despacho", (3.3, 2.0, -4.0), (-1.0, 1.0, 3.0), 75)
+
+# Sin telefono: el capitulo 3 se decide en la mesa.
+pasar(0.5)
+tecla("enter", 0.3)
+assert estado() == "libre", "en el capitulo 3 no se saca el telefono"
+
+# Las pantallas y el mapa, con E, en una tarjeta.
+for punto, (x, z) in (("encuestas", (8.3, -3.3)), ("mapa", (8.7, 1.25))):
+    J.cl.actor.setPos(x, 0, z)
+    pasar(0.3)
+    assert J.cl.punto_cerca == punto, (punto, J.cl.punto_cerca)
+    tecla("e", 0.4)
+    assert estado() == "aviso_papel", estado()
+    foto(f"campana_{punto}")
+    tecla("enter", 0.4)
+    assert estado() == "libre", estado()
+
+# La mesa: el asesor trae el expediente y Daniel decide.
+TECLA = sys.argv[1] if len(sys.argv) > 1 else "2"
+J.cl.actor.setPos(15.8, 0, -0.3)
+pasar(0.3)
+assert J.cl.punto_cerca == "mesa", J.cl.punto_cerca
+tecla("e", 0.3)
+assert estado() == "escena", estado()
+for espera, nombre in ((2.0, "entra"), (3.0, "deja"), (3.0, "asesor"), (5.3, "daniel"),
+                       (3.2, "sonrie")):
+    pasar(espera)
+    foto(f"campana_esc_{nombre}")
+while J.cl.escena.fase != "decide":
+    pasar(0.2)
+pasar(0.5)
+foto("campana_esc_decide")
+tecla(TECLA, 1.5)
+assert J.cl.escena.fase == "consecuencia" and J.cl.partida.arbol_decision.termino()
+foto("campana_esc_consecuencia")
+bandera = {"1": "ospina_jugo_sucio", "2": "ospina_dio_la_cara", "3": "asesor_a_tus_espaldas"}[TECLA]
+assert bandera in J.cl.partida.banderas, J.cl.partida.banderas
+assert hasta_estado("juego", 12) and J.cl.dia_cerrado, estado()
+pasar(3.0)
+foto("campana_esc_cierre")
 
 J.volver_al_menu()
 pasar(0.5)

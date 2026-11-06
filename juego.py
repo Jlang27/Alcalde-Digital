@@ -38,13 +38,25 @@ from contenido import (
     VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1, NIVEL_INICIAL, RONDAS_POR_NIVEL,
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
-    OPCIONES_QUE_PROTEGEN, DIA_SIGILO, RONDAS_CAPITULO_2, REGRESO_CAPITULO_2,
+    OPCIONES_QUE_PROTEGEN, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO,
+    RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, RELLENO_CHAT_4, PEDIDOS_CHAT_4,
     OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2, OBJETIVOS_CAPITULO_2,
     SALIDA_CAPITULO_2,
     construir_arbol_habilidades, construir_arbol_decision, construir_arbol_capitulo_2,
+    construir_arbol_capitulo_3, construir_arbol_capitulo_4,
     aplicar_habilidades, aplicar_banderas,
 )
 from sigilo import Sigilo
+from transmision import Transmision
+
+# Los capitulos que deciden en su propia escena, con su arbol: sin
+# telefono, sin habilidades ni banderas que inserten ramas.
+ARBOL_DEL_CAPITULO = {DIA_SIGILO: construir_arbol_capitulo_2,
+                      DIA_CAMPANA: construir_arbol_capitulo_3,
+                      DIA_ESTUDIO: construir_arbol_capitulo_4}
+# Lo que mueve en los indicadores llevar bien (o mal) el chat del directo.
+EFECTOS_CHAT = {True: {"desinformacion": -4, "confianza": 4},
+                False: {"desinformacion": 6, "confianza": -3}}
 
 RASGOS = ["rigor", "empatia", "alcance", "impulso"]
 
@@ -257,6 +269,8 @@ class Partida:
 
         # --- sigilo del dia 2: la ronda de vigilantes del colegio ---
         self.sigilo = None
+        self.transmision = None       # el directo del dia 4
+        self.con_telefono = True      # lo fija iniciar_dia
 
         # --- lo que el jugador sabe de los candidatos (dura toda la partida) ---
         self.expediente = set()
@@ -327,8 +341,11 @@ class Partida:
         prota = self.protagonista
 
         # 1. arbol base de la publicacion (el capitulo 2 trae su dilema)
-        if indice == DIA_SIGILO:
-            self.arbol_decision = construir_arbol_capitulo_2()
+        # El telefono es del capitulo 1 (y de los dias aun provisionales):
+        # el 2 y el 3 deciden en su propia escena.
+        self.con_telefono = indice not in ARBOL_DEL_CAPITULO
+        if indice in ARBOL_DEL_CAPITULO:
+            self.arbol_decision = ARBOL_DEL_CAPITULO[indice]()
             propias = memoria = 0
         else:
             self.arbol_decision = construir_arbol_decision(self.publicacion)
@@ -345,6 +362,8 @@ class Partida:
                               OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2,
                               SALIDA_CAPITULO_2, OBJETIVOS_CAPITULO_2)
                        if indice == DIA_SIGILO else None)
+        self.transmision = (Transmision(RELLENO_CHAT_4, PEDIDOS_CHAT_4)
+                            if indice == DIA_ESTUDIO else None)
         # El reloj del dia se fija antes de repartir: las cartas se
         # programan contra el, no contra el de serie.
         self.tiempo_total = (self.publicacion.get("tiempo", TIEMPO_ESCENA)
@@ -407,6 +426,13 @@ class Partida:
         if self.sigilo is not None and self.sigilo.escapo:
             self.banderas_del_dia.append("sacaste_la_propuesta")
             self.banderas.add("sacaste_la_propuesta")
+        # El directo deja memoria de como se llevo el chat, aparte de la oferta.
+        if self.transmision is not None and self.transmision.terminada:
+            bien = self.transmision.bien_llevado()
+            bandera = "cuidaste_tu_chat" if bien else "tu_chat_se_desbordo"
+            self.banderas_del_dia.append(bandera)
+            self.banderas.add(bandera)
+            self._aplicar_efectos(EFECTOS_CHAT[bien])
 
         self._cerrar_red()
         self._mover_encuesta()
@@ -923,7 +949,8 @@ class Partida:
         """La opcion que se toma si nadie elige: dejar pasar, si la hay."""
         opciones = self.arbol_decision.opciones_actuales()
         # guardar: si te sacaron del colegio no hay nada que publicar
-        return next((o for o in opciones if o.id in ("ignorar", "i_result", "guardar")),
+        return next((o for o in opciones
+                     if o.id in ("ignorar", "i_result", "guardar", "rechazar")),
                     opciones[0] if opciones else None)
 
     def tiempo_agotado(self):
