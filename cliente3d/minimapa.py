@@ -50,6 +50,7 @@ NOMBRES = {
     "cafeteria": "CAFETERÍA",
     "rectoria": "COLEGIO NOVA",
     "campana": "OFICINA DE CAMPAÑA",
+    "estudio": "ESTUDIO DE STREAMING",
 }
 
 # tipo de punto -> nombre del color en estilo. Se resuelve al CREAR el

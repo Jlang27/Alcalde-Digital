@@ -405,6 +405,125 @@ class Sospecha:
         _limpiar(self.piezas)
 
 
+class Directo:
+    """El directo de Santiago (capitulo 4): la interfaz de su plataforma
+    encima del plano de la camara del tripode.
+
+    Arriba, EN VIVO, los espectadores y la confianza de la comunidad; a
+    la derecha, el chat, que vuela; abajo a la izquierda, el mensaje que
+    pide atencion con su plazo y las dos teclas. Lo que pasa lo decide
+    transmision.Transmision: aqui solo se pinta.
+    """
+
+    FILAS = 15
+    LARGO = 36                     # caracteres del mensaje en una fila
+    NOMBRE = 13                    # y del nombre, que va en su columna
+    # Los nombres del chat, en las tintas de la interfaz.
+    TINTAS = (E.ACENTO_UI, E.LLERAS, E.RESTREPO, E.UI)
+
+    def __init__(self):
+        self.piezas, self.tarjeta = [], []
+        a = self.piezas.append
+        # --- arriba: en vivo, espectadores y confianza ---
+        self.piezas += E.degradado_vertical(0.5, 0.30, alfa=150)
+        a(E.banda(0.13, 0.042, (-0.795, 0.445), E.GAITAN))
+        a(E.etiqueta("EN VIVO", (-0.795, 0.445), 0.62, E.TEXTO, origen=(0, 0)))
+        self.vistos = E.etiqueta("", (-0.715, 0.445), 0.78, E.TEXTO, origen=(-0.5, 0))
+        a(self.vistos)
+        a(E.pequena("CONFIANZA DE TU COMUNIDAD", (-0.86, 0.405), E.TEXTO_TENUE, escala=0.5))
+        self.confianza = E.barra_voto(0.34, 0.5, (-0.86, 0.37), E.RESTREPO,
+                                      grosor=0.012, col_riel=E.luz(40))
+        self.piezas += self.confianza
+        # --- a la derecha: el chat ---
+        self.piezas += E.degradado(0.89, 0.22, alfa=235)
+        a(E.pequena("CHAT EN VIVO", (0.38, 0.445), E.TEXTO_TENUE, escala=0.52))
+        a(E.banda(0.50, 0.002, (0.63, 0.425), E.luz(50)))
+        # Nombre y mensaje en dos columnas: el color de cada nombre no se
+        # puede mezclar en un mismo Text (la etiqueta de color de Ursina
+        # los dejaba casi negros).
+        self.nombres, self.filas, self.marcas = [], [], []
+        for i in range(self.FILAS):
+            y = 0.398 - i * 0.042
+            self.nombres.append(E.pequena("", (0.385, y), E.TEXTO, escala=0.52))
+            self.filas.append(E.pequena("", (0.535, y), E.TEXTO, escala=0.52))
+            marca = E.banda(0.006, 0.03, (0.372, y - 0.013), E.ACENTO_UI)
+            marca.enabled = False
+            self.marcas.append(marca)
+        self.piezas += self.nombres + self.filas + self.marcas
+        self.lineas = []
+        # --- abajo: lo que se le explica al atender ---
+        self.explicacion = E.entradilla("", (-0.86, -0.075), 0.72, E.TEXTO, ancho=58)
+        a(self.explicacion)
+
+    def chat(self, mensaje):
+        """Entra un mensaje: sube todo una fila."""
+        autor, texto = mensaje["autor"], mensaje["texto"]
+        if len(autor) > self.NOMBRE:
+            autor = autor[:self.NOMBRE - 1] + "…"
+        if len(texto) > self.LARGO:
+            texto = texto[:self.LARGO - 1].rstrip() + "…"
+        tinta = self.TINTAS[sum(map(ord, mensaje["autor"])) % len(self.TINTAS)]
+        self.lineas.append((autor, tinta, texto, mensaje["tipo"] is not None))
+        self.lineas = self.lineas[-self.FILAS:]
+        for nombre, fila, marca, (autor, tinta, texto, pide) in zip(
+                self.nombres, self.filas, self.marcas, self.lineas):
+            nombre.text, nombre.color = autor, tinta
+            fila.text = texto
+            fila.color = E.TEXTO if pide else E.TEXTO_TENUE
+            marca.enabled = pide
+
+    def poner(self, espectadores, confianza, pedido, plazo, esperan):
+        """Lo que cambia cada fotograma: cifras, plazo y el pedido que se atiende."""
+        self.vistos.text = f"{int(espectadores):,}".replace(",", " ") + " espectadores"
+        self.confianza[1].scale_x = 0.34 * max(0.0, min(1.0, confianza / 100))
+        if (pedido, esperan) != self._pintado:
+            self._tarjeta(pedido, esperan)
+        if pedido is not None:
+            self.plazo.scale_x = 0.5 * plazo
+            self.plazo.color = E.GAITAN if plazo < 0.3 else E.LLERAS
+
+    _pintado = (None, 0)
+
+    def _tarjeta(self, pedido, esperan):
+        """El mensaje que pide atencion, en grande, con sus dos teclas."""
+        self._pintado = (pedido, esperan)
+        _limpiar(self.tarjeta)
+        if pedido is None:
+            return
+        a = self.tarjeta.append
+        self.tarjeta += E.degradado(-0.89, 0.05, alto=0.30, y=-0.29, alfa=225)
+        a(E.pequena(f"TE PIDE ATENCIÓN  ·  {pedido['autor']}", (-0.86, -0.165),
+                    E.ACENTO_UI, escala=0.52))
+        a(E.entradilla(pedido["texto"], (-0.86, -0.195), 0.86, E.TEXTO, ancho=44))
+        self.plazo = E.banda(0.5, 0.008, (-0.86, -0.315), E.LLERAS)
+        self.plazo.origin = (-0.5, 0)        # se vacia hacia la izquierda
+        a(self.plazo)
+        x = -0.86
+        for tecla, que in (("1", "responder"), ("2", "borrar")):
+            piezas, ancho = E.tecla(tecla, que, x, -0.37)
+            self.tarjeta += piezas
+            x += ancho + 0.02
+        if esperan > 1:
+            a(E.pequena(f"y {esperan - 1} más esperando", (-0.86, -0.42),
+                        E.TEXTO_TENUE, escala=0.5))
+
+    def explicar(self, texto, bien):
+        """Por que estuvo bien o mal lo que hiciste, un momento."""
+        e = self.explicacion
+        for s in list(getattr(e, "animations", [])):
+            s.kill()
+        e.text, e.wordwrap = texto, 58
+        e.color = E.RESTREPO if bien else E.GAITAN
+        e.alpha = 1
+        e.fade_out(duration=0.6, delay=3.0)
+
+    def cerrar(self):
+        for s in list(getattr(self.explicacion, "animations", [])):
+            s.kill()
+        _limpiar(self.tarjeta)
+        _limpiar(self.piezas)
+
+
 class Inventario:
     """Lo que llevas (capitulo 2), abajo a la derecha.
 

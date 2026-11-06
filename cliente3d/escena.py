@@ -16,6 +16,7 @@ import math
 from ursina import Vec3, camera, color, destroy
 
 import estilo as E
+import mundo
 from intro import Intro, NEGRO_CORTE, _suave
 
 DURA_CONSECUENCIA = 6.5
@@ -101,8 +102,7 @@ class EscenaDecision:
         s = _suave(f)
         camera.fov = fov
         camera.position = p0 + (p1 - p0) * s
-        camera.rotation = Vec3(0, 0, 0)
-        camera.look_at(m0 + (m1 - m0) * s)
+        mundo.mirar(m0 + (m1 - m0) * s)
         self._durante(nombre, min(1.0, f))
 
     def _decidir(self):

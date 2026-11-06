@@ -2821,9 +2821,12 @@ def _pantalla_plana(textura, centro, ancho, alto, mira):
 def _pantallas_estudio():
     g = GROSOR_MURO / 2
     chat = _textura("chat_directo", _pintar_chat, 512, 1024, srgb=False)
-    santiago = (0.0, 1.4, 0.0)
+    # Los monitores miran recto a +z, como su marco: girados hacia Santiago
+    # media imagen se metia dentro de la caja.
+    def de_frente(punto):
+        return (punto[0], punto[1], punto[2] + 1.0)
     tele = _pantalla_plana(chat, (2.2, 1.8, SZ_FONDO + g + 0.08), 3.1, 1.6, (2.2, 1.8, 0.0))
-    monitor = _pantalla_plana(chat, MONITOR_CHAT, 0.56, 0.34, santiago)
+    monitor = _pantalla_plana(chat, MONITOR_CHAT, 0.56, 0.34, de_frente(MONITOR_CHAT))
     # Se ve un trozo de la tira de chat, con la proporcion de cada pantalla.
     # Por la entrada del shader de Ursina: el de estas pantallas no mira la
     # matriz de textura de Panda3D.
@@ -2832,7 +2835,7 @@ def _pantallas_estudio():
     _ACTUAL["pantallas_chat"] = [tele, monitor]
     _ACTUAL["monitor_privado"] = _pantalla_plana(
         _textura("privado_bandeja", _pintar_privado("bandeja"), 512, 320, srgb=False),
-        MONITOR_PRIVADO, 0.56, 0.34, santiago)
+        MONITOR_PRIVADO, 0.56, 0.34, de_frente(MONITOR_PRIVADO))
     z0, z1, y0, y1 = VENTANA_ESTUDIO
     _pantalla_plana(_textura("ciudad_noche", _pintar_ciudad_noche, 1024, 512, srgb=False),
                     (SX0 + g + 0.01, (y0 + y1) / 2, (z0 + z1) / 2), z1 - z0, y1 - y0,
@@ -2855,8 +2858,7 @@ def plano_directo():
     pos, mira, fov = PLANO_DIRECTO
     camera.fov = fov
     camera.position = pos
-    camera.rotation = Vec3(0, 0, 0)
-    camera.look_at(mira)
+    mirar(mira)
 
 
 def _luces_estudio(mundo):
@@ -4534,8 +4536,17 @@ def corte(plano, sujeto=Vec3(0, 0, 0)):
     pos, altura, desvio, *extra = PLANOS[plano]
     camera.fov = extra[0] if extra else FOV_BASE
     camera.position = pos
-    # look_at parte de la orientacion anterior: sin esto el mismo plano sale
-    # ligeramente distinto segun de que plano vengas.
-    camera.rotation = Vec3(0, 0, 0)
-    camera.look_at(Vec3(sujeto.x, altura, sujeto.z))
+    mirar(Vec3(sujeto.x, altura, sujeto.z))
     camera.rotation_y += desvio
+
+
+def mirar(objetivo):
+    """Apunta la camara a objetivo con el horizonte recto.
+
+    No con look_at: Ursina gira por el arco mas corto desde la orientacion
+    de antes y, con mucho giro y algo de picado, ladea el plano (en el
+    estudio, el monitor de los privados salia torcido 30 grados).
+    """
+    d = Vec3(*objetivo) - camera.position
+    camera.rotation = Vec3(math.degrees(math.atan2(-d.y, math.hypot(d.x, d.z))),
+                           math.degrees(math.atan2(d.x, d.z)), 0)
