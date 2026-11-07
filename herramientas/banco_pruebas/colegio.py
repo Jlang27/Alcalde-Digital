@@ -26,13 +26,18 @@ def vigilante(id_v):
     return next(v for v in J.cl.partida.sigilo.vigilantes if v.id == id_v)
 
 
+donde_pillaron = None
+
+
 def dejarse_ver(id_v, maximo=6.0):
     """Se planta delante de un vigilante hasta que la pillan."""
+    global donde_pillaron
     t = 0.0
     while estado() == "libre" and t < maximo:
         v = vigilante(id_v)
         mx, mz = v.mira()
-        poner(v.x + mx * 2.5, v.z + mz * 2.5, (v.x, v.z))
+        donde_pillaron = (v.x + mx * 2.5, v.z + mz * 2.5)
+        poner(*donde_pillaron, (v.x, v.z))
         pasar(0.2)
         t += 0.2
     return estado()
@@ -237,7 +242,25 @@ for n in range(1, AVISOS_MAXIMOS + 1):
     x, z, _ = s.regreso
     assert abs(J.cl.actor.getX() - x) < 0.01 and abs(J.cl.actor.getZ() - z) < 0.01, (J.cl.actor.getPos(), s.regreso, J.cl.aviso_papel and [getattr(e, "text", "") for e in J.cl.aviso_papel.piezas][:4])
     foto(f"colegio_aviso_{n}")
+    if n == 1:
+        # El corrillo se deshace: el que te pillo y los que acudieron al
+        # jaleo se van corriendo a la punta de su ronda mas lejos de ti.
+        assert all(v.modo == "aleja" for v in s.vigilantes), [v.modo for v in s.vigilantes]
+        assert s.gracia > 0.0, s.gracia
+        antes = {v.id: (v.x, v.z) for v in s.vigilantes}
     tecla("enter", 0.6)
+    if n == 1:
+        pasar(3.5)
+        pasillo = (J.cl.actor.getX(), J.cl.actor.getZ())
+        ax, az = antes["archivo"]
+        assert math.hypot(vigilante("archivo").x - ax,
+                          vigilante("archivo").z - az) > 2.0, "el que te pillo no se fue"
+        for v in s.vigilantes:
+            assert math.hypot(v.x - donde_pillaron[0],
+                              v.z - donde_pillaron[1]) > 6.0, (v.id, "sigue en el sitio")
+            assert math.hypot(v.x - pasillo[0], v.z - pasillo[1]) > 4.0, (
+                v.id, "encima de donde te dejaron")
+        foto("colegio_dispersion")
     if n < AVISOS_MAXIMOS:
         assert estado() == "libre", estado()
 # Sin telefono: la expulsion cierra el dia y queda en la memoria.

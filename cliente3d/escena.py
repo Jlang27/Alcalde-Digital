@@ -13,7 +13,7 @@ consecuencia() pinta lo que respondio.
 
 import math
 
-from ursina import Vec3, camera, color, destroy
+from ursina import Entity, Vec3, camera, color, curve, destroy
 
 import estilo as E
 import mundo
@@ -105,24 +105,83 @@ class EscenaDecision:
         mundo.mirar(m0 + (m1 - m0) * s)
         self._durante(nombre, min(1.0, f))
 
+    ENTRADA = 0.30               # desde donde sube al abrirse
+    # Las tintas de noche no valen sobre papel: TEXTO es casi blanco y
+    # TEXTO_TENUE un gris claro que ahi se lee como «deshabilitado».
+    # Se detectan por lo claras que son y NO comparandolas con E.TEXTO:
+    # contraste() recrea esos colores al arrancar, asi que el diccionario
+    # de cada escena guarda otro objeto y la comparacion nunca acertaba.
+    CLARO = 0.55
+
+    def _en_papel(self, tinta):
+        luz = 0.299 * tinta.r + 0.587 * tinta.g + 0.114 * tinta.b
+        if luz <= self.CLARO:
+            return tinta                      # ya es una tinta oscura
+        # Un gris claro pasa a gris de imprenta; un color claro, a tinta.
+        gris = max(tinta.r, tinta.g, tinta.b) - min(tinta.r, tinta.g, tinta.b)
+        return E.TINTA_TENUE if gris < 0.10 else E.TINTA
+
+    def _borrar_panel(self):
+        """Primero los hijos, y la caja al final."""
+        for p in self.panel:
+            destroy(p)
+        self.panel.clear()
+        if getattr(self, "caja", None) is not None:
+            destroy(self.caja)
+            self.caja = None
+
+    def _papel(self, arriba, suelo, titulo):
+        """La hoja sobre la que se decide. Mismo lenguaje que el dialogo
+        de la cafeteria: papel y tinta, no un degradado con letra blanca
+        encima de la escena. Son los momentos mas importantes del juego
+        y eran los mas genericos de ver."""
+        self.caja = Entity(parent=camera.ui)
+        alto = arriba - suelo
+        medio = (arriba + suelo) / 2
+        c = self.caja
+        # La caja NO va en self.panel: ahi dentro se destruye en orden de
+        # lista y, al ir la primera, se llevaba por delante a sus hijos.
+        # Los siguientes destroy() caian sobre NodePaths ya invalidos.
+        self.panel.append(E.banda(2.0, alto, (0.006, medio - 0.006),
+                                  E.tinta(120), padre=c, z=E.Z_FONDO + 0.004))
+        self.panel.append(E.banda(2.0, alto, (0, medio), E.PAPEL, padre=c,
+                                  z=E.Z_FONDO))
+        self.panel += E.filete(2.0, (-1.0, arriba), E.TINTA, padre=c)
+        self.panel.append(E.pequena(titulo, (-0.835, arriba - 0.030),
+                                    E.TINTA_TENUE, escala=0.56, padre=c))
+        c.y = -self.ENTRADA
+        c.animate_y(0, duration=0.28, curve=curve.out_cubic)
+        return c
+
+    def _tecla_papel(self, texto, x, y, padre):
+        """Tecla impresa: bloque de tinta con la letra en papel. La de
+        E.tecla esta hecha para fondo oscuro y sobre papel desaparece."""
+        self.panel.append(E.banda(0.050, 0.050, (x + 0.025, y), E.TINTA,
+                                  padre=padre))
+        self.panel.append(E.etiqueta(texto, (x + 0.025, y), 0.90, E.PAPEL,
+                                     origen=(0, 0), padre=padre))
+        return 0.062
+
     def _decidir(self):
-        """Las opciones, con su tecla, a la izquierda y abajo."""
+        """Las opciones, impresas en la hoja de la decision."""
         self.fase = "decide"
         self.rotulo_saltar.fade_out(duration=0.3)
+        paso = 0.105 if len(self.opciones) < 3 else 0.098
+        primera = -0.128
+        # La hoja mide justo lo que ocupan las opciones: antes reservaba
+        # un alto fijo y sobraban cien pixeles de papel en blanco.
+        ultima = primera - (len(self.opciones) - 1) * paso
+        c = self._papel(-0.020, ultima - 0.044, self.PREGUNTA.upper())
         a = self.panel.append
-        self.panel += E.degradado(-0.9, 0.2, alto=0.36, y=-0.19, alfa=215)
-        a(E.pequena(self.PREGUNTA, (-0.80, -0.035), E.TEXTO_TENUE, escala=0.5))
-        # Con tres opciones se aprietan un poco para no pisar la barra de abajo.
-        paso = 0.11 if len(self.opciones) < 3 else 0.095
         for k, (id_opcion, texto, detalle) in enumerate(self.opciones):
-            y = -0.11 - k * paso
-            piezas, ancho = E.tecla(str(k + 1), "", -0.80, y)
-            self.panel += piezas
-            x = -0.80 + ancho
-            tinta = self.TINTAS.get(id_opcion, E.TEXTO)
-            a(E.banda(0.006, 0.075, (x - 0.012, y - 0.012), tinta))
-            a(E.etiqueta(texto.upper(), (x, y + 0.022), 1.05, tinta))
-            a(E.pequena(detalle, (x, y - 0.022), E.TEXTO_TENUE, escala=0.55))
+            y = primera - k * paso
+            ancho = self._tecla_papel(str(k + 1), -0.835, y - 0.004, c)
+            x = -0.835 + ancho
+            tinta = self._en_papel(self.TINTAS.get(id_opcion, E.TINTA))
+            a(E.banda(0.006, 0.072, (x - 0.010, y - 0.004), tinta, padre=c))
+            a(E.etiqueta(texto.upper(), (x, y + 0.020), 1.05, tinta, padre=c))
+            a(E.pequena(detalle, (x, y - 0.018), E.TINTA_TENUE, escala=0.58,
+                        padre=c))
 
     def elegir(self, i):
         """Tecla 1-9 mientras se decide: el id de la opcion, o None."""
@@ -134,15 +193,15 @@ class EscenaDecision:
     def consecuencia(self, titulo, detalle):
         """Lo que contesto la Partida: se cambia el panel por la consecuencia."""
         self.fase, self.t_consecuencia = "consecuencia", 0.0
-        for p in self.panel:
-            destroy(p)
-        self.panel.clear()
-        tinta = self.TINTAS.get(self.elegida, E.TEXTO)
+        self._borrar_panel()
+        tinta = self._en_papel(self.TINTAS.get(self.elegida, E.TINTA))
+        c = self._papel(-0.020, -0.300, "CONSECUENCIA")
         a = self.panel.append
-        self.panel += E.degradado(-0.9, 0.2, alto=0.36, y=-0.19, alfa=215)
-        a(E.pequena("CONSECUENCIA", (-0.80, -0.06), tinta, escala=0.5))
-        a(E.titular(titulo, (-0.80, -0.085), 1.6, E.TEXTO))
-        a(E.entradilla(detalle, (-0.80, -0.175), 0.8, E.TEXTO_TENUE, ancho=52))
+        # El titular en la tinta de lo que elegiste, con su sello al lado.
+        a(E.banda(0.040, 0.040, (-0.815, -0.108), tinta, padre=c))
+        a(E.titular(titulo, (-0.775, -0.088), 1.6, E.TINTA, padre=c))
+        a(E.entradilla(detalle, (-0.835, -0.178), 0.86, E.TINTA_TENUE,
+                       ancho=58, padre=c))
         self._reaccion()
 
     # ---------------------------------------------------------------

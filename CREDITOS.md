@@ -14,6 +14,8 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 |---|---|---|---|---|---|
 | `assets/audio/menu.ogg` | Música de los menús (de `UNITY.mp3`, convertida a OGG) | Aportada por A · origen por confirmar | **POR CONFIRMAR** | Sí, en cuanto se sepa | A · 2026-10-20 |
 | `assets/audio/ambiente.ogg` | Ambiente de calle de la cinemática (tráfico, murmullo, carros que pasan) | Generado por el proyecto (`herramientas/componer_intro.py`) | Propia | No | A · 2026-10-20 |
+| `assets/audio/ambiente_ciudad_alto.ogg` | La ciudad desde el piso 8: zumbido de tráfico lejano, el mitin de la avenida y algún claxon (capítulo 3) | Generado por el proyecto (`herramientas/componer_ambientes.py`) | Propia | No | A · 2026-11-06 |
+| `assets/audio/ambiente_estudio.ogg` | Tono de sala del estudio: red eléctrica, ventilador, aire y la calle tras el vidrio (capítulo 4) | Generado por el proyecto (`herramientas/componer_ambientes.py`) | Propia | No | A · 2026-11-06 |
 | `assets/audio/ambiente_lluvia.wav` | Lluvia en bucle con rachas y una sirena lejana (colegio de noche, capítulo 2) | Generado por el proyecto (`herramientas/componer_lluvia.py`) | Propia | No | A · 2026-10-31 |
 | `assets/audio/fx_trueno.wav` | Trueno de la cinemática del capítulo 2 | Generado por el proyecto (`herramientas/componer_lluvia.py`) | Propia | No | A · 2026-10-31 |
 | `assets/audio/fx_canica.wav` | Canica que bota y rueda (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
@@ -37,7 +39,8 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 
 | Archivo | Qué es | Fuente | Licencia | Requiere crédito | Quién / Cuándo |
 |---|---|---|---|---|---|
-| | | | | | |
+| `assets/escenarios/cafeteria.glb` | La cafetería del día 1 | Generado por `herramientas/generar_cafeteria.py` | Propio | No | Equipo |
+| `assets/multitud/peaton_0..5.glb` | 6 figuras animadas de fondo para el mitin, ~570 triángulos cada una (partidas del pack original) | [Low Detail Animated Crowd, Shahriar Shahrabi (Sketchfab)](https://sketchfab.com/3d-models/low-detail-animated-crowd-4fe76fdec12d456f9b0db06b45cc53d6) | CC Attribution | **Sí** | 6 nov 2026 |
 
 ## Tipografías
 

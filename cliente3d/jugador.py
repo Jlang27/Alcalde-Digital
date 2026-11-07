@@ -25,6 +25,14 @@ VELOCIDAD = 2.7              # metros por segundo
 VELOCIDAD_CORRER = 5.2       # Shift
 VELOCIDAD_AGACHADO = 1.3     # Ctrl: lento a proposito, es el precio del sigilo
 VELOCIDAD_GIRO = 10.0        # suavizado del giro del personaje
+# Cuanto se espera antes de dar por parado al personaje. Sin este
+# margen, un solo fotograma en el que el teclado no devuelve la tecla
+# —y pasa: al repetir tecla, al mover el raton, al recuperar el foco—
+# corta la carrera y la vuelve a empezar. En pantalla se ve como
+# «corre, se queda quieto, vuelve a correr». El personaje DEJA de
+# avanzar y de hacer ruido en el acto; lo unico que espera es el cambio
+# de animacion.
+GRACIA_PARADA = 0.14
 SENSIBILIDAD = 42.0
 
 DISTANCIA = 4.3
@@ -47,6 +55,13 @@ ALFA_CERCA = 0.3             # lo que queda del personaje: se sabe donde esta
 # La transparencia empieza mas cerca que la grua: un modelo transparente
 # deja ver sus caras de dentro, y a media distancia eso son manchas.
 DISTANCIA_TRANSPARENTE = 1.4
+# Y por debajo de esto se apaga del todo. Contra un muro INTERIOR la
+# camara puede llegar a DISTANCIA_MINIMA_MURO (0,3 m), que la deja dentro
+# de la cabeza: con el personaje aun al 30 %, el plano cercano cortaba el
+# craneo y se veia por dentro. Eso es lo que el equipo llamo «se queda
+# calva al pegarse a una pared». Contra los muros EXTERIORES no pasaba
+# porque alli el tope es DISTANCIA_MINIMA (1,25 m).
+DISTANCIA_INVISIBLE = 0.75
 # La lente cerrada es la de cine, pero en un rincon deja ver solo una
 # espalda: de cerca se abre un poco para que quepa la sala.
 ABRIR_CERCA = 12.0
@@ -110,6 +125,16 @@ CLIPS = {
     "correr": (("correr", 1.0), ("caminar", 1.7)),
     "agachado": (("agachado", 1.0), ("idle", 1.0)),
     "agachado_andar": (("agachado_caminar", 1.0), ("caminar", 0.55)),
+}
+# A que velocidad avanza el personaje en cada estado. Sirve para que el
+# clip se reproduzca al ritmo al que de verdad pisa el suelo: los
+# numeros de CLIPS eran multiplicadores a ojo y dejaban los pies
+# patinando (zancada medida de 2,57 m andando, cuando la humana es 0,78).
+# Un estado que no esta aqui no se mueve: se queda con su ritmo de CLIPS.
+VELOCIDAD_DE = {
+    "andar": VELOCIDAD,
+    "correr": VELOCIDAD_CORRER,
+    "agachado_andar": VELOCIDAD_AGACHADO,
 }
 
 
@@ -177,6 +202,8 @@ class Jugador:
         self.rumbo = 0.0                # hacia donde mira el personaje
         self.explorando = False
         self.estado = "quieto"          # una clave de CLIPS
+        self.sin_andar = 0.0            # segundos seguidos sin tecla de avance
+        self.clip_puesto = None         # el clip que ESTE puso a sonar
         # Lo leera el minijuego de sigilo: agachado se ve menos, corriendo
         # se oye mas. Aqui solo se mueve; las reglas iran en Partida.
         self.agachado = False
@@ -506,8 +533,13 @@ class Jugador:
         self.moviendose = False
         if avance == 0 and lado == 0:
             self.corriendo = False      # correr sin moverse no hace ruido
-            self._animar(quieto)
+            # El margen: se para de verdad, pero la animacion aguanta
+            # unas centesimas por si fue un fotograma suelto sin tecla.
+            self.sin_andar += dt
+            if self.sin_andar >= GRACIA_PARADA:
+                self._animar(quieto)
             return
+        self.sin_andar = 0.0
 
         # Direccion relativa a la camara: W va hacia donde miras.
         rad = math.radians(self.yaw)
@@ -557,18 +589,30 @@ class Jugador:
         self._animar(estado)
 
     def _animar(self, estado):
-        if estado == self.estado:
+        # No basta con mirar el estado: los gestos de mundo.reaccionar y
+        # las rutinas de avanzar_rutinas tambien cambian el clip por
+        # detras. Si el que suena no es el que este puso, hay que
+        # reafirmarlo aunque el estado no haya cambiado; si no, el
+        # personaje se queda clavado en el clip ajeno.
+        if estado == self.estado and self.actor.getCurrentAnim() == self.clip_puesto:
             return
         self.estado = estado
         nombres = self.actor.getAnimNames()
+        velocidad = VELOCIDAD_DE.get(estado, 0.0)
         # Si el modelo no trae ninguno se queda en idle y se desliza. Es
         # visible y a proposito: asi se nota que falta la animacion.
         for clip, ritmo in CLIPS[estado] + (("idle", 1.0),):
             if clip in nombres:
+                if velocidad > 0:
+                    # Del propio clip, no a ojo: asi tambien sale bien
+                    # cuando se cae al de repuesto (correr con «caminar»).
+                    import mundo
+                    ritmo = mundo.ritmo_para(self.actor, clip, velocidad)
                 # El ritmo se pone siempre: se guarda por clip, y «caminar»
                 # se queda acelerado si se vuelve a el despues de correr.
                 self.actor.setPlayRate(ritmo, clip)
                 self.actor.loop(clip)
+                self.clip_puesto = clip
                 return
 
     # ----------------------------------------------------------------
@@ -684,9 +728,18 @@ class Jugador:
         # camara no cabe detras y desde abajo solo se veia su espalda.
         recorte = 0.0 if self.cubierta is not None else (1.0 - GRUA_AGACHADO) * self.agache
         pos.y += GRUA * self.cerca * (1.0 - recorte)
-        tapa = ((DISTANCIA_TRANSPARENTE - distancia)
-                / (DISTANCIA_TRANSPARENTE - DISTANCIA_MINIMA_MURO))
-        self._poner_alfa(1.0 - (1.0 - ALFA_CERCA) * max(0.0, min(1.0, tapa)))
+        # Dos tramos: hasta DISTANCIA_INVISIBLE se queda translucido (se
+        # sigue sabiendo donde esta), y de ahi abajo se apaga del todo
+        # antes de que la camara le entre en la cabeza.
+        if distancia <= DISTANCIA_INVISIBLE:
+            dentro = ((DISTANCIA_INVISIBLE - distancia)
+                      / max(1e-6, DISTANCIA_INVISIBLE - DISTANCIA_MINIMA_MURO))
+            alfa = ALFA_CERCA * (1.0 - max(0.0, min(1.0, dentro)))
+        else:
+            tapa = ((DISTANCIA_TRANSPARENTE - distancia)
+                    / (DISTANCIA_TRANSPARENTE - DISTANCIA_INVISIBLE))
+            alfa = 1.0 - (1.0 - ALFA_CERCA) * max(0.0, min(1.0, tapa))
+        self._poner_alfa(alfa)
         # Ultimo recurso: en un rincon muy cerrado ni la distancia
         # minima cabe. Se traslada sin girar, asi el encuadre no bascula.
         # Y nunca a ras de suelo: agachado y mirando hacia arriba se metia

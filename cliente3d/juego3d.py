@@ -45,6 +45,7 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
 from transmision import BORRAR, RESPONDER
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
+import sigilo
 from sigilo import AVISOS_MAXIMOS, Vigilante
 
 DURACION_CARGA = 2.8
@@ -59,6 +60,7 @@ class Cliente:
         self.actor = None
         self.menu = None
         self.ajustes = None
+        self.ajustes_desde = "menu"   # a donde vuelve Ajustes con Esc
         self.como = None
         self.seleccion = None
         self.elenco = []
@@ -85,6 +87,10 @@ class Cliente:
         self.mundo = None
         self.confirmando = None
         self.confirmacion = []
+        self.pausa = []               # el menu de ESC en mitad de la partida
+        self.pausa_marca = []
+        self.pausa_sel = 0
+        self.antes_de_pausa = None
         self.ocultos = []
         self.pantalla = []
         self.zonas = []
@@ -263,8 +269,10 @@ def confirmar_reparto(indices):
     abrir_carga()
 
 
-def abrir_ajustes(seleccion=0):
+def abrir_ajustes(seleccion=0, desde="menu"):
+    """desde: «menu» o «pausa», para saber a donde vuelve con Esc."""
     cl.estado = "ajustes"
+    cl.ajustes_desde = desde
     cl.ajustes = pantallas.Ajustes(rehacer_ajustes, seleccion)
 
 
@@ -277,7 +285,7 @@ def rehacer_ajustes(_clave):
     """
     donde = cl.ajustes.seleccion
     cl.ajustes.cerrar()
-    abrir_ajustes(donde)
+    abrir_ajustes(donde, cl.ajustes_desde)
 
 # Los siete dias del guion; los primeros se pueden jugar sueltos desde el
 # menu. Antes la lista llegaba a doce, que nunca existieron.
@@ -502,6 +510,110 @@ def mover_confirmacion(paso):
     cl.confirmacion_sel = (cl.confirmacion_sel + paso) % len(
         OPCIONES_CONFIRMACION)
     pintar_confirmacion()
+
+
+# ESC en mitad de la partida. Antes solo preguntaba «¿volver al menu?»:
+# para bajar el volumen habia que abandonar la partida.
+TITULO_PAUSA = "EL RELOJ DEL DÍA ESTÁ DETENIDO"
+OPCIONES_PAUSA = (("CONTINUAR", "seguir"),
+                  ("AJUSTES", "ajustes"),
+                  ("VOLVER AL MENÚ", "menu"))
+
+
+def abrir_pausa(retomar=False):
+    """Para la partida y abre el menu. Mismo patron que la libreta: se
+    apaga el HUD y el estado pasa a «pausa», con lo que update() no
+    adelanta el reloj (solo lo hace en «juego») ni mueve a nadie.
+
+    retomar=True al volver de Ajustes: el HUD ya esta apagado y la lista
+    para encenderlo otra vez (cl.tapados) no se puede volver a hacer,
+    porque ahora todo esta deshabilitado y saldria vacia.
+    """
+    if cl.pausa:
+        return
+    if not retomar:
+        cl.antes_de_pausa = cl.estado
+        if cl.estado == "libre":
+            cerrar_libre()
+            limpiar(cl.reloj_manana)
+        cl.tapados = [e for e in cl.hud + cl.opciones + cl.zonas + cl.marcas
+                      + cl.modal if e.enabled]
+        if cl.alerta is not None:
+            cl.tapados += [e for e in cl.alerta.piezas if e.enabled]
+        for e in cl.tapados:
+            e.enabled = False
+        audio.agachar(True)          # la musica baja, como en los dialogos
+        audio.efecto("confirmar")
+    cl.estado = "pausa"
+    cl.pausa_sel = 0
+    c = cl.pausa
+    # 214 y no 234 como la confirmacion: aqui no se pregunta nada, se
+    # descansa, y conviene seguir viendo donde estabas.
+    c.append(E.velo(color.rgb32(5, 6, 9, 214), z=-0.50))
+    t = E.titular("Pausa", (0, 0.268), 2.6, E.TEXTO, origen=(0, 0.5))
+    t.z = -0.60
+    c.append(t)
+    sub = E.pequena(TITULO_PAUSA, (0, 0.203), E.TEXTO_TENUE,
+                    escala=0.58, origen=(0, 0.5))
+    sub.z = -0.60
+    c.append(sub)
+    # Filete de periodico, centrado: el mismo lenguaje que el resto.
+    for r in E.filete(0.62, (-0.31, 0.173), E.luz(70)):
+        r.z = -0.60
+        c.append(r)
+    c += E.leyenda((("flechas", "elegir"), ("enter", "abrir"),
+                    ("esc", "seguir jugando")), -0.458, z=-0.60)
+    pintar_pausa()
+
+
+def pintar_pausa():
+    limpiar(cl.pausa_marca)
+    for i, (texto, _que) in enumerate(OPCIONES_PAUSA):
+        y = 0.075 - i * 0.105
+        elegido = i == cl.pausa_sel
+        caja = E.banda(0.62, 0.082, (0, y), E.luz(36 if elegido else 14),
+                       z=-0.55)
+        et = E.titular(texto, (0, y + 0.019), 1.45,
+                       E.TEXTO if elegido else E.TEXTO_TENUE, origen=(0, 0.5))
+        et.z = -0.60
+        filo = E.banda(0.62, 0.0040, (0, y - 0.041),
+                       E.UI if elegido else E.luz(26), z=-0.60)
+        cl.pausa_marca += [caja, et, filo]
+
+
+def mover_pausa(paso):
+    cl.pausa_sel = (cl.pausa_sel + paso) % len(OPCIONES_PAUSA)
+    pintar_pausa()
+
+
+def cerrar_pausa(restaurar=True):
+    """restaurar=False cuando lo que sigue es otra pantalla encima
+    (Ajustes): el HUD se queda apagado hasta que se vuelva."""
+    limpiar(cl.pausa_marca)
+    limpiar(cl.pausa)
+    if not restaurar:
+        return
+    for e in cl.tapados:
+        e.enabled = True
+    cl.tapados = []
+    audio.agachar(False)
+    audio.efecto("volver")
+    if cl.antes_de_pausa == "libre":
+        abrir_libre()
+    else:
+        cl.estado = cl.antes_de_pausa
+
+
+def activar_pausa():
+    que = OPCIONES_PAUSA[cl.pausa_sel][1]
+    if que == "seguir":
+        cerrar_pausa()
+    elif que == "ajustes":
+        audio.efecto("confirmar")
+        cerrar_pausa(restaurar=False)
+        abrir_ajustes(desde="pausa")
+    else:
+        abrir_confirmacion("menu")
 
 
 def cerrar_confirmacion(acepta):
@@ -930,9 +1042,11 @@ def iniciar_dia(indice):
 # oficina de campana, el murmullo de la ciudad de abajo.
 SONIDO_LUGAR = {
     "rectoria": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_LLUVIA),
-    "campana": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_CALLE),
-    # El estudio: musica tranquila de directo y la ciudad tras la ventana.
-    "estudio": (audio.MUSICA_CAFETERIA, 0.5, audio.AMBIENTE_CALLE),
+    "campana": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_CIUDAD_ALTO),
+    # El estudio: musica tranquila de directo y el tono de la sala. La
+    # calle apenas se cuela por el vidrio, que es lo que hay dentro de un
+    # cuarto con espuma acustica.
+    "estudio": (audio.MUSICA_CAFETERIA, 0.5, audio.AMBIENTE_ESTUDIO),
 }
 
 
@@ -944,7 +1058,10 @@ def sonido_del_lugar():
 # La cinematica con la que abre cada escenario, si la tiene. Va antes del
 # rotulo del dia, como la de «7 días» antes del dia 1.
 CINEMATICAS = {
-    "rectoria": cine_colegio.CineColegio,
+    # Con el rector, para que gesticule al hablar en vez de soltar
+    # sus frases en pose fija.
+    "rectoria": lambda actor, nombre: cine_colegio.CineColegio(
+        actor, nombre, cl.figurantes.get("rector")),
     # El asesor entra preocupado y cita a Daniel en su oficina.
     "campana": lambda actor, nombre: cine_campana.LlegadaCampana(
         actor, nombre, cl.asesor, DIALOGO_ASESOR_PREOCUPADO),
@@ -1086,7 +1203,8 @@ def abrir_libre():
     cl.jugador.encuadrar()
     cl.jugador.activar()
     cl.aviso = pantallas.AvisoLibre(telefono=p is None or p.con_telefono)
-    cl.mapa.preparar(mundo.escenario(), mundo.limites(), mundo.bloqueos())
+    cl.mapa.preparar(mundo.escenario(), mundo.limites(),
+                     mundo.bloqueos(), mundo.muros())
     pintar_reloj_manana()
 
 
@@ -1635,15 +1753,18 @@ def pintar_reloj_manana():
         return
     ya, total = len(p.creyentes()), len(p.vecinos())
     r = cl.reloj_manana
-    r.append(E.banda(0.64, 0.115, (0.555, 0.415), E.tinta(215), z=E.Z_ADORNO))
+    # El panel acaba en x=0.855, el mismo margen que el minimapa por la
+    # izquierda. Antes llegaba a 0.875 con el borde de la pantalla en
+    # 0.889: no se salia, pero sin aire se leia como recortado.
+    r.append(E.banda(0.64, 0.115, (0.535, 0.415), E.tinta(215), z=E.Z_ADORNO))
     r.append(E.pequena("LA MAÑANA · REUNIÓN DE PADRES A LAS 8:30",
-                       (0.255, 0.462), E.TEXTO_TENUE, escala=0.44))
-    hora = E.titular(p.hora(), (0.255, 0.440), 1.5, E.TEXTO)
+                       (0.235, 0.462), E.TEXTO_TENUE, escala=0.44))
+    hora = E.titular(p.hora(), (0.235, 0.440), 1.5, E.TEXTO)
     r.append(hora)
     cifra = E.pequena(f"ya lo creen {ya} de {total} vecinos",
-                      (0.420, 0.430), E.TEXTO, escala=0.50)
+                      (0.400, 0.430), E.TEXTO, escala=0.50)
     r.append(cifra)
-    r += E.barra_voto(0.43, ya / max(total, 1), (0.420, 0.392), E.GAITAN,
+    r += E.barra_voto(0.42, ya / max(total, 1), (0.400, 0.392), E.GAITAN,
                       grosor=0.010, col_riel=E.luz(30))
     if p.rondas != cl.rondas_pintadas:
         # destello: lo que acaba de cambiar nace en rojo y se apaga
@@ -1674,6 +1795,7 @@ def abrir_dialogo(id_npc):
         actor.loop("hablar")
     animar("hablar")
     cl.dialogo = pantallas.Dialogo(nombre, quien, elegir_pregunta)
+    cl.dialogo.apuntar(x_en_pantalla(cl.npcs.get(cl.con_quien)))
     audio.agachar(True)
     mostrar_preguntas()
 
@@ -1791,14 +1913,40 @@ def cerrar_libreta():
         cl.estado = cl.antes_de_libreta
 
 
+def x_en_pantalla(actor, alto=1.6):
+    """Donde cae la cabeza de ese actor en camera.ui, o None.
+
+    Sirve para ponerle el pico al cuadro de dialogo justo debajo de
+    quien habla. Si queda fuera de cuadro o detras, devuelve None y el
+    cuadro se queda sin pico, que es mejor que un pico apuntando a nada.
+    """
+    if actor is None:
+        return None
+    try:
+        from panda3d.core import Point2
+        mundo_pos = actor.getPos(cl.mundo)
+        cabeza = Vec3(mundo_pos[0], mundo_pos[1] + alto, mundo_pos[2])
+        rel = application.base.cam.getRelativePoint(cl.mundo, cabeza)
+        plano = Point2()
+        if not application.base.camLens.project(rel, plano):
+            return None                      # detras de la camara
+        return plano.getX() * camera.aspect_ratio / 2
+    except Exception:
+        return None
+
+
 def mostrar_preguntas():
     """El tarjeton de lo que se puede preguntar con lo que ya sabes."""
     cl.preguntas_menu = cl.partida.preguntas_de(cl.con_quien)
     if not cl.preguntas_menu:
         cerrar_dialogo()
         return
-    opciones = [(n.nombre, f"{MINUTOS_POR_RONDA} min") for n in cl.preguntas_menu]
-    cl.dialogo.preguntar(opciones + [("Despedirse", "")])
+    # El tercer dato dice si esa pregunta abre rama: se mira si el nodo
+    # tiene hijos en el arbol de pistas. Es leer lo que la Partida ya
+    # sabe, no una regla nueva del cliente.
+    opciones = [(n.nombre, f"{MINUTOS_POR_RONDA} min", bool(n.hijos))
+                for n in cl.preguntas_menu]
+    cl.dialogo.preguntar(opciones + [("Despedirse", "", False)])
 
 
 def elegir_pregunta(i):
@@ -2390,7 +2538,10 @@ def gente_del_mapa():
               for i, a in cl.figurantes.items()]
     s = cl.partida.sigilo                  # primero se asigna...
     if s is not None and minimapa.MOSTRAR_VIGILANTES:
-        gente += [(f"v_{v.id}", v.x, v.z, "vigilante", v.rumbo)
+        # El alcance y la apertura salen de las reglas, no del dibujo:
+        # el minimapa no sabe cuanto alumbra una linterna.
+        gente += [(f"v_{v.id}", v.x, v.z, "vigilante", v.rumbo,
+                   sigilo.ALCANCE, sigilo.MEDIO_ANGULO)
                   for v in s.vigilantes]   # ...y después se usa
     if cl.ronda_asesor is not None:
         gente.append(("asesor", cl.ronda_asesor.x, cl.ronda_asesor.z,
@@ -2460,6 +2611,10 @@ def update():
     # Los gestos y las rutinas corren tambien con el telefono fuera: si
     # no, un «pensar» disparado ahi termina y deja al cuerpo sin ninguna
     # animacion, congelado en el ultimo fotograma.
+    # La linea del dialogo se imprime sola, letra a letra.
+    if cl.estado == "dialogo" and cl.dialogo is not None:
+        cl.dialogo.avanzar_impresion(time.dt)
+
     if cl.estado in ("libre", "dialogo", "juego"):
         mirar_npcs(time.dt, mirar=cl.estado != "juego")
 
@@ -2640,6 +2795,19 @@ def input(tecla):
             cerrar_confirmacion(False)
         return
 
+    elif cl.estado == "pausa":
+        if tecla in ("down arrow", "s"):
+            audio.efecto("mover")
+            mover_pausa(1)
+        elif tecla in ("up arrow", "w"):
+            audio.efecto("mover")
+            mover_pausa(-1)
+        elif tecla in ("enter", "space"):
+            activar_pausa()
+        elif tecla == "escape":
+            cerrar_pausa()
+        return
+
     elif cl.estado == "cinematica":
         # Como la intro: Enter, espacio o Esc la saltan.
         if tecla in ("enter", "space", "escape") and cl.cine is not None:
@@ -2761,8 +2929,7 @@ def input(tecla):
         elif tecla == "tab":
             abrir_libreta()
         elif tecla == "escape":
-            cerrar_libre()
-            abrir_confirmacion("menu")
+            abrir_pausa()
         return
 
     elif cl.estado == "comojugar":
@@ -2806,7 +2973,10 @@ def input(tecla):
         if tecla == "escape":
             cl.ajustes.cerrar()
             cl.ajustes = None
-            abrir_menu()
+            if cl.ajustes_desde == "pausa":
+                abrir_pausa(retomar=True)
+            else:
+                abrir_menu()
         elif tecla in ("down arrow", "s"):
             cl.ajustes.mover(1)
         elif tecla in ("up arrow", "w"):
@@ -2841,7 +3011,12 @@ def input(tecla):
         return
     
     elif tecla == "escape" and cl.estado != "carga":
-        abrir_confirmacion("salir" if cl.estado == "menu" else "menu")
+        if cl.estado == "menu":
+            abrir_confirmacion("salir")
+        elif cl.partida is not None and cl.estado == "juego":
+            abrir_pausa()            # con el telefono fuera tambien se pausa
+        else:
+            abrir_confirmacion("menu")
         return
 
     if cl.estado == "final" and tecla in ("enter", "space"):

@@ -7,7 +7,8 @@ hacia la eleccion, que es la espina dorsal del guion.
 
 import math
 
-from ursina import Button, Entity, Func, Vec3, camera, color, curve, destroy, invoke
+from ursina import (Button, Entity, Func, Mesh, Vec3, camera, color, curve,
+                    destroy, invoke)
 
 import ajustes as A
 import estilo as E
@@ -415,41 +416,97 @@ class Directo:
     transmision.Transmision: aqui solo se pinta.
     """
 
-    FILAS = 15
-    LARGO = 36                     # caracteres del mensaje en una fila
-    NOMBRE = 13                    # y del nombre, que va en su columna
+    FILAS = 12
+    PASO = 0.048                   # alto de fila; el chat se lee de un vistazo
+    LARGO = 30                     # caracteres del mensaje en una fila
+    NOMBRE = 12                    # y del nombre, que va en su columna
     # Los nombres del chat, en las tintas de la interfaz.
     TINTAS = (E.ACENTO_UI, E.LLERAS, E.RESTREPO, E.UI)
+    # Insignias de canal, como las de cualquier plataforma: una letra en
+    # un cuadro de color delante del nombre. No dicen nada del juego, son
+    # decorado creible; se reparten por el hash del nombre para que cada
+    # espectador tenga SIEMPRE la suya.
+    INSIGNIAS = ((None, None), (None, None), ("M", E.RESTREPO),
+                 ("S", E.ACENTO_UI), ("S", E.ACENTO_UI), ("V", E.LLERAS))
+    # Marco del chat, a la derecha.
+    CHAT_X0, CHAT_X1 = 0.355, 0.880
+    CHAT_Y0, CHAT_Y1 = -0.150, 0.470
 
     def __init__(self):
         self.piezas, self.tarjeta = [], []
         a = self.piezas.append
-        # --- arriba: en vivo, espectadores y confianza ---
-        self.piezas += E.degradado_vertical(0.5, 0.30, alfa=150)
-        a(E.banda(0.13, 0.042, (-0.795, 0.445), E.GAITAN))
-        a(E.etiqueta("EN VIVO", (-0.795, 0.445), 0.62, E.TEXTO, origen=(0, 0)))
-        self.vistos = E.etiqueta("", (-0.715, 0.445), 0.78, E.TEXTO, origen=(-0.5, 0))
+
+        # ---------------- cabecera del canal ----------------
+        # Como la de una plataforma de verdad: avatar, arroba, de que va
+        # el directo y la pildora de EN VIVO. Antes eran tres datos
+        # sueltos flotando y se leia como HUD de videojuego, no como un
+        # canal.
+        self.piezas += E.degradado_vertical(0.5, 0.26, alfa=165)
+        a(E.banda(0.062, 0.062, (-0.828, 0.428), E.LLERAS))
+        a(E.etiqueta("SL", (-0.828, 0.428), 0.86, E.NOCHE, origen=(0, 0)))
+        a(E.etiqueta("@santilleras", (-0.788, 0.448), 0.86, E.TEXTO))
+        a(E.pequena("Charlando  ·  Ciudad Nova", (-0.788, 0.414),
+                    E.TEXTO_TENUE, escala=0.54))
+        # Pildora EN VIVO con su punto, y los espectadores al lado.
+        a(E.banda(0.112, 0.034, (-0.552, 0.452), E.GAITAN))
+        a(E.banda(0.012, 0.012, (-0.594, 0.452), E.TEXTO))
+        a(E.etiqueta("EN VIVO", (-0.542, 0.452), 0.58, E.TEXTO, origen=(0, 0)))
+        self.vistos = E.etiqueta("", (-0.486, 0.452), 0.76, E.TEXTO,
+                                 origen=(-0.5, 0))
         a(self.vistos)
-        a(E.pequena("CONFIANZA DE TU COMUNIDAD", (-0.86, 0.405), E.TEXTO_TENUE, escala=0.5))
-        self.confianza = E.barra_voto(0.34, 0.5, (-0.86, 0.37), E.RESTREPO,
-                                      grosor=0.012, col_riel=E.luz(40))
+        # La confianza, como la barra de meta de un directo.
+        a(E.pequena("CONFIANZA DE TU COMUNIDAD", (-0.86, 0.378),
+                    E.TEXTO_TENUE, escala=0.5))
+        self.confianza = E.barra_voto(0.34, 0.5, (-0.86, 0.348), E.RESTREPO,
+                                      grosor=0.014, col_riel=E.luz(40))
         self.piezas += self.confianza
-        # --- a la derecha: el chat ---
-        self.piezas += E.degradado(0.89, 0.22, alfa=235)
-        a(E.pequena("CHAT EN VIVO", (0.38, 0.445), E.TEXTO_TENUE, escala=0.52))
-        a(E.banda(0.50, 0.002, (0.63, 0.425), E.luz(50)))
+
+        # ---------------- el chat ----------------
+        ancho = self.CHAT_X1 - self.CHAT_X0
+        alto = self.CHAT_Y1 - self.CHAT_Y0
+        a(E.banda(ancho, alto, ((self.CHAT_X0 + self.CHAT_X1) / 2,
+                                (self.CHAT_Y0 + self.CHAT_Y1) / 2),
+                  E.tinta(236), z=E.Z_FONDO))
+        a(E.banda(ancho, 0.040, ((self.CHAT_X0 + self.CHAT_X1) / 2,
+                                 self.CHAT_Y1 - 0.020), E.luz(26),
+                  z=E.Z_ADORNO))
+        a(E.pequena("CHAT EN VIVO", (self.CHAT_X0 + 0.016, self.CHAT_Y1 - 0.009),
+                    E.TEXTO_TENUE, escala=0.54))
+
         # Nombre y mensaje en dos columnas: el color de cada nombre no se
         # puede mezclar en un mismo Text (la etiqueta de color de Ursina
         # los dejaba casi negros).
         self.nombres, self.filas, self.marcas = [], [], []
+        self.fondos, self.chapas, self.letras = [], [], []
         for i in range(self.FILAS):
-            y = 0.398 - i * 0.042
-            self.nombres.append(E.pequena("", (0.385, y), E.TEXTO, escala=0.52))
-            self.filas.append(E.pequena("", (0.535, y), E.TEXTO, escala=0.52))
-            marca = E.banda(0.006, 0.03, (0.372, y - 0.013), E.ACENTO_UI)
+            # De abajo arriba: un chat de verdad sube desde el
+            # suelo. Colgandolo del techo quedaba medio panel
+            # vacio debajo del ultimo mensaje.
+            y = self.CHAT_Y0 + 0.030 + (self.FILAS - 1 - i) * self.PASO
+            # Fondo de fila: solo se enciende en los mensajes que te
+            # hablan a ti, como el resaltado de mencion de un chat.
+            f = E.banda(ancho - 0.012, self.PASO - 0.006,
+                        ((self.CHAT_X0 + self.CHAT_X1) / 2, y - 0.010),
+                        E.luz(30), z=E.Z_ADORNO)
+            f.enabled = False
+            self.fondos.append(f)
+            chapa = E.banda(0.020, 0.020, (self.CHAT_X0 + 0.030, y - 0.009),
+                            E.RESTREPO)
+            letra = E.pequena("", (self.CHAT_X0 + 0.030, y - 0.001), E.NOCHE,
+                              escala=0.44, origen=(0, 0.5))
+            chapa.enabled = letra.enabled = False
+            self.chapas.append(chapa)
+            self.letras.append(letra)
+            self.nombres.append(E.pequena("", (self.CHAT_X0 + 0.048, y),
+                                          E.TEXTO, escala=0.62))
+            self.filas.append(E.pequena("", (self.CHAT_X0 + 0.196, y),
+                                        E.TEXTO, escala=0.62))
+            marca = E.banda(0.005, self.PASO - 0.010,
+                            (self.CHAT_X0 + 0.010, y - 0.010), E.ACENTO_UI)
             marca.enabled = False
             self.marcas.append(marca)
-        self.piezas += self.nombres + self.filas + self.marcas
+        self.piezas += (self.fondos + self.chapas + self.letras
+                        + self.nombres + self.filas + self.marcas)
         self.lineas = []
         # --- abajo: lo que se le explica al atender ---
         self.explicacion = E.entradilla("", (-0.86, -0.075), 0.72, E.TEXTO, ancho=58)
@@ -462,15 +519,33 @@ class Directo:
             autor = autor[:self.NOMBRE - 1] + "…"
         if len(texto) > self.LARGO:
             texto = texto[:self.LARGO - 1].rstrip() + "…"
-        tinta = self.TINTAS[sum(map(ord, mensaje["autor"])) % len(self.TINTAS)]
-        self.lineas.append((autor, tinta, texto, mensaje["tipo"] is not None))
+        h = sum(map(ord, mensaje["autor"]))
+        tinta = self.TINTAS[h % len(self.TINTAS)]
+        chapa = self.INSIGNIAS[h % len(self.INSIGNIAS)]
+        # OJO: no se marca de que TIPO es el mensaje. Una plataforma real
+        # tendria un filtro que senala bulos y estafas, pero aqui eso es
+        # justo lo que el jugador tiene que saber ver: senalarlo le daria
+        # la respuesta hecha. Solo se resalta que te hablan a ti.
+        self.lineas.append((autor, tinta, texto, mensaje["tipo"] is not None,
+                            chapa))
         self.lineas = self.lineas[-self.FILAS:]
-        for nombre, fila, marca, (autor, tinta, texto, pide) in zip(
-                self.nombres, self.filas, self.marcas, self.lineas):
+        # Se emparejan por el FINAL: con menos de FILAS mensajes, los
+        # que hay van abajo del todo, como en cualquier chat.
+        hueco = self.FILAS - len(self.lineas)
+        for nombre, fila, marca, fondo, chap, letra, datos in zip(
+                self.nombres[hueco:], self.filas[hueco:], self.marcas[hueco:],
+                self.fondos[hueco:], self.chapas[hueco:], self.letras[hueco:],
+                self.lineas):
+            autor, tinta, texto, pide, (ins, col) = datos
             nombre.text, nombre.color = autor, tinta
             fila.text = texto
             fila.color = E.TEXTO if pide else E.TEXTO_TENUE
-            marca.enabled = pide
+            marca.enabled = fondo.enabled = pide
+            chap.enabled = letra.enabled = ins is not None
+            if ins is not None:
+                chap.color, letra.text = col, ins
+            # El nombre se corre si lleva insignia, para que no la pise.
+            nombre.x = self.CHAT_X0 + (0.048 if ins else 0.022)
 
     def poner(self, espectadores, confianza, pedido, plazo, esperan):
         """Lo que cambia cada fotograma: cifras, plazo y el pedido que se atiende."""
@@ -479,7 +554,7 @@ class Directo:
         if (pedido, esperan) != self._pintado:
             self._tarjeta(pedido, esperan)
         if pedido is not None:
-            self.plazo.scale_x = 0.5 * plazo
+            self.plazo.scale_x = (0.550 - 0.060) * plazo
             self.plazo.color = E.GAITAN if plazo < 0.3 else E.LLERAS
 
     _pintado = (None, 0)
@@ -491,21 +566,39 @@ class Directo:
         if pedido is None:
             return
         a = self.tarjeta.append
-        self.tarjeta += E.degradado(-0.89, 0.05, alto=0.30, y=-0.29, alfa=225)
-        a(E.pequena(f"TE PIDE ATENCIÓN  ·  {pedido['autor']}", (-0.86, -0.165),
-                    E.ACENTO_UI, escala=0.52))
-        a(E.entradilla(pedido["texto"], (-0.86, -0.195), 0.86, E.TEXTO, ancho=44))
-        self.plazo = E.banda(0.5, 0.008, (-0.86, -0.315), E.LLERAS)
+        # Tarjeta de la plataforma, no un degradado: aqui NO va papel,
+        # que estamos dentro de un directo. Mismo lenguaje que el chat:
+        # panel oscuro, filete de acento y la chapa del usuario.
+        x0, x1 = -0.875, -0.325
+        y0, y1 = -0.372, -0.130
+        a(E.banda(x1 - x0, y1 - y0, ((x0 + x1) / 2, (y0 + y1) / 2),
+                  E.tinta(238), z=E.Z_FONDO))
+        a(E.banda(0.007, y1 - y0, (x0 + 0.0035, (y0 + y1) / 2), E.ACENTO_UI,
+                  z=E.Z_ADORNO))
+        a(E.banda(0.026, 0.026, (x0 + 0.036, y1 - 0.030), E.ACENTO_UI))
+        a(E.pequena(pedido["autor"], (x0 + 0.058, y1 - 0.022), E.TEXTO,
+                    escala=0.66))
+        # Debajo del nombre y no en el canto: alineada a la derecha se
+        # salia de la tarjeta.
+        a(E.pequena("TE ESCRIBIÓ", (x0 + 0.058, y1 - 0.040), E.ACENTO_UI,
+                    escala=0.46))
+        a(E.entradilla(pedido["texto"], (x0 + 0.030, y1 - 0.074), 1.00,
+                       E.TEXTO, ancho=34))
+        # El plazo, como la barra de un directo que se vacia.
+        a(E.banda(x1 - x0 - 0.060, 0.012, (x0 + 0.030, y0 + 0.048),
+                  E.luz(34)))
+        self.plazo = E.banda(x1 - x0 - 0.060, 0.012, (x0 + 0.030, y0 + 0.052),
+                             E.LLERAS)
         self.plazo.origin = (-0.5, 0)        # se vacia hacia la izquierda
         a(self.plazo)
-        x = -0.86
+        x = x0 + 0.030
         for tecla, que in (("1", "responder"), ("2", "borrar")):
-            piezas, ancho = E.tecla(tecla, que, x, -0.37)
+            piezas, ancho = E.tecla(tecla, que, x, y0 + 0.018)
             self.tarjeta += piezas
             x += ancho + 0.02
         if esperan > 1:
-            a(E.pequena(f"y {esperan - 1} más esperando", (-0.86, -0.42),
-                        E.TEXTO_TENUE, escala=0.5))
+            a(E.pequena(f"y {esperan - 1} más esperando", (x0 + 0.030,
+                        y0 - 0.020), E.TEXTO_TENUE, escala=0.52))
 
     def explicar(self, texto, bien):
         """Por que estuvo bien o mal lo que hiciste, un momento."""
@@ -573,78 +666,246 @@ class Dialogo:
     """La charla con un vecino de la cafeteria.
 
     Abajo y en modo noche, como un subtitulo de cine: la escena sigue a
-    la vista, porque lo que importa es a QUIEN se lo oyes. Alterna dos
-    modos: las lineas de una respuesta, y el tarjeton de preguntas que
-    se pueden hacer con lo que ya sabes.
+    la vista, porque lo que importa es a QUIEN se lo oyes.
+
+    Tres cosas que se midieron contra lo que piden las guias de
+    accesibilidad de videojuegos y que antes no se cumplian:
+
+      - CUERPO DE TEXTO. El minimo recomendado es 46 px a 1080p (unos
+        31 a 720p). El dialogo iba a la mitad de eso y la etiqueta de
+        quien habla era casi ilegible.
+      - FONDO PROPIO. Texto claro directamente sobre la escena 3D es lo
+        que todas desaconsejan: segun la pared de detras, se perdia.
+        Ahora hay un panel de tinta con filete, no solo un degradado.
+      - EL COSTE, PEGADO A SU OPCION. El «10 min» vivia en el borde
+        derecho de la pantalla, a medio metro de la linea a la que se
+        refiere.
+
+    El panel crece HACIA ARRIBA desde una base fija: asi la leyenda y la
+    primera linea no bailan segun cuantas preguntas haya.
     """
 
+    BASE = -0.370            # linea de la opcion mas baja
+    PASO = 0.058             # separacion entre opciones
+    SUELO = -0.418           # el papel acaba ANTES de la barra de teclas
+    MARGEN = -0.835          # sangrado del texto
+    COSTE_X = 0.790          # donde se alinea «10 min», dentro del panel
+    LETRAS_POR_SEG = 58.0    # a que ritmo se imprime
+    ANCHO = 60               # caracteres por linea
+    ALTO_LINEA = 0.036       # lo que ocupa una linea a escala 1.18
+    ENTRADA = 0.26           # desde donde sube el papel al abrirse
+
     def __init__(self, nombre, quien, al_elegir):
+        # TODO lo del dialogo cuelga de esta caja, para animarla entera
+        # de una vez: moviendo pieza a pieza se descuadraba.
+        self.caja = Entity(parent=camera.ui)
         self.piezas = []
-        self.cuerpo = []              # lo que cambia entre modos
+        self.cuerpo = []
         self.al_elegir = al_elegir
+        self.nombre, self.quien = nombre, quien
         self.lineas = []
         self.indice = 0
         self.modo = None
+        self.imprimiendo = None
+        self.entrado = False         # el papel solo sube la primera vez
+        self.pico_x = None           # donde esta en pantalla quien habla
+
+    # ---------------------------------------------------------------
+    #  el panel
+    # ---------------------------------------------------------------
+
+    def apuntar(self, x):
+        """Donde esta en pantalla quien habla, para ponerle el pico.
+
+        Es lo que resuelve Detroit: la opcion no flota suelta, sale del
+        personaje. Aqui el papel no se mueve, pero le crece un pico de
+        bocadillo debajo de quien habla, y con eso la etiqueta y la cara
+        se leen como la misma persona.
+        """
+        self.pico_x = None if x is None else max(-0.80, min(0.80, x))
+
+    def _fondo(self, arriba):
+        """Tira de papel de `arriba` al suelo, ajustada al contenido."""
+        _limpiar(self.piezas)
+        alto = arriba - self.SUELO
+        medio = (arriba + self.SUELO) / 2
+        c = self.caja
         a = self.piezas.append
-        self.piezas += E.degradado_vertical(-0.52, -0.18, alfa=230)
-        a(E.banda(0.055, 0.0045, (-0.8325, -0.205), E.LLERAS))
-        a(E.pequena(f"{nombre.upper()}  ·  {quien}", (-0.86, -0.222),
-                    E.LLERAS, escala=0.58))
-        a(E.banda(2.4, 0.003, (0, -0.418), E.luz(46), z=E.Z_ADORNO))
+        a(E.banda(2.0, alto, (0.006, medio - 0.006), E.tinta(120),
+                  padre=c, z=E.Z_FONDO + 0.004))
+        a(E.banda(2.0, alto, (0, medio), E.PAPEL, padre=c, z=E.Z_FONDO))
+        self.piezas += E.filete(2.0, (-1.0, arriba), E.TINTA, padre=c)
+        if self.pico_x is not None:
+            # Dos triangulos: el de abajo hace de filo, como el del
+            # canto del papel. Sin el, el pico se leia como un triangulo
+            # suelto en vez de como la punta del bocadillo.
+            a(Entity(parent=c, model=Mesh(
+                vertices=[(self.pico_x - 0.026, arriba, 0),
+                          (self.pico_x + 0.026, arriba, 0),
+                          (self.pico_x, arriba + 0.034, 0)],
+                triangles=[(0, 1, 2)], mode="triangle"),
+                color=E.TINTA, position=(0, 0, E.Z_FONDO + 0.002)))
+            a(Entity(parent=c, model=Mesh(
+                vertices=[(self.pico_x - 0.022, arriba, 0),
+                          (self.pico_x + 0.022, arriba, 0),
+                          (self.pico_x, arriba + 0.028, 0)],
+                triangles=[(0, 1, 2)], mode="triangle"),
+                color=E.PAPEL, position=(0, 0, E.Z_FONDO)))
+        ancho = 0.055 + 0.0135 * len(self.nombre)
+        a(E.banda(ancho, 0.046, (self.MARGEN + ancho / 2 - 0.010,
+                                 arriba - 0.030), E.LLERAS, padre=c,
+                  z=E.Z_ADORNO))
+        a(E.etiqueta(self.nombre.upper(), (self.MARGEN, arriba - 0.030),
+                     0.80, E.NOCHE, origen=(-0.5, 0), padre=c))
+        a(E.pequena(self.quien, (self.MARGEN + ancho + 0.004, arriba - 0.030),
+                    E.TINTA_TENUE, escala=0.62, origen=(-0.5, 0.5), padre=c))
+        self._entrar()
+        return arriba - 0.072
+
+    def _entrar(self):
+        """El papel sube la primera vez, como quien deja una hoja encima."""
+        if self.entrado:
+            return
+        self.entrado = True
+        self.caja.y = -self.ENTRADA
+        self.caja.animate_y(0, duration=0.26, curve=curve.out_cubic)
+
+    # ---------------------------------------------------------------
+    #  decir
+    # ---------------------------------------------------------------
 
     def decir(self, lineas):
         _limpiar(self.cuerpo)
         self.modo = "lineas"
         self.lineas = list(lineas)
         self.indice = 0
-        self.texto = E.entradilla("", (-0.86, -0.262), 0.92, E.TEXTO, ancho=70)
-        self.cuenta = E.pequena("", (0.86, -0.222), E.TEXTO_TENUE,
-                                escala=0.50, origen=(0.5, 0.5))
+        self.texto = E.entradilla(" ", (self.MARGEN, 0), 1.18, E.TINTA,
+                                  ancho=self.ANCHO, padre=self.caja)
+        self.cuenta = E.pequena("", (self.COSTE_X, 0), E.TINTA_TENUE,
+                                escala=0.62, origen=(0.5, 0.5),
+                                padre=self.caja)
         self.cuerpo += [self.texto, self.cuenta]
-        self.cuerpo += E.leyenda((("enter", "seguir"),), -0.458)
+        self.cuerpo += E.leyenda((("enter", "seguir"),), -0.462,
+                                 padre=self.caja)
         self._pintar()
 
     def _pintar(self):
-        self.texto.text = self.lineas[self.indice]
-        self.texto.wordwrap = 70
-        self.cuenta.text = f"{self.indice + 1} / {len(self.lineas)}"
+        """Mide la linea, ajusta el papel a su alto y la empieza a imprimir."""
+        entero = self.lineas[self.indice]
+        self.texto.text = entero
+        self.texto.wordwrap = self.ANCHO
+        n = max(1, math.ceil(len(entero) / self.ANCHO))
+        alto = max(0.052, n * self.ALTO_LINEA + 0.026)
+        y = self._fondo(min(-0.150, self.SUELO + alto + 0.098))
+        self.texto.position = (self.MARGEN, y)
+        self.cuenta.position = (self.COSTE_X, y + 0.044)
+        self.cuenta.text = (f"{self.indice + 1} / {len(self.lineas)}"
+                            if len(self.lineas) > 1 else "")
+        self.texto.text = ""
+        self.imprimiendo = [entero, 0.0]
+
+    def avanzar_impresion(self, dt):
+        """Un paso de la impresion. El cliente la llama cada fotograma."""
+        if not self.imprimiendo:
+            return
+        entero, puestas = self.imprimiendo
+        antes = int(puestas)
+        puestas = min(len(entero), puestas + self.LETRAS_POR_SEG * dt)
+        self.imprimiendo[1] = puestas
+        # Solo se toca el Text cuando entra una letra NUEVA: asignar
+        # .text rehace la malla entera, y hacerlo cada fotograma era
+        # rehacerla sesenta veces por segundo para nada.
+        if int(puestas) != antes:
+            self.texto.text = entero[:int(puestas)]
+        if puestas >= len(entero):
+            self.texto.text = entero
+            self.imprimiendo = None
+
+    def completar(self):
+        """Enter a medias: planta la linea entera. True si habia algo."""
+        if not self.imprimiendo:
+            return False
+        self.texto.text = self.imprimiendo[0]
+        self.imprimiendo = None
+        return True
 
     def avanzar(self):
         """Pasa a la siguiente linea. Devuelve True si ya no quedan."""
+        if self.completar():
+            return False
         if self.indice + 1 >= len(self.lineas):
             return True
         self.indice += 1
         self._pintar()
         return False
 
-    def preguntar(self, opciones):
-        """opciones: [(texto, nota)]. La nota es lo que cuesta («10 min»).
+    # ---------------------------------------------------------------
+    #  preguntar
+    # ---------------------------------------------------------------
 
-        Casillas sin marcar, como el tarjeton: elegir una pregunta es
-        decidir en que gastas la manana.
+    def preguntar(self, opciones):
+        """opciones: [(texto, nota, abre)].
+
+        `abre` dice si esa pregunta destapa mas preguntas. Se marca con
+        un filete al margen, como Detroit marca las opciones que tienen
+        consecuencia: no dice QUE va a pasar, solo que ahi hay hilo del
+        que tirar.
         """
         _limpiar(self.cuerpo)
         self.modo = "preguntas"
-        for i, (texto, nota) in enumerate(opciones):
-            y = -0.258 - i * 0.042
-            self.cuerpo += E.casilla((-0.848, y - 0.011), E.luz(90),
-                                     fondo=E.NOCHE, lado=0.020)
-            self.cuerpo.append(E.etiqueta(f"{i + 1}   {texto}", (-0.82, y), 0.88,
-                                          E.TEXTO if nota else E.TEXTO_TENUE))
+        self.imprimiendo = None
+        c = self.caja
+        n = max(1, len(opciones))
+        paso = self.PASO if n <= 5 else max(0.042, 0.290 / n)
+        self._fondo(min(-0.120, self.BASE + (n - 1) * paso + 0.118))
+
+        for i, opcion in enumerate(opciones):
+            texto, nota = opcion[0], opcion[1]
+            abre = opcion[2] if len(opcion) > 2 else False
+            y = self.BASE + (n - 1 - i) * paso
+            if abre:
+                self.cuerpo.append(E.banda(0.006, paso - 0.014,
+                                           (self.MARGEN - 0.014, y - 0.011),
+                                           E.OSPINA, padre=c))
+            self.cuerpo += E.casilla((self.MARGEN + 0.014, y - 0.012),
+                                     E.TINTA, fondo=E.PAPEL, lado=0.026,
+                                     padre=c)
+            linea = E.etiqueta(f"{i + 1}   {texto}", (self.MARGEN + 0.046, y),
+                               1.10, E.TINTA if nota else E.TINTA_TENUE,
+                               padre=c)
+            self.cuerpo.append(linea)
             if nota:
-                self.cuerpo.append(E.pequena(nota, (0.86, y - 0.002), E.GAITAN,
-                                             escala=0.52, origen=(0.5, 0.5)))
+                self.cuerpo.append(E.pequena(
+                    nota, (self.COSTE_X, y - 0.004), E.GAITAN,
+                    escala=0.64, origen=(0.5, 0.5), padre=c))
+                ancho_linea = getattr(linea, "width", None) or (
+                    0.0118 * len(f"{i + 1}   {texto}"))
+                self.cuerpo += self._puntos(
+                    self.MARGEN + 0.060 + ancho_linea, self.COSTE_X - 0.045,
+                    y - 0.010, padre=c)
             self.cuerpo.append(Button(
-                parent=camera.ui, color=color.clear,
-                highlight_color=E.luz(26),
-                scale=(1.74, 0.038), position=(0, y - 0.011),
+                parent=c, color=color.clear, highlight_color=E.tinta(28),
+                scale=(1.70, paso - 0.004), position=(0, y - 0.012),
                 on_click=Func(self.al_elegir, i)))
         self.cuerpo += E.leyenda(((f"1-{len(opciones)}", "preguntar"),
-                                  ("esc", "despedirse")), -0.458)
+                                  ("esc", "despedirse")), -0.462, padre=c)
+
+    def _puntos(self, desde, hasta, y, paso=0.016, padre=None):
+        """Puntitos sueltos entre dos x, como los de un indice."""
+        if hasta - desde < paso * 2:
+            return []
+        n = int((hasta - desde) / paso)
+        hueco = (hasta - desde) / n
+        return [E.banda(0.0025, 0.0025, (desde + k * hueco, y), E.TINTA_TENUE,
+                        padre=padre)
+                for k in range(1, n)]
 
     def cerrar(self):
         _limpiar(self.cuerpo)
         _limpiar(self.piezas)
+        if self.caja is not None:
+            destroy(self.caja)
+            self.caja = None
 
 
 def _boton_papel(texto, posicion, ancho=0.46, z=E.Z_ADORNO_MODAL):

@@ -40,6 +40,10 @@ CERCA = 1.0                # tropezarse con el vigilante
 TIEMPO_PILLAR = 0.9
 OLVIDO = 0.5               # cuanto baja la sospecha por segundo sin verte
 AVISOS_MAXIMOS = 3         # al tercero te sacan del colegio
+# Tras un aviso nadie te ve durante estos segundos. Es el tiempo que
+# tardan en irse: sin el, vuelves del pasillo y ya estas otra vez dentro
+# del cono del que te pillo, sin margen para colocarte.
+GRACIA_AVISO = 4.0
 VELOCIDAD = 1.1            # paso de ronda, mas lento que el tuyo
 ESPERA = 1.8               # parada en cada punto de la ronda
 BARRIDO = 45.0             # en la parada barre con la linterna a cada lado
@@ -223,7 +227,9 @@ class Vigilante:
         return not self.camino
 
     def _investigar(self, dt):
-        self.corriendo = self.modo == "acude"
+        # "aleja" corre como "acude", pero al llegar no busca: sigue la
+        # ronda desde el punto al que fue.
+        self.corriendo = self.modo in ("acude", "aleja")
         if self.modo == "busca":
             # Donde oyo el ruido: barre a un lado y a otro con la linterna.
             self.andando = False
@@ -234,7 +240,7 @@ class Vigilante:
                 self.modo, self.camino = "vuelve", vuelta or [self.ruta[self.destino]]
             return
         self.andando = True
-        if self._seguir_camino(dt, CARRERA if self.modo == "acude" else self.velocidad):
+        if self._seguir_camino(dt, CARRERA if self.corriendo else self.velocidad):
             if self.modo == "acude":
                 self.modo, self.desde = "busca", self.rumbo
             else:
@@ -277,6 +283,28 @@ class Vigilante:
             self.sentido = -self.sentido      # ida y vuelta
         self.destino += self.sentido
         self.desde, self.espera = self.rumbo, ESPERA
+
+    def alejarse(self, evitar):
+        """Deja lo que estaba haciendo y se va al punto de SU ronda mas
+        lejos de `evitar` (una lista de (x, z)), corriendo.
+
+        Mide por el punto mas cercano de los que hay que evitar, no por
+        la suma: no sirve de nada irse lejos de donde te pillo si eso lo
+        deja plantado en el pasillo al que te llevan.
+        """
+        def lejania(p):
+            return min(math.hypot(p[0] - x, p[1] - z) for x, z in evitar)
+
+        lejos = max(range(len(self.ruta)), key=lambda i: lejania(self.ruta[i]))
+        self.atento = self.espera = self.buscar = 0.0
+        self.hacia_ruido = None
+        self.destino = lejos
+        if not 0 <= self.destino + self.sentido < len(self.ruta):
+            self.sentido = -self.sentido      # la ronda sigue desde el extremo
+        camino = (self.plano.ruta((self.x, self.z), self.ruta[lejos])
+                  if self.plano else None)
+        self.modo = "aleja"
+        self.camino = camino or [self.ruta[lejos]]
 
     def ve(self, x, z, agachado, tapan):
         """Distancia a la que te ve, o None si no te ve."""
@@ -329,6 +357,7 @@ class Sigilo:
         self.escapo = False
         self.sospecha = 0.0           # 0..1
         self.avisos = 0
+        self.gracia = 0.0             # segundos en los que nadie te ve
         self.quien = None             # el que te esta viendo ahora
         # Rincones (x0, x1, z0, z1) donde nadie te ve ni te oye.
         self.zonas_seguras = list(zonas_seguras)
@@ -405,14 +434,18 @@ class Sigilo:
         self._sonar(dt)
         tapan = self.tapan_agachado if agachado else self.tapan_de_pie
         self.a_salvo = self.en_zona_segura(x, z)
-        oye = (0.0 if self.a_salvo
+        # La ventaja de despues de un aviso: siguen la ronda (y yendose),
+        # pero ni te ven ni te oyen mientras dura.
+        self.gracia = max(0.0, self.gracia - dt)
+        ciego = self.gracia > 0.0
+        oye = (0.0 if self.a_salvo or ciego
                else OIDO_CORRIENDO if corriendo        # correr ya es moverse
                else 0.0 if not moviendose
                else 0.0 if agachado else OIDO_ANDANDO)
         self.quien, tasa = None, 0.0
         for v in self.vigilantes:
             v.avanzar(dt)
-            dist = None if self.a_salvo else v.ve(x, z, agachado, tapan)
+            dist = None if self.a_salvo or ciego else v.ve(x, z, agachado, tapan)
             lento = 1.0
             if dist is None and oye:
                 oido = math.hypot(x - v.x, z - v.z)
@@ -431,7 +464,24 @@ class Sigilo:
             return None
         self.sospecha, self.quien = 0.0, None
         self.avisos += 1
+        self.dispersar(x, z)
         return "expulsada" if self.expulsada else "pillada"
+
+    def dispersar(self, x, z):
+        """Un aviso deshace el corrillo: cada vigilante se va corriendo a
+        la punta de su ronda mas lejos de donde te pillo y del sitio al
+        que te llevan, y durante GRACIA_AVISO nadie te ve.
+
+        Antes se quedaban amontonados en el sitio —el que te vio y los
+        que habian acudido al jaleo—, asi que volvias del pasillo a la
+        misma trampa y no habia forma de recolocarse.
+        """
+        self.gracia = GRACIA_AVISO
+        evitar = [(x, z)]
+        if self.regreso is not None:
+            evitar.append((self.regreso[0], self.regreso[1]))
+        for v in self.vigilantes:
+            v.alejarse(evitar)
 
     def rayos(self, vigilante):
         return vigilante.rayos(self.tapan_de_pie)
@@ -568,16 +618,33 @@ if __name__ == "__main__":
         v.avanzar(0.05)
     assert v.andando and v.x < 10.0 and abs(abs(v.rumbo) - 270.0) % 360 > 80
 
-    # Te pilla en menos de un segundo a 3 m; tres veces y fuera.
+    # Te pilla en menos de un segundo a 3 m; tres veces y fuera. Como
+    # cada aviso lo manda lejos, la prueba se le planta delante.
     s = Sigilo({"g": [(0.0, 0.0), (10.0, 0.0)]}, (0.0, -5.0, 0.0))
-    s.vigilantes[0].velocidad = 0.0
+    g = s.vigilantes[0]
+    g.velocidad = 0.0
     eventos = []
-    for _ in range(200):
-        e = s.actualizar(0.05, 3.0, 0.0, False, False)
+    for _ in range(1200):
+        mx, mz = g.mira()
+        e = s.actualizar(0.05, g.x + mx * 3.0, g.z + mz * 3.0, False, False)
         if e:
             eventos.append(e)
     assert eventos == ["pillada", "pillada", "expulsada"], eventos
-    assert s.actualizar(0.05, 3.0, 0.0, False, False) is None
+    assert s.actualizar(0.05, g.x, g.z, False, False) is None
+
+    # Un aviso deshace el corrillo: el que te pilla se va al otro extremo
+    # de su ronda y por el camino no te ve.
+    s = Sigilo({"g": [(0.0, 0.0), (10.0, 0.0)]}, (0.0, -5.0, 0.0))
+    g = s.vigilantes[0]
+    g.velocidad = 0.0
+    for _ in range(200):
+        if s.actualizar(0.05, 2.0, 0.0, False, False):
+            break
+    assert g.modo == "aleja" and s.gracia == GRACIA_AVISO, (g.modo, s.gracia)
+    for _ in range(int(6.0 / 0.05)):
+        assert s.actualizar(0.05, 2.0, 0.0, False, False) is None, "ve en la gracia"
+    assert g.x > 9.0, g.x                      # se planto en la otra punta
+    assert s.gracia == 0.0 and s.sospecha == 0.0
 
     # Correr a su espalda tambien te delata; andar no.
     s = Sigilo({"g": [(0.0, 0.0), (10.0, 0.0)]}, (0.0, -5.0, 0.0))

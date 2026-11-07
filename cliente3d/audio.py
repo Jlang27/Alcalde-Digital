@@ -57,6 +57,11 @@ MUSICA_TENSION = "musica_tension.ogg"
 AMBIENTE_CALLE = "ambiente.ogg"
 AMBIENTE_CAFETERIA = "ambiente_cafeteria.ogg"
 AMBIENTE_LLUVIA = "ambiente_lluvia.wav"
+# Cada sitio suena a lo que es: desde el piso 8 el trafico es un zumbido
+# sin ruedas y lo que se oye es el mitin de abajo; dentro del estudio no
+# hay calle, hay ventilador y aire. Los compone herramientas/componer_ambientes.py.
+AMBIENTE_CIUDAD_ALTO = "ambiente_ciudad_alto.ogg"
+AMBIENTE_ESTUDIO = "ambiente_estudio.ogg"
 
 # (archivo, peso, variacion de tono). El peso es relativo al ajuste de
 # efectos; la variacion evita que una tecla repetida suene a metralleta.

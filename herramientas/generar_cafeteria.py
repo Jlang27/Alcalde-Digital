@@ -208,7 +208,7 @@ def banquetas():
     # registradora: si la fila ocupa toda la barra, el jugador nunca
     # llega a menos de 2 m del mostrador y no puede hablar con quien
     # atiende (medido: la fila lo frena en z=2.24 de x=+0.45 a +3.45).
-    for x in (0.60, 1.20, 1.80, 2.40):
+    for x in (0.55, 1.00, 1.50, 1.95):
         cilindro("banqueta_asiento", 0.19, 0.07, (x, 0.70, 2.78), 14)
         cilindro("banqueta_metal", 0.03, 0.66, (x, 0.33, 2.78), 8)
         cilindro("banqueta_metal", 0.17, 0.03, (x, 0.015, 2.78), 14)

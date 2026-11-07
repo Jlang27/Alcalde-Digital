@@ -12,6 +12,8 @@ la escena del expediente: 1 publicar el rumor, 2 rueda de prensa,
 import os
 import sys
 
+import math
+
 from banco import *
 from banco import J
 import banco
@@ -45,11 +47,30 @@ tecla("enter", 0.5)
 # La llegada: el asesor entra preocupado y cita a Daniel en su oficina.
 assert hasta_estado("cinematica", 20), estado()
 from cine_campana import PLANOS_LLEGADA, DURACION_LLEGADA
-inicio = 0.0
+inicio, marcas = 0.0, []
 for nombre, dura, *_ in PLANOS_LLEGADA:
-    pasar(inicio + dura * 0.75 - J.cl.cine.t)
-    foto(f"campana_llegada_{nombre}")
+    marcas.append((inicio + dura * 0.75, nombre))
     inicio += dura
+# Fotograma a fotograma, porque aqui se cuela un bug que no se ve en una
+# captura: el asesor no puede DESPLAZARSE en «idle». Se iba flotando
+# hasta la puerta porque el fin de su ultima frase caia 0,2 s despues de
+# que arrancara a irse y le borraba el paso.
+_a = J.cl.asesor
+_ant = (_a.getX(), _a.getZ())
+for cuando, nombre in marcas:
+    while J.cl.cine is not None and J.cl.cine.t < cuando:
+        pasar(frames=1)
+        _x, _z = _a.getX(), _a.getZ()
+        _v = math.hypot(_x - _ant[0], _z - _ant[1]) * 30.0
+        _ant = (_x, _z)
+        # Entre 0,2 y 4 m/s: por debajo esta quieto y por encima es un
+        # corte de plano, que lo recoloca de golpe.
+        if 0.2 < _v < 4.0:
+            assert _a.getCurrentAnim() == "caminar", (
+                round(J.cl.cine.t, 2), _a.getCurrentAnim(), "el asesor flota")
+    if J.cl.cine is None:
+        break
+    foto(f"campana_llegada_{nombre}")
 assert hasta_estado("rotulo", 5), estado()
 assert J.cl.actor.getPos().length() < 0.01 and abs(J.cl.actor.getH()) < 0.01, (
     J.cl.actor.getPos(), J.cl.actor.getH())

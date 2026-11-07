@@ -36,7 +36,7 @@ PLANOS = (
     # Dentro: el pasillo a oscuras, de espaldas, hacia la rectoria.
     # Ya dentro del pasillo: desde la boca, el canto del muro tapaba medio
     # plano.
-    ("pasillo", 4.5, Vec3(21.6, 1.75, mundo.Z_MEDIO_PASILLO),
+    ("pasillo", 5.5, Vec3(21.6, 1.75, mundo.Z_MEDIO_PASILLO),
      Vec3(20.4, 1.7, mundo.Z_MEDIO_PASILLO),
      Vec3(4.0, 1.3, 5.3), Vec3(4.0, 1.3, 5.3), 48),
     # El despacho: los dos, con la lampara del rector entre ellos.
@@ -50,11 +50,18 @@ for _p in PLANOS:
     _t += _p[1]
 DURACION = _t
 
-# Por donde camina la protagonista: (desde, hasta, ritmo del clip). El
-# clip de caminar esta hecho para 2,7 m/s; mas lento patina si no se frena.
+# Por donde camina la protagonista: (desde, hasta). El ritmo del clip ya
+# no se pone a ojo: sale de la velocidad del tramo (ver _entra). El clip
+# «caminar» anda a 0,70 m/s —medido con mundo.velocidad_natural, no los
+# 2,7 que decia este comentario—, asi que los numeros de antes (0,4 y
+# 0,95) movian los pies a 0,28 m/s mientras el cuerpo volaba a 1,10: se
+# veia como si estuviera quieta y la arrastraran.
+# El tramo del pasillo era de 11,5 m en 4,5 s (2,56 m/s): ni al ritmo
+# tope pisa tan rapido, asi que empieza mas adentro y el plano dura un
+# segundo mas.
 CAMINOS = {
-    "llegada": ((13.2, ZF - 1.9), (7.2, ZF - 1.1), 0.4),
-    "pasillo": ((17.0, 5.3), (5.5, 5.3), 0.95),
+    "llegada": ((13.2, ZF - 1.9), (7.2, ZF - 1.1)),
+    "pasillo": ((14.0, 5.3), (5.5, 5.3)),
 }
 DONDE_HABLA = (0.35, 0.45)              # de pie, frente al escritorio
 RECTOR = mundo.FIGURANTES["rectoria"]["rector"][1]
@@ -75,13 +82,24 @@ class CineColegio:
     """Se crea con el colegio ya montado y se avanza con actualizar(dt),
     que devuelve True al terminar. actor: la protagonista."""
 
-    def __init__(self, actor, protagonista):
+    def __init__(self, actor, protagonista, rector=None):
         self.t = 0.0
         self.plano = -1
         self.fin = DURACION
         self.actor = actor
         self.nombre = protagonista
+        self.rector = rector
         self.calla = None             # cuando deja de hablar la protagonista
+        self.calla_rector = None      # ...y cuando deja de hablar el rector
+        # Su postura de reposo es la que le toco al montar la sala:
+        # poner_rutina elige al azar dentro de la familia «sentado», asi
+        # que no se puede dar por sabida. De ahi salen sus gestos.
+        self.reposo_rector = (rector.getCurrentAnim() or "sentado"
+                              if rector is not None else None)
+        self.gestos_rector = [c for c in mundo.clips_de(rector, "sentado")
+                              if c != self.reposo_rector] if rector else []
+        self.gesto_rector = 0
+        self.dicho = []               # subtitulo que esta puesto ahora
         self.piezas = []
         Intro._barras(self)
         self.rayo = E.velo(color.rgba(0.82, 0.88, 1.0, 0), z=-0.8)
@@ -116,15 +134,42 @@ class CineColegio:
 
     def _decir(self, quien, texto, dura):
         prota = quien == "prota"
+        # La frase anterior se apaga AL ENTRAR la nueva. Su fade_out dura
+        # 0,3 s y la siguiente entraba dentro de esa ventana: durante tres
+        # decimas se leian las dos encima, en el mismo renglon. No se
+        # destruye, se oculta: destruir un Text con una animacion viva
+        # revienta con un assert de NodePath.
+        for p in self.dicho:
+            p.enabled = False
         piezas = Intro._subtitulo(self, self.nombre.upper() if prota else "EL RECTOR",
                                   texto, E.LLERAS if prota else E.TEXTO_TENUE)
+        self.dicho = piezas
         for p in piezas:
             p.fade_out(duration=0.3, delay=dura)
         if prota:
             self._anima("hablar")
             self.calla = self.t + dura
+        elif self.rector is not None:
+            # Un gesto SENTADO, no «hablar»: ese clip es de pie y lo
+            # levantaria de la silla. Hasta ahora soltaba sus dos frases
+            # en pose fija, que era lo que delataba la cinematica.
+            # «sentado_dudar» resulto ser incredulidad con la cabeza
+            # entre las manos: el rector parecia dormido sobre la mesa
+            # mientras hablaba. Este es un gesto sentado neutro.
+            # Un clip sentado DISTINTO del que tiene puesto, en bucle.
+            # Antes era «sentado2» fijo: como el reposo tambien sale de
+            # esa familia, la mitad de las partidas el rector soltaba sus
+            # frases sin moverse. Y era play, no loop: el gesto dura 2,97 s
+            # y la frase 3,4, asi que se quedaba SIN animacion —congelado
+            # a media pose— y luego pegaba el salto (medido con el banco:
+            # getCurrentAnim() daba None).
+            if self.gestos_rector:
+                gesto = self.gestos_rector[self.gesto_rector % len(self.gestos_rector)]
+                self.gesto_rector += 1
+                self.rector.loop(gesto)
+                self.calla_rector = self.t + dura
 
-    def _entra(self, nombre):
+    def _entra(self, nombre, dura):
         """Coloca a la protagonista al empezar cada plano."""
         a = self.actor
         if nombre == "fachada":
@@ -132,9 +177,11 @@ class CineColegio:
             return
         a.show()
         if nombre in CAMINOS:
-            (x0, z0), (x1, z1), ritmo = CAMINOS[nombre]
+            (x0, z0), (x1, z1) = CAMINOS[nombre]
             a.setH(180.0 - math.degrees(math.atan2(x1 - x0, z1 - z0)))
-            self._anima("caminar", ritmo)
+            # Lo que recorre entre lo que dura: asi pisa lo que avanza.
+            v = math.hypot(x1 - x0, z1 - z0) / dura
+            self._anima("caminar", mundo.ritmo_para(a, "caminar", v))
             return
         x, z = DONDE_HABLA
         a.setPos(x, 0, z)
@@ -154,7 +201,7 @@ class CineColegio:
                 self.negro.color = color.rgba(0, 0, 0, 1)
                 self.negro.animate_color(color.rgba(0, 0, 0, 0),
                                          duration=NEGRO_CORTE)
-            self._entra(nombre)
+            self._entra(nombre, dura)
         f = (self.t - INICIOS[i]) / dura
         s = _suave(f)
         camera.fov = fov
@@ -162,7 +209,7 @@ class CineColegio:
         camera.rotation = Vec3(0, 0, 0)
         camera.look_at(m0 + (m1 - m0) * s)
         if nombre in CAMINOS:
-            (x0, z0), (x1, z1), _r = CAMINOS[nombre]
+            (x0, z0), (x1, z1) = CAMINOS[nombre]
             f = min(1.0, f)
             self.actor.setPos(x0 + (x1 - x0) * f, 0, z0 + (z1 - z0) * f)
 
@@ -202,6 +249,9 @@ class CineColegio:
         if self.calla is not None and t >= self.calla:
             self.calla = None
             self._anima("idle")
+        if self.calla_rector is not None and t >= self.calla_rector:
+            self.calla_rector = None
+            self.rector.loop(self.reposo_rector)
         if cruza(T_NEGRO) and self.fin == DURACION:
             self.negro.animate_color(color.rgba(0, 0, 0, 1), duration=0.8)
         return t >= self.fin

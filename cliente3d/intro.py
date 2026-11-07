@@ -209,16 +209,37 @@ class Intro:
                           col=color.Color(0.95, 0.92, 0.85, 0.85))
 
     def _subtitulo(self, etiqueta, texto, col_etiqueta):
-        """Lo que se oye, escrito dentro de la barra de abajo."""
+        """Lo que se oye, escrito dentro de la barra de abajo.
+
+        Iban a escala 0,74 cuando el dialogo del juego va a 1,18, o sea
+        muy por debajo del minimo que piden las guias de accesibilidad
+        (46 px a 1080p). Aqui NO se usa el papel del resto de la
+        interfaz: esto es un subtitulo de cine sobre barras negras y
+        debe seguir pareciendolo. Lo que se arregla es el tamaño, el
+        contraste y quien habla.
+        """
         y = -0.5 + ALTO_BARRA / 2
         piezas = []
         if etiqueta:
-            e = E.pequena(etiqueta, (0, y + 0.028), col_etiqueta,
-                          escala=0.46, origen=(0, 0))
+            # Un filete de tinta delante del nombre: se ve de quien es
+            # la voz sin leer, que es lo que pide una cinematica.
+            ancho = 0.010 + 0.0132 * len(etiqueta)
+            b = E.banda(0.030, 0.0045, (-ancho / 2 - 0.026, y + 0.030),
+                        col_etiqueta or E.TEXTO_TENUE)
+            b.z = -0.6
+            piezas.append(b)
+            e = E.pequena(etiqueta, (0, y + 0.030), col_etiqueta,
+                          escala=0.64, origen=(0, 0))
             e.z = -0.6
             piezas.append(e)
-        t = E.entradilla(texto, (0, y - 0.010), 0.74, E.TEXTO,
-                         origen=(0, 0), ancho=200)
+        # Plancha oscura detras: la barra del cinemascope no siempre
+        # llega hasta donde cae la segunda linea.
+        plancha = E.banda(2.4, ALTO_BARRA * 0.92, (0, y - 0.006),
+                          E.tinta(185))
+        plancha.z = -0.55
+        piezas.append(plancha)
+        t = E.entradilla(texto, (0, y - 0.012), 1.00, E.TEXTO,
+                         origen=(0, 0), ancho=74)
         t.z = -0.6
         piezas.append(t)
         self.piezas += piezas

@@ -6,6 +6,7 @@ import textwrap
 import simplepbr
 from direct.actor.Actor import Actor
 from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
+                          NodePath,
                           Geom, GeomLines, GeomNode, GeomVertexData,
                           GeomVertexFormat, GeomVertexWriter, LColor, Material,
                           PNMImage, PointLight, SamplerState, ShaderAttrib,
@@ -14,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec2, Vec3
 
 from contenido import ZONAS_SEGURAS_CAPITULO_2
-from sigilo import DT_VUELO
+from sigilo import CARRERA as CARRERA_RONDA, DT_VUELO, VELOCIDAD as VELOCIDAD_RONDA
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUTA_PERSONAJE = os.path.join(RAIZ, "assets", "personajes", "prueba.glb")
@@ -1044,6 +1045,71 @@ def _trafico(mundo, azar):
     _ACTUAL["vehiculos"] = vehiculos
 
 
+# Gente animada en el mitin. Detras siguen los muñecos de cajas de
+# _muneco(): a mas de unos metros nadie distingue una caja de una
+# persona, pero la fila de delante inmovil era lo que delataba que el
+# mitin estaba muerto.
+#
+# OJO AL ORDEN: primero se cargan TODOS los Actor y solo despues se
+# animan. Intercalar carga y loop() rompe los que ya estaban sonando:
+# medido, de seis figuras quedaban cinco desplomadas (0,27-0,40 m de
+# alto) y solo la ultima de pie. Cargando primero, las seis salen a
+# 1,66-1,80 m. Con el mismo archivo repetido no pasaba, asi que es cosa
+# de cargar .glb DISTINTOS mientras otro actor esta reproduciendo.
+RUTA_GENTIO = os.path.join(RAIZ, "assets", "multitud")
+MODELOS_GENTIO = 4             # cuatro cuerpos distintos bastan de lejos
+# Los .glb vienen a unos 4,1 m; esto los deja en estatura humana.
+ESCALA_GENTIO = 0.426
+# Variacion de talla: la gente no mide toda igual, y como las copias de
+# un mismo modelo comparten fotograma, el tamaño distinto es lo que
+# evita que se lean como calcos.
+VARIACION_TALLA = 0.07
+# Cuantas figuras animadas. Ojo al subirlo: cada una lleva piel y
+# la ciudad se ve tambien desde la oficina del capitulo 3, que ya
+# estaba ajustada de llamadas de dibujo en la grafica integrada.
+FILA_GENTIO = 8
+
+
+def _gentio(mundo, azar):
+    """La gente animada del mitin. Devuelve los Actor cargados."""
+    if not os.path.isdir(RUTA_GENTIO):
+        return []
+    actores = []
+    for i in range(MODELOS_GENTIO):
+        ruta = os.path.join(RUTA_GENTIO, f"peaton_{i}.glb")
+        if not os.path.exists(ruta):
+            continue
+        actor = Actor(application.base.loader.loadModel(
+            Filename.from_os_specific(ruta).getFullpath()).copyTo(NodePath()))
+        _quitar_mapa_de_brillo(actor)
+        actores.append(actor)
+    if not actores:
+        return []
+
+    z0, z1 = MITIN
+    for k in range(FILA_GENTIO):
+        actor = actores[k % len(actores)]
+        z = z0 + (z1 - z0) * (k + 0.5) / FILA_GENTIO + azar.uniform(-0.6, 0.6)
+        x = -azar.uniform(6.9, 8.6)
+        sitio = mundo.attachNewNode(f"gentio_{k}")
+        sitio.setPos(x, 0.15, z)
+        sitio.setH(azar.uniform(55.0, 125.0))        # de cara a la tarima
+        sitio.setScale(ESCALA_GENTIO * azar.uniform(1 - VARIACION_TALLA,
+                                                    1 + VARIACION_TALLA))
+        # La primera vez que sale un modelo se cuelga; las siguientes se
+        # instancian, que comparte malla y animacion.
+        if k < len(actores):
+            actor.reparentTo(sitio)
+        else:
+            actor.instanceTo(sitio)
+    # Y AHORA se animan, con todas ya cargadas.
+    for actor in actores:
+        clips = actor.getAnimNames()
+        if clips:
+            actor.loop(clips[0])
+    return actores
+
+
 def _peatones(mundo):
     """Seis peatones con dos modelos: cada Actor se instancia tres veces.
 
@@ -1058,7 +1124,18 @@ def _peatones(mundo):
     actores = []
     for i, rol in enumerate(("ciudadano", "periodista")):
         ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
-        actor = Actor(ruta)
+        # Con su PROPIA COPIA del modelo: uno de estos dos .glb es ademas
+        # el del protagonista (Mateo es «ciudadano»), y Panda3D devolvia
+        # el mismo nodo para los dos. Al animar uno se descolocaba el
+        # otro, y en la cinematica de apertura los tres peatones de ese
+        # modelo salian tumbados en la acera: tres pares de zapatos.
+        #
+        # OJO, aqui estuvo el peor error del dia: se arreglo con
+        # noCache=True, que ademas de copiar SALTA LA CACHE EN DISCO de
+        # Panda3D. Medido: 7,8 s por modelo frente a 0,07 s copiando. Con
+        # seis modelos asi, cada arranque de la ciudad se iba casi un
+        # minuto en reconvertir lo que ya estaba convertido.
+        actor = Actor(application.base.loader.loadModel(ruta).copyTo(NodePath()))
         _quitar_mapa_de_brillo(actor)
         for j, (x, z, rumbo) in enumerate(PEATONES[i::2]):
             sitio = mundo.attachNewNode(f"peaton_{i}_{j}")
@@ -1068,8 +1145,13 @@ def _peatones(mundo):
                 actor.reparentTo(sitio)
             else:
                 actor.instanceTo(sitio)
-        if "idle" in actor.getAnimNames():
-            actor.loop("idle")
+        # Por los mismos helpers que npc(), no con un loop() a pelo: sin
+        # ellos la pose no llegaba a aplicarse y los peatones de la
+        # cinematica de apertura salian en T (la periodista) o tumbados
+        # en la acera (los demas), dejando a la vista solo los zapatos.
+        # Tres instancias por modelo, asi que eran seis figuras rotas.
+        mezclar(actor)
+        animar_con_vida(actor, "idle")
         actores.append(actor)
     # Van en la misma lista: cambiar_escenario() les hace cleanup() y
     # ciudad_alerta() los salta solo, porque no tienen «celular».
@@ -1077,6 +1159,7 @@ def _peatones(mundo):
         actor = npc(mundo, modelo, (x, 0.15, z), rumbo, "idle")
         if actor is not None:
             actores.append(actor)
+    actores += _gentio(mundo, random.Random(7))
     _ACTUAL["actores"] = actores
 
 
@@ -2908,12 +2991,29 @@ def _pintar_chat(img):
     d, (w, h) = ImageDraw.Draw(img), img.size
     d.rectangle((0, 0, w, h), fill=(14, 12, 24, 255))
     paso, nombre, texto = 32, _letra(17, False), _letra(17, False)
+    margen = 18
     for i in range(h // paso):
         autor, frase = RELLENO_CHAT_4[(i * 7) % len(RELLENO_CHAT_4)]
         y = i * paso + 8
-        d.text((18, y), autor, font=nombre, fill=(*TINTAS_CHAT[i % 4], 255))
+        d.text((margen, y), autor, font=nombre, fill=(*TINTAS_CHAT[i % 4], 255))
         ancho = d.textlength(autor + "  ", font=nombre)
-        d.text((18 + ancho, y), frase, font=texto, fill=(200, 196, 210, 255))
+        # Recortado al ancho de la tira: sin esto las frases largas se
+        # salian de la textura y en pantalla el chat se desbordaba del
+        # marco del monitor. Con puntos suspensivos, como un chat de
+        # verdad cuando no cabe.
+        hueco = w - margen - (margen + ancho)
+        d.text((margen + ancho, y), _recortar(d, frase, texto, hueco),
+               font=texto, fill=(200, 196, 210, 255))
+
+
+def _recortar(d, frase, letra, ancho):
+    """La frase que quepa en ese ancho, con «…» si sobra."""
+    if ancho <= 0 or d.textlength(frase, font=letra) <= ancho:
+        return frase
+    corte = frase
+    while corte and d.textlength(corte + "…", font=letra) > ancho:
+        corte = corte[:-1]
+    return (corte.rstrip() + "…") if corte else ""
 
 
 def _burbuja(d, texto, y, derecha, fondo, tinta, w):
@@ -3222,7 +3322,12 @@ LIMITES = {
 BLOQUEOS = {
     "cafeteria": (
         (0.30, 3.80, 3.30, 4.80),      # la barra
-        (0.41, 2.59, 2.59, 2.97),      # la fila de banquetas
+        # Acaban en x=2.14 para que quepa alguien DELANTE de la
+        # registradora: con la fila llegando a 2.59, lo mas cerca
+        # que se podia estar de Don Rafa eran 2,0 m y no se le
+        # podia hablar (el alcance son 1,6). Solo valia una
+        # franja de 25 cm en la esquina.
+        (0.36, 2.14, 2.59, 2.97),      # la fila de banquetas
     ),
     "plaza": (),
     "rectoria": tuple(OBRA_COLEGIO.paso),
@@ -3565,6 +3670,97 @@ def mezclar(actor):
         pass          # sin esqueleto compatible, se queda como estaba
 
 
+# ---------------------------------------------------------------------
+#  que los pies pisen el suelo
+# ---------------------------------------------------------------------
+# Un ciclo de locomocion lleva su velocidad dentro: mientras un pie esta
+# apoyado retrocede respecto al cuerpo exactamente a la velocidad a la
+# que el personaje deberia avanzar. Nadie estaba comparando esa velocidad
+# con la del juego, asi que los pies resbalaban: medido en el banco, la
+# periodista andando a 2,7 m/s daba una ZANCADA DE 2,57 m (la humana es
+# 0,78) y corriendo 3,38 m (1,45). Eso es lo que se veia como «la
+# animacion de caminar y correr esta bug».
+#
+# No se arregla con una constante a ojo porque cada modelo trae su clip:
+# se mide el del actor y se ajusta su ritmo.
+RITMO_MINIMO, RITMO_MAXIMO = 0.55, 2.45
+PIES = ("LeftFoot", "RightFoot")
+_NATURAL = {}        # (modelo, clip) -> m/s que marca el clip, o None
+
+
+def _pie(actor, sufijo):
+    for j in actor.getJoints():
+        n = j.getName()
+        if n == sufijo or n.endswith(":" + sufijo):
+            return n
+    return None
+
+
+def velocidad_natural(actor, clip):
+    """A cuantos m/s «pisa» ese clip. None si no se puede medir.
+
+    Se recorre el clip fotograma a fotograma mirando los dos pies en el
+    espacio del actor y quedandose, en cada uno, con el que mas
+    retrocede: ese es el apoyado. El eje de avance no se supone, se
+    busca entre los tres (suponerlo daba 0,05 m/s, que era el vaiven
+    vertical del pie).
+    """
+    clave = (actor.getName(), clip)
+    if clave in _NATURAL:
+        return _NATURAL[clave]
+    _NATURAL[clave] = None
+    control = actor.getAnimControl(clip)
+    if control is None:
+        return None
+    n, fps = control.getNumFrames(), control.getFrameRate()
+    if n < 4 or not fps:
+        return None
+    nodos = []
+    for sufijo in PIES:
+        hueso = _pie(actor, sufijo)
+        if hueso is None:
+            return None
+        nodos.append(actor.exposeJoint(None, "modelRoot", hueso))
+
+    antes = control.getFrame()
+    rastro = []
+    try:
+        for f in range(n):
+            control.pose(f)
+            actor.update(force=True)
+            rastro.append([tuple(p.getPos(actor)) for p in nodos])
+    finally:
+        for p in nodos:
+            p.removeNode()
+        control.pose(antes)
+
+    mejor = 0.0
+    for eje in (0, 1, 2):
+        pasos = [min(b[0][eje] - a[0][eje], b[1][eje] - a[1][eje])
+                 for a, b in zip(rastro, rastro[1:])]
+        pasos.sort()
+        # El tercio central: fuera el instante en que cambia el pie.
+        medio = pasos[len(pasos) // 3: 2 * len(pasos) // 3 + 1]
+        if medio:
+            mejor = max(mejor, abs(sum(medio) / len(medio)) * fps)
+    _NATURAL[clave] = mejor or None
+    return _NATURAL[clave]
+
+
+def ritmo_para(actor, clip, velocidad):
+    """El playRate con el que ese clip pisa a esa velocidad.
+
+    Se recorta: por encima de RITMO_MAXIMO las piernas son un borron y
+    queda peor que el patinaje que se queria quitar.
+    """
+    if velocidad <= 0:
+        return 1.0
+    natural = velocidad_natural(actor, clip)
+    if not natural:
+        return 1.0
+    return max(RITMO_MINIMO, min(RITMO_MAXIMO, velocidad / natural))
+
+
 # Hasta donde puede girar el cuello antes de parecer un buho.
 GIRO_CUELLO = 52.0
 # Si el jugador esta mas atras que esto, no lo mira: no tiene ojos en la
@@ -3796,7 +3992,6 @@ LINTERNA = (1.0, 0.80, 0.48)      # ambar: la luz calida contra la noche azul
 LINTERNA_ALERTA = (1.0, 0.16, 0.10)
 # La ronda va a 1,1 m/s y el clip de caminar esta hecho para mas: sin
 # frenarlo, los pies patinan.
-RITMO_RONDA = 0.6
 
 
 def vigilante(mundo):
@@ -3809,8 +4004,6 @@ def vigilante(mundo):
     actor = Actor(Filename.from_os_specific(RUTA_PERSONAJE).getFullpath())
     actor.reparentTo(mundo)
     _quitar_mapa_de_brillo(actor)
-    actor.setPlayRate(RITMO_RONDA, "caminar")
-    actor.setPlayRate(0.75, "correr")     # corre a 3,4 m/s, no a lo que pide el clip
     # El brillo de la linterna a la altura del pecho; el modelo mira a -z.
     # No va por _pieza: esa lo apunta al escenario, y este se va con el actor.
     foco = Entity(model="sphere", scale=0.09, position=(0.0, 1.15, -0.35))
@@ -3870,6 +4063,13 @@ def mover_actor(actor, x, z, rumbo, andando, corriendo=False):
     clip = ("correr" if corriendo and "correr" in actor.getAnimNames()
             else "caminar" if andando else "idle")
     if actor.getCurrentAnim() != clip:
+        # El ritmo sale de lo que el clip pisa y de lo que corre la ronda,
+        # no de una constante a ojo: si no, el vigilante se desliza igual
+        # que se deslizaba el jugador.
+        velocidad = VELOCIDAD_RONDA if clip == "caminar" else (
+            CARRERA_RONDA if clip == "correr" else 0.0)
+        if velocidad:
+            actor.setPlayRate(ritmo_para(actor, clip, velocidad), clip)
         actor.loop(clip)
 
 
@@ -3884,7 +4084,6 @@ def asesor(mundo):
     actor = Actor(Filename.from_os_specific(ruta_personaje("ciudadano")).getFullpath())
     actor.reparentTo(mundo)
     _quitar_mapa_de_brillo(actor)
-    actor.setPlayRate(RITMO_RONDA, "caminar")
     return actor
 
 
@@ -4460,6 +4659,27 @@ RADIO_NPC = 0.28
 # marca de Valeria. Mismo formato que NPCS_CAFETERIA.
 FIGURANTES = {
     "rectoria": {"rector": ("npc4", (-0.5, 0.0, 2.82), 0.0, "sentado")},
+    # La oficina mide 26 x 19 m y estaba literalmente vacia: solo el
+    # asesor de ronda. Un comando de campana a cinco dias de la eleccion
+    # con una sola persona dentro se lee como un decorado. Van de pie y
+    # con «idle», que es el clip que npc3 y npc4 tienen por triplicado:
+    # la rotacion de poner_rutina les da vida sin animaciones nuevas.
+    # Sitios comprobados libres contra los bloqueos de la sala.
+    # npc3 NO entra aqui: es un obrero con chaleco reflectante y casco.
+    # Plantado en una oficina se lee como un chiste. Vale para la calle
+    # de la intro, que es donde ya sale.
+    "campana": {
+        "analista": ("npc4", (5.0, 0.0, -7.4), 180.0, "idle"),
+        "becario": ("npc2", (9.5, 0.0, -5.1), 135.0, "idle"),
+        "prensa": ("npc1", (-1.5, 0.0, 2.9), 90.0, "idle"),
+    },
+    # El estudio tambien estaba vacio. Dos personas fuera de camara: la
+    # que lleva la mesa y la que espera. Apartadas del paso central, que
+    # es por donde Santiago va a la consola.
+    "estudio": {
+        "tecnico": ("npc2", (-3.3, 0.0, -0.6), 90.0, "idle"),
+        "produccion": ("npc4", (3.4, 0.0, 0.2), -90.0, "idle"),
+    },
 }
 
 

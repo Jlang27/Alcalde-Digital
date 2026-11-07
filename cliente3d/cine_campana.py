@@ -53,7 +53,12 @@ INICIOS = [sum(p[1] for p in PLANOS_EXPEDIENTE[:i]) for i in range(len(PLANOS_EX
 T_DEJA = INICIOS[1] + 0.5          # la carpeta empieza a caer
 # Cuando entra cada linea de contenido.DIALOGO_EXPEDIENTE.
 T_LINEAS = (INICIOS[2] + 0.2, INICIOS[2] + 3.5, INICIOS[3] + 0.3, INICIOS[4] + 0.3)
-RITMO_PASO = 0.35                  # el clip de caminar va a 2,7 m/s; aqui, a uno
+# El ritmo del clip al andar NO se pone a ojo: sale de la velocidad del
+# tramo, con mundo.ritmo_para. «caminar» anda a 0,70 m/s —medido con
+# mundo.velocidad_natural, no los 2,7 que suponian estos numeros—, asi
+# que el 0,35 de antes movia los pies a 0,25 m/s mientras el asesor
+# cruzaba la sala a 0,93: parecia que lo arrastraran.
+V_DANIEL_SALE = 0.95               # lo que anda Daniel al salir (ver _despues)
 
 
 class ExpedienteCampana(EscenaDecision):
@@ -91,7 +96,9 @@ class ExpedienteCampana(EscenaDecision):
         if nombre == "entra":
             (x0, z0), (x1, z1) = ASESOR_ENTRA, ASESOR_EN_MESA
             self._mirar_a(x1 - x0, z1 - z0, self.asesor)
-            self._anima("caminar", RITMO_PASO, self.asesor)
+            v = math.hypot(x1 - x0, z1 - z0) / PLANOS_EXPEDIENTE[0][1]
+            self._anima("caminar", mundo.ritmo_para(self.asesor, "caminar", v),
+                        self.asesor)
         elif nombre == "deja":
             self._poner_asesor(*ASESOR_EN_MESA)
             self._mirar_a(0, -1, self.asesor)          # hacia la mesa
@@ -142,7 +149,8 @@ class ExpedienteCampana(EscenaDecision):
             # Deja la carpeta en la mesa y sale hacia la sala de guerra.
             self._mirar_a(ASESOR_ENTRA[0] - DANIEL_EN_MESA[0],
                           ASESOR_ENTRA[1] - DANIEL_EN_MESA[1])
-            self._anima("caminar", RITMO_PASO)
+            self._anima("caminar",
+                        mundo.ritmo_para(self.actor, "caminar", V_DANIEL_SALE))
             self._anima("pensar", actor=self.asesor)
         else:
             self._anima("celular")                        # llama a quien va a espiar
@@ -152,7 +160,7 @@ class ExpedienteCampana(EscenaDecision):
         if self.elegida == "prensa":
             (x0, z0), (x1, z1) = DANIEL_EN_MESA, ASESOR_ENTRA
             largo = math.hypot(x1 - x0, z1 - z0)
-            f = min(1.0, t * 0.95 / largo)
+            f = min(1.0, t * V_DANIEL_SALE / largo)
             self.actor.setPos(x0 + (x1 - x0) * f, 0, z0 + (z1 - z0) * f)
 
 
@@ -165,6 +173,10 @@ ASESOR_HABLA = (1.2, -1.5)         # a dos metros de Daniel, entre el y la puert
 # Entra por la puerta de la sala de guerra (x = 3,8, z de -3,9 a -2,5):
 # recto hasta pasarla y luego hacia Daniel, sin rozar el marco.
 CAMINO_ASESOR = ((5.4, -3.2), (3.0, -3.2), ASESOR_HABLA)
+
+
+def _largo(camino):
+    return sum(math.dist(a, b) for a, b in zip(camino, camino[1:]))
 
 
 def _por_camino(camino, f):
@@ -206,9 +218,18 @@ DURACION_LLEGADA = sum(p[1] for p in PLANOS_LLEGADA)
 # Cuando entra cada linea de contenido.DIALOGO_ASESOR_PREOCUPADO.
 T_LINEAS_LLEGADA = (_I[2] + 0.2, _I[3] + 0.2, _I[4] + 0.2, _I[4] + 3.6,
                     _I[5] + 0.2, _I[6] + 0.1)
-T_SALE = _I[6] + 2.3               # acaba de hablar y se va
-DURA_SALIDA = 2.6
-RITMO_PRISA = 0.55                 # 1,5 m/s con el clip de 2,7: va con prisa
+# Se da la vuelta mientras remata la ultima frase, no despues: con 2,3 y
+# 2,6 s tenia que cruzar el despacho a 1,88 m/s y el clip de este modelo
+# anda a 0,62, asi que ni al ritmo tope (x2,45 = 1,52 m/s) le daban los
+# pies y patinaba un 19 %. Con 1,8 y 3,2 s le sale a 1,52: exacto, y
+# llega a la puerta justo cuando acaba el plano.
+T_SALE = _I[6] + 1.8
+DURA_SALIDA = 3.2
+# Lo que corre de verdad cada tramo del asesor, para que los pies pisen
+# lo que avanza (antes: 0,55 fijo, o sea 0,39 m/s de pies para 1,52 de
+# cuerpo).
+V_ASESOR_PRISA = _largo(CAMINO_ASESOR) / PLANOS_LLEGADA[1][1]
+V_ASESOR_SALIDA = _largo(CAMINO_ASESOR) / DURA_SALIDA
 
 
 class LlegadaCampana(EscenaDecision):
@@ -257,7 +278,9 @@ class LlegadaCampana(EscenaDecision):
             self._anima("idle", actor=self.asesor)
         elif nombre == "puerta":
             audio.efecto("puerta")
-            self._anima("caminar", RITMO_PRISA, self.asesor)
+            self._anima("caminar",
+                        mundo.ritmo_para(self.asesor, "caminar", V_ASESOR_PRISA),
+                        self.asesor)
             self._mirar_a(ax - dx, az - dz)           # se gira al oir la puerta
         elif nombre == "asesor":
             self._poner_asesor(ax, az)
@@ -278,10 +301,18 @@ class LlegadaCampana(EscenaDecision):
                 tinta = E.OSPINA if quien == "daniel" else E.TEXTO_TENUE
                 self._decir(etiqueta, texto, dura, tinta)
                 self._anima("hablar", actor=habla)
-            if cruza(cuando + dura):
+            if cruza(cuando + dura) and not (habla is self.asesor
+                                             and self.t >= T_SALE):
+                # El «and»: su ultima frase acaba 0,2 s DESPUES de que
+                # arranque a irse (medido con el banco: clip «caminar» a
+                # los 24,40 s, «idle» a los 24,60 con el cuerpo todavia a
+                # 1,88 m/s). Ese idle le borraba el paso y el asesor
+                # salia flotando hasta la puerta.
                 self._anima("idle", actor=habla)
         if cruza(T_SALE):
-            self._anima("caminar", RITMO_PRISA, self.asesor)
+            self._anima("caminar",
+                        mundo.ritmo_para(self.asesor, "caminar", V_ASESOR_SALIDA),
+                        self.asesor)
         if self.t >= T_SALE:
             self._ir_por(CAMINO_ASESOR[::-1], (self.t - T_SALE) / DURA_SALIDA)
         if cruza(DURACION_LLEGADA - 0.8) and self.fin == DURACION_LLEGADA:
@@ -301,4 +332,6 @@ class LlegadaCampana(EscenaDecision):
         self.actor.setPos(DANIEL_EN_MARCA[0], 0, DANIEL_EN_MARCA[1])
         self.actor.setH(0)
         if "caminar" in self.asesor.getAnimNames():
-            self.asesor.setPlayRate(mundo.RITMO_RONDA, "caminar")
+            self.asesor.setPlayRate(
+                mundo.ritmo_para(self.asesor, "caminar", mundo.VELOCIDAD_RONDA),
+                "caminar")
