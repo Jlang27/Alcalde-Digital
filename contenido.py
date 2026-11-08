@@ -529,6 +529,10 @@ TEXTO_BANDERA = {
     "expusiste_la_red_fantasma": "Que expusiste en vivo a la red que pagaba montajes.",
     "cuidaste_tu_chat": "Que cuidaste tu chat: respondiste dudas y borraste bulos.",
     "tu_chat_se_desbordo": "Que en tu directo los bulos corrieron sin control.",
+    "cantaste_la_verdad": "Que la plaza entera coreó tu mensaje contra el bulo.",
+    "el_rumor_gano_el_duelo": "Que el rumor sonó más fuerte que tu canción.",
+    "recuperaste_la_mochila": "Que le quitaste la mochila repetidora al de la chaqueta negra.",
+    "la_red_sigue_activa": "Que el de la mochila escapó y la red siguió emitiendo.",
 }
 
 # Nombre y oficio de los que hablan en la cafeteria.
@@ -617,13 +621,81 @@ DIA_PLAZA = 4
 # responsables bajan la suma.
 TENSION_PLAZA = 60
 # Donde pasa cada cosa en la plaza (x0, x1, z0, z1 en el plano de
-# cliente3d/plaza.py): el duelo musical frente a la tarima, en la pacifica;
-# y la persecucion del de la mochila repetidora, en la caotica, por la
-# plaza, el callejon del este, la avenida y la calle del sur.
+# cliente3d/plaza.py): el duelo musical frente a la tarima, en la pacifica.
 ZONA_DUELO_PLAZA = (-6.0, 6.0, 27.0, 34.0)
-RUTA_PERSECUCION_PLAZA = ((0.0, 16.0), (18.0, 14.0), (30.0, 12.0), (47.0, 12.0),
-                          (56.0, 12.0), (56.0, -8.0), (35.0, -8.0), (35.0, -36.0),
-                          (0.0, -36.0), (0.0, -70.0))
+# La persecucion de la caotica (persecucion.py): el camino del de la
+# mochila, en cinco fases. Sale de la tarima, cruza la plaza por el
+# comercio, baja por la avenida cortada, se mete en los callejones del este
+# (parkour), sube la avenida y acaba en la calle de detras de la tarima,
+# contra la fila de antidisturbios. Medida para no atravesar bancas,
+# farolas ni puestos (cliente3d/plaza.py).
+RUTA_PERSECUCION_PLAZA = ((0.0, 19.0), (10.9, 8.0), (10.9, -20.0), (29.0, -28.0),
+                          (34.0, -34.0), (34.0, -8.0), (56.0, -8.0), (56.0, 13.0),
+                          (35.0, 13.0), (34.0, 40.0), (30.0, 50.0), (-8.0, 50.0))
+# (punto de la ruta donde empieza, nombre) de cada fase.
+FASES_PERSECUCION = ((0, "SALIDA DE LA PLAZA"), (3, "CALLES BLOQUEADAS"),
+                     (5, "ZONA DE PARKOUR"), (8, "ÚLTIMO TRAMO"), (10, "CAPTURA"))
+OBJETIVOS_PERSECUCION = {
+    1: "Síguelo entre la gente: salta, esquiva y no lo pierdas",
+    2: "La avenida está cortada: trepa los coches y salta",
+    3: "Callejones: deslízate, trepa y salta el hueco",
+    4: "Te lanza lo que encuentra: esquiva y acorta distancia",
+    5: "Está agotado: alcánzalo y pulsa E",
+}
+# Lo que pasa en el camino (persecucion.py dice que es cada tipo). rect:
+# (x0, x1, z0, z1); en: el punto de la ruta al que se refiere; objeto: como
+# se ve. Las alturas de lo que hay que pasar estan en cliente3d/plaza.py.
+EVENTOS_PERSECUCION = (
+    # --- fase 1: salida de la plaza ---
+    {"tipo": "cruza", "en": (10.9, -2.0), "desde": (6.8, -2.0), "hasta": (11.9, -2.0),
+     "dura": 1.4},
+    {"tipo": "lanza", "en": (10.9, -7.5), "desde": (4.0, -9.0), "objeto": "botella"},
+    {"tipo": "saltar", "rect": (8.5, 13.3, -14.4, -14.0), "objeto": "banca"},
+    {"tipo": "cae", "rect": (15.3, 16.7, -24.7, -19.8), "queda": "saltar", "objeto": "valla"},
+    {"tipo": "cae", "rect": (22.6, 24.4, -29.0, -22.4), "queda": "trepar", "objeto": "mesa"},
+    {"tipo": "lanza", "en": (26.5, -27.0), "desde": (25.0, -20.5), "objeto": "caja"},
+    # --- fase 2: calles bloqueadas ---
+    {"tipo": "trepar", "rect": (31.6, 36.4, -25.0, -23.2), "objeto": "coche"},
+    {"tipo": "saltar", "rect": (31.6, 36.4, -19.25, -18.75), "objeto": "motos"},
+    {"tipo": "cae", "rect": (31.6, 36.4, -14.6, -13.4), "queda": "saltar", "objeto": "cajas"},
+    {"tipo": "cruza", "en": (34.0, -11.6), "desde": (30.5, -11.6), "hasta": (40.0, -11.6),
+     "dura": 1.8},
+    {"tipo": "agacharse", "rect": (31.0, 37.0, -9.8, -9.4), "objeto": "andamio"},
+    # --- fase 3: parkour por los callejones ---
+    {"tipo": "deslizar", "rect": (42.0, 42.4, -10.0, -6.0), "objeto": "persiana"},
+    {"tipo": "trepar", "rect": (48.3, 48.7, -10.0, -6.0), "objeto": "valla_alta"},
+    {"tipo": "lanza", "en": (52.5, -8.0), "desde": (52.0, -6.1), "objeto": "maceta"},
+    {"tipo": "brecha", "rect": (54.0, 57.5, 1.0, 3.0), "objeto": "plataformas"},
+    {"tipo": "agacharse", "rect": (54.0, 57.5, 9.8, 10.2), "objeto": "tuberia"},
+    {"tipo": "cae", "rect": (49.3, 49.7, 10.0, 16.0), "queda": "saltar", "objeto": "andamio"},
+    {"tipo": "trepar", "rect": (42.8, 43.2, 10.0, 16.0), "objeto": "valla_alta"},
+    # --- fase 4: ultimo tramo, te lanza lo que encuentra ---
+    {"tipo": "lanza", "en": (35.0, 20.0), "desde": "sospechoso", "objeto": "caja"},
+    {"tipo": "cae", "rect": (31.9, 37.1, 25.8, 26.2), "queda": "saltar", "objeto": "valla"},
+    {"tipo": "cruza", "en": (34.4, 33.0), "desde": (34.3, 40.0), "hasta": (34.7, 27.0),
+     "dura": 2.6},
+    {"tipo": "lanza", "en": (33.0, 42.5), "desde": "sospechoso", "objeto": "botella"},
+    {"tipo": "cae", "rect": (28.4, 34.6, 46.0, 47.8), "queda": "agacharse", "objeto": "pancarta"},
+    # --- fase 5: la captura ---
+    {"tipo": "lanza", "en": (14.0, 50.0), "desde": "sospechoso", "objeto": "caja"},
+    {"tipo": "saltar", "rect": (3.8, 4.2, 46.5, 53.5), "objeto": "valla"},
+)
+# Lo que dicen al atraparlo: (quien, texto, segundos).
+DIALOGO_CAPTURA = (
+    ("sospechoso", "¡Suéltame! Yo solo cargo la mochila: me pagan por plaza.", 3.2),
+    ("mateo", "¿Quién te paga?", 1.8),
+    ("sospechoso", "Un tal «Nodo». Todo va a la misma cuenta… mira la lista.", 3.4),
+)
+# La escalinata de la calle sur: (x0, x1, z0, z1, alto en z0, alto en z1).
+ESCALERAS_PLAZA = ((-5.0, 5.0, -48.0, -44.0, 1.5, 0.0),
+                   (-5.0, 5.0, -56.0, -48.0, 1.5, 1.5),
+                   (-5.0, 5.0, -60.0, -56.0, 0.0, 1.5),
+                   # las plataformas de cajas de la calle de servicio del este
+                   # (fase 3): rampa, plataforma, el hueco (z 1..3) y otra
+                   (54.0, 57.5, -4.0, -2.0, 0.0, 1.0),
+                   (54.0, 57.5, -2.0, 1.0, 1.0, 1.0),
+                   (54.0, 57.5, 3.0, 6.0, 1.0, 1.0),
+                   (54.0, 57.5, 6.0, 8.0, 1.0, 0.0))
 
 # La ronda de cada vigilante, ida y vuelta, en puntos (x, z) del plano de
 # mundo.py. Cada una pasa junto a un folio: no hay foto gratis.
@@ -925,6 +997,116 @@ def construir_arbol_capitulo_4():
         bandera="expusiste_la_red_fantasma",
         detalle="Expones a la red en directo, pero te ganas un poderoso enemigo cibernético.",
         corto="UN ENEMIGO"))
+    return arbol
+
+
+# --- Capitulo 5: la plaza (ritmo.py y persecucion.py) ---
+# Lo que se oye en cada ronda del duelo: el rival canta el bulo, Mateo
+# contesta. Una linea por frase (tres frases de dos compases por ronda,
+# rival y respuesta).
+LETRAS_RITMO = (
+    (("rival", "«Ospina cierra el colegio el lunes, ¡pásalo!»"),
+     ("mateo", "¿Y quién lo dijo? Sin fuente no lo paso."),
+     ("rival", "«Lo vi en un grupo, tiene mil compartidos»"),
+     ("mateo", "Mil compartidos no hacen una verdad."),
+     ("rival", "«Si lo dicen tantos, por algo será»"),
+     ("mateo", "Un rumor repetido sigue siendo un rumor.")),
+    (("rival", "«El audio es real, se oye clarito»"),
+     ("mateo", "Un audio sin origen se puede recortar."),
+     ("rival", "«Todos lo saben, ¿para qué confirmar?»"),
+     ("mateo", "Busca la prueba antes de compartir."),
+     ("rival", "«Comparte ya, que lo van a borrar»"),
+     ("mateo", "Lo que se borra rápido, se verifica despacio.")),
+    (("rival", "«Los del otro barrio no deberían votar»"),
+     ("mateo", "En esta plaza cabemos todos."),
+     ("rival", "«La elección ya está comprada»"),
+     ("mateo", "Tu voto cuenta: participa y verifica."),
+     ("rival", "«Aquí nadie escucha a nadie»"),
+     ("mateo", "Escúchame tú, y canto contigo.")),
+)
+TEXTO_DUELO = (
+    "Hay gente compartiendo el bulo del colegio entre el público. Los "
+    "músicos de la plaza te retan a un duelo frente a la tarima: el rival "
+    "canta el rumor y tú le contestas. Pulsa las flechas cuando las notas "
+    "lleguen a las marcas de arriba. Tres rondas.")
+FINAL_DUELO = {
+    "perfecta": ("LA PLAZA CANTA LA VERDAD",
+                 "La plaza corea tu respuesta y el bulo se queda sin eco: la gente "
+                 "guarda el teléfono y pregunta de dónde salió. La ciudadanía puede "
+                 "defender la verdad cantando junta."),
+    "parcial": ("UN APLAUSO A MEDIAS",
+                "Te equivocaste en algunas estrofas, pero el mensaje llegó: varios "
+                "borran el rumor del grupo del barrio. Falta, pero se empezó."),
+    "derrota": ("EL RUMOR SUENA MÁS FUERTE",
+                "El rival se lleva el aplauso y el bulo vuelve a correr entre los "
+                "teléfonos. La convivencia no se gana sola."),
+}
+TEXTO_SOSPECHOSO = (
+    "Junto a la tarima, un hombre con chaqueta negra lleva una mochila con "
+    "antena: las pantallas que muestran el bulo parpadean cuando pasa. "
+    "Acércate a mirarlo, y prepárate: si te ve, correrá. Shift corre (y "
+    "acelera), Espacio salta o trepa, Ctrl te agacha y C te desliza a la "
+    "carrera. Los avisos salen antes de cada obstáculo.")
+FINAL_PERSECUCION = {
+    "capturado": ("LA MOCHILA ERA UNA RED",
+                  "Dentro hay una repetidora y una lista: catorce mochilas como "
+                  "esta en catorce plazas, todas pagadas desde la misma cuenta, "
+                  "firmada «Nodo». Alguien está fabricando el caos de Ciudad Nova "
+                  "a propósito, y ahora tienes por dónde empezar a buscarlo."),
+    "escapo": ("SE PERDIÓ ENTRE EL HUMO",
+               "El de la chaqueta negra se escapó con la mochila. Las pantallas "
+               "siguen emitiendo el bulo y sin la repetidora no hay pista de "
+               "quién está detrás: la investigación se complica."),
+}
+# Las hojas del capitulo 5: (opcion, texto, detalle, corto, hoja), con la
+# hoja (id, texto, efectos, bandera, detalle, corto). Los efectos son los
+# del guion; la victoria parcial, la mitad de la perfecta.
+HOJAS_CAPITULO_5 = {
+    "pacifica": (
+        ("perfecta", "Victoria perfecta", "Más del 85 % de precisión.", "PERFECTA",
+         ("r5_perfecta", "La plaza canta la verdad",
+          {"desinformacion": -15, "confianza": 15, "conflictos": -10},
+          "cantaste_la_verdad", "El bulo se queda sin eco.", "LA VERDAD")),
+        ("parcial", "Victoria parcial", "Entre el 65 y el 85 %.", "PARCIAL",
+         ("r5_parcial", "Un aplauso a medias",
+          {"desinformacion": -8, "confianza": 8, "conflictos": -5},
+          None, "Parte del público borra el rumor.", "A MEDIAS")),
+        ("derrota", "Derrota", "Menos del 65 %.", "DERROTA",
+         ("r5_derrota", "El rumor suena más fuerte",
+          {"desinformacion": 5, "confianza": -5, "conflictos": 5},
+          "el_rumor_gano_el_duelo", "El bulo vuelve a correr.", "EL RUMOR")),
+    ),
+    "caotica": (
+        ("capturado", "Recuperar la mochila", "Alcanzas al de la chaqueta negra.",
+         "LA MOCHILA",
+         ("r5_mochila", "La red, al descubierto",
+          {"desinformacion": -10, "confianza": 5, "conflictos": -5},
+          "recuperaste_la_mochila", "Tienes pruebas de una red organizada.", "PRUEBAS")),
+        ("escapo", "Dejarlo escapar", "Se pierde entre el humo.", "SE ESCAPA",
+         ("r5_escapa", "La propaganda sigue",
+          {"desinformacion": 10, "confianza": -5, "conflictos": 10},
+          "la_red_sigue_activa", "La repetidora sigue llenando las pantallas.", "SIGUE")),
+    ),
+}
+
+
+def construir_arbol_capitulo_5(estado="pacifica"):
+    """El capitulo 5 no se decide en un menu: lo decide el minijuego de la
+    ruta a la que se llego (Partida.estado_plaza). Las opciones son sus
+    resultados y la Partida toma la que salio (terminar_minijuego):
+
+        pacifica: duelo perfecto | parcial | perdido
+        caotica:  mochila recuperada | el sospechoso escapa
+    """
+    caotica = estado == "caotica"
+    raiz = NodoDecision("raiz", "«Caos en la plaza»" if caotica else "«El ritmo de la verdad»",
+                        corto="LA PERSECUCIÓN" if caotica else "EL DUELO")
+    arbol = ArbolDecision(raiz)
+    for id_op, texto, detalle, corto, hoja in HOJAS_CAPITULO_5[estado]:
+        op = raiz.agregar_hijo(NodoDecision(id_op, texto, detalle=detalle, corto=corto))
+        hid, htexto, efectos, bandera, hdet, hcorto = hoja
+        op.agregar_hijo(NodoDecision(hid, htexto, efectos=efectos, bandera=bandera,
+                                     detalle=hdet, corto=hcorto))
     return arbol
 
 

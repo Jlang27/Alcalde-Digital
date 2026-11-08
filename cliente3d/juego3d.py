@@ -42,8 +42,12 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        MENSAJE_ANONIMO, DIA_CAMPANA, PUNTOS_CAPITULO_3,
                        TEXTO_MAPA_DISTRITOS, DIALOGO_EXPEDIENTE,
                        DIALOGO_ASESOR_PREOCUPADO, DIA_ESTUDIO, DIA_PLAZA, PUNTOS_CAPITULO_4,
-                       TEXTO_PATROCINADORES, MENSAJE_CIFRADO)
+                       TEXTO_PATROCINADORES, MENSAJE_CIFRADO, ZONA_DUELO_PLAZA,
+                       LETRAS_RITMO, TEXTO_DUELO, FINAL_DUELO, TEXTO_SOSPECHOSO,
+                       FINAL_PERSECUCION, OBJETIVOS_PERSECUCION, DIALOGO_CAPTURA)
+import ritmo
 from transmision import BORRAR, RESPONDER
+from persecucion import ANCHO_PASILLO, distancia_a_ruta
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
 import sigilo
@@ -108,6 +112,21 @@ class Cliente:
         self.asesor = None            # el asesor de Daniel (dia 3)
         self.ronda_asesor = None      # su ida y vuelta (sigilo.Vigilante)
         self.directo = None           # la interfaz del directo de Santiago (dia 4)
+        self.ritmo = None             # la del duelo musical (dia 5, pacifica)
+        self.rival = None             # el musico que canta el rumor
+        self.duelo_t = 0.0            # reloj del duelo (negativo: cartel de ronda)
+        self.duelo_ronda = 0
+        self.duelo_musica = False
+        self.duelo_frase = None       # (quien, indice) de la letra que suena
+        self.duelo_fin = None         # segundos desde el resultado
+        self.tropiezo = 0.0           # lo que le queda a Mateo del gesto de fallo
+        self.persigue = False         # la persecucion (dia 5, caotica) en marcha
+        self.hud_persecucion = None
+        self.sospechoso = None
+        self.reloj_choque = 0.0       # para no contar dos veces el mismo choque
+        self.jadeo = 0.0
+        self.pitido = 0.0
+        self.captura = None           # la secuencia de la captura
         self.sospecha = None          # el medidor de «te estan viendo»
         self.vio_aviso = False        # el aviso de «hablar cuesta», una vez
         self.dia_avisado = None       # el aviso de la jornada, una vez por dia
@@ -1022,6 +1041,8 @@ def iniciar_dia(indice):
     # La plaza del capitulo 5 es la que dejaron los dias anteriores.
     if cl.partida.estado_plaza is not None:
         plaza.estado(cl.partida.estado_plaza)
+        if cl.partida.persecucion is not None:
+            cl.sospechoso = plaza.preparar_sospechoso()
     # Cada dia empieza en la marca: el anterior pudo dejar al protagonista
     # en cualquier sitio (la calle del colegio, tras la decision del cap. 2)
     # y en el escenario nuevo eso cae fuera de las paredes.
@@ -1193,7 +1214,7 @@ def abrir_libre():
         cl.dia_avisado = p.dia_actual
         if p.estado_plaza == "caotica":
             abrir_aviso_papel("LA PLAZA ARDE", "Lo que se compartió ya está en la calle",
-                              TEXTO_PLAZA_CAOTICA, abrir_libre)
+                              TEXTO_PLAZA_CAOTICA + " " + TEXTO_SOSPECHOSO, abrir_libre)
         else:
             abrir_aviso_papel("TU TARDE EN LA PLAZA", "Ciudad Nova está en paz",
                               TEXTO_PLAZA_PACIFICA, abrir_libre)
@@ -1214,6 +1235,10 @@ def abrir_libre():
         cl.jugador.bloqueos = bloqueos
         cl.jugador.muros = list(mundo.muros())
     cl.jugador.techo = mundo.techo()
+    # La plaza tiene escalinata (se sube de verdad) y, en la caotica, lo que
+    # solo se pasa saltando o deslizandose.
+    cl.jugador.suelo = plaza.suelo if mundo.escenario() == "plaza_central" else None
+    _parkour_al_jugador()
     cl.jugador.fov = mundo.lente()
     # Donde esconderse: lo que tapa agachada (mesas, estantes, muros).
     cl.jugador.coberturas = (cl.partida.sigilo.tapan_agachado
@@ -1359,8 +1384,7 @@ TEXTO_PLAZA_PACIFICA = (
     "a la pista frente a la tarima: esta tarde se canta.")
 TEXTO_PLAZA_CAOTICA = (
     "Los rumores de estos días llegaron a la calle: humo, barricadas y "
-    "pantallas con noticias falsas. Alguien con una mochila repetidora "
-    "está alimentando el caos: muévete con cuidado por la plaza.")
+    "pantallas con noticias falsas.")
 TEXTO_ESTUDIO = (
     "Tus seguidores ya están conectados. Ve a la consola y empieza el "
     "directo: responde (1) las preguntas de buena fe y borra (2) los "
@@ -1546,6 +1570,380 @@ def abrir_oferta():
         cl.actor, opciones_del_dia(), MENSAJE_CIFRADO, cl.partida.protagonista.nombre)
 
 
+# ===================================================================
+#  CAPITULO 5: LOS MINIJUEGOS DE LA PLAZA
+# ===================================================================
+
+TECLAS_DUELO = {"left arrow": 0, "down arrow": 1, "up arrow": 2, "right arrow": 3,
+                "a": 0, "s": 1, "w": 2, "d": 3}
+# Lo rapido que suben las notas (pantallas por segundo) en cada ronda.
+VELOCIDAD_NOTAS = (0.42, 0.5, 0.6)
+CARTEL_RONDA = 2.4          # segundos del cartel antes de que entre la musica
+CARTEL_FINAL = 3.5
+SUBTITULO_RONDA = ("El rival canta el bulo; tú le contestas",
+                   "Más rápido: fuentes, pruebas, no compartir sin confirmar",
+                   "La final: respeto, democracia y participación")
+NOMBRE_RESULTADO = {"perfecta": "VICTORIA PERFECTA", "parcial": "VICTORIA PARCIAL",
+                    "derrota": "DERROTA"}
+
+
+def empezar_duelo():
+    """Mateo y el rival a la pista; la camara, desde el publico."""
+    cerrar_libre()
+    cl.estado = "duelo"
+    fundido = pantallas.Fundido()
+    x, z = plaza.DUELO_MATEO
+    cl.actor.setPos(x, 0, z)
+    cl.actor.setH(180.0 - math.degrees(math.atan2(1.5 - x, 22.0 - z)))
+    animar("idle")
+    cl.rival = plaza.preparar_duelo()
+    pos, mira, fov = plaza.PLANO_DUELO
+    camera.fov = fov
+    camera.position = pos
+    mundo.mirar(mira)
+    fundido.desvanecer(0.45, retraso=0.1)
+    cl.ritmo = pantallas.DueloRitmo(plaza.textura_flecha())
+    audio.parar_musica(fundido=0.8)
+    empezar_ronda(0)
+
+
+def empezar_ronda(i):
+    cl.partida.duelo.empezar(i)
+    cl.duelo_ronda, cl.duelo_t, cl.duelo_musica = i, -CARTEL_RONDA, False
+    cl.duelo_frase = None
+    ronda = ritmo.RONDAS[i]
+    cl.ritmo.preparar(ritmo.partitura(i))
+    cl.ritmo.poner_ronda(f"RONDA {i + 1} DE {len(ritmo.RONDAS)}  ·  {ronda['nombre']}")
+    cl.ritmo.titulo(f"RONDA {i + 1} DE {len(ritmo.RONDAS)}", ronda["nombre"],
+                    SUBTITULO_RONDA[i])
+    audio.efecto("sello")
+
+
+def _tiempo_duelo():
+    """El tiempo de la musica, que es el de la partitura. Sin audio (el banco
+    de pruebas), el reloj propio."""
+    real = audio.tiempo_musica()
+    return real if real else cl.duelo_t
+
+
+def duelo_paso(dt):
+    cl.duelo_t += dt
+    d = cl.partida.duelo
+    if cl.duelo_fin is not None:
+        cl.duelo_fin += dt
+        plaza.pulso(0.0)
+        if cl.duelo_fin >= CARTEL_FINAL:
+            cl.duelo_fin = None
+            res = d.resultado()
+            titulo, texto = FINAL_DUELO[res]
+            cerrar_minijuegos()
+            abrir_aviso_papel("EL RITMO DE LA VERDAD", titulo.capitalize(), texto,
+                              cerrar_minijuego)
+        return
+    if cl.duelo_t < 0:
+        return                                      # el cartel de la ronda
+    i = cl.duelo_ronda
+    ronda = ritmo.RONDAS[i]
+    if not cl.duelo_musica:
+        cl.duelo_musica = True
+        cl.ritmo.sin_titulo()
+        audio.musica(f"ritmo_{i + 1}.wav", nivel=1.0)
+    t = _tiempo_duelo()
+    cantadas, falladas = d.actualizar(t)
+    for c in cantadas:
+        cl.ritmo.canta(c)
+    for c in falladas:
+        cl.ritmo.fallo(c)
+        tropezar()
+    cl.ritmo.mover(t, VELOCIDAD_NOTAS[i])
+    cl.ritmo.cifras(d.puntos, d.combo, d.multiplicador, d.precision(), d.barra)
+    # La letra y quien canta: frases de dos compases, primero el rival.
+    negra = 60.0 / ronda["bpm"]
+    pulso = t / negra - ritmo.ENTRADA * 4
+    frase = int(pulso // 8) if pulso >= 0 else None
+    if frase is not None and frase < len(LETRAS_RITMO[i]) and frase != cl.duelo_frase:
+        cl.duelo_frase = frase
+        quien, texto = LETRAS_RITMO[i][frase]
+        cl.ritmo.cantar(quien, texto)
+        _cantan(quien)
+    cl.tropiezo = max(0.0, cl.tropiezo - dt)
+    plaza.pulso(max(0.0, 1.0 - (t / negra) % 1.0 * 3.0))
+    if d.ronda_terminada(t):
+        if i + 1 < len(ritmo.RONDAS):
+            empezar_ronda(i + 1)
+        else:
+            terminar_duelo()
+
+
+def _cantan(quien):
+    """El que canta su frase se mueve; el otro escucha."""
+    for actor, canta, clips in ((cl.actor, quien == "mateo", ("hablar",)),
+                                (cl.rival, quien == "rival", ("hablar2", "hablar"))):
+        nombres = actor.getAnimNames()
+        clip = next((c for c in clips if c in nombres), "idle") if canta else "idle"
+        actor.loop(clip)
+
+
+def pulsar_duelo(carril):
+    d = cl.partida.duelo
+    if cl.duelo_t < 0 or cl.duelo_fin is not None:
+        return
+    juicio = d.pulsar(carril, _tiempo_duelo())
+    if juicio is None:
+        return
+    if juicio == "MISS":
+        cl.ritmo.fallo(carril)
+        tropezar()
+    else:
+        cl.ritmo.acierto(carril, juicio)
+
+
+def tropezar():
+    """El gesto de fallo: Mateo duda un momento; el rival se crece."""
+    if cl.tropiezo > 0:
+        return
+    cl.tropiezo = 0.8
+    mundo.reaccionar(cl.actor, "pensar")
+    mundo.reaccionar(cl.rival, "asentir")
+    audio.efecto("volver", 0.6)
+
+
+def terminar_duelo():
+    d = cl.partida.duelo
+    res = d.resultado()
+    audio.parar_musica(fundido=1.2)
+    audio.efecto("sello")
+    cl.ritmo.titulo("RESULTADO", NOMBRE_RESULTADO[res],
+                    f"Precisión {d.precision() * 100:.0f} %  ·  {d.puntos:,} puntos  ·  "
+                    f"combo máximo {d.combo_max}".replace(",", " "))
+    cl.duelo_fin = 0.0
+    mundo.reaccionar(cl.actor, "asentir" if res != "derrota" else "pensar")
+
+
+# La musica de la persecucion sube de volumen con cada fase.
+NIVEL_FASE = (0.55, 0.65, 0.75, 0.88, 1.0)
+# Cada cuanto jadea Mateo a la carrera y pita la mochila cuando esta cerca.
+JADEO, PITIDO, CERCA_PITIDO = 1.5, 0.7, 8.0
+REPETIR_CHOQUE = 2.0       # un choque contra el mismo obstaculo no cuenta dos veces seguidas
+TITULO_ESCAPE = {"lejos": "SE TE ESCAPÓ", "golpes": "TE HA DEJADO ATRÁS",
+                 "tiempo": "SE ACABÓ EL TIEMPO"}
+
+
+def _parkour_al_jugador():
+    """Lo que hay en la ruta, en las listas del jugador segun lo que pide."""
+    p = cl.partida
+    activos = p.persecucion.activos if p is not None and p.persecucion is not None else []
+    por_tipo = {t: [(*o["rect"], t) for o in activos if o["tipo"] == t]
+                for t in ("saltar", "trepar", "agacharse", "deslizar", "bloqueo")}
+    j = cl.jugador
+    j.saltables, j.trepables = por_tipo["saltar"], por_tipo["trepar"]
+    j.agachables, j.deslizables = por_tipo["agacharse"], por_tipo["deslizar"]
+    # El coche atravesado no se salta: se rodea. (Se quita el de la vez
+    # anterior antes de ponerlo: esto se llama otra vez cuando algo cae.)
+    antes = getattr(cl, "bloqueos_ruta", [])
+    cl.bloqueos_ruta = [r[:4] for r in por_tipo["bloqueo"]]
+    j.bloqueos = [b for b in j.bloqueos if b not in antes] + cl.bloqueos_ruta
+
+
+def empezar_persecucion():
+    """Te vio: el de la mochila echa a correr."""
+    p = cl.partida.persecucion
+    if p.empezada:
+        return
+    p.empezar()
+    cl.persigue = True
+    limpiar(cl.marca_punto)
+    cl.punto_cerca = None
+    # Su propia leyenda (saltar, trepar, agacharse...) en vez de la de explorar.
+    if cl.aviso is not None:
+        cl.aviso.cerrar()
+        cl.aviso = None
+    cl.jugador.con_impulso = True
+    cl.reloj_choque = cl.jadeo = cl.pitido = 0.0
+    # Lineal: la policia cierra las calles a los lados y Mateo sale del
+    # principio del pasillo, con el sospechoso unos metros por delante.
+    fundido = pantallas.Fundido()
+    x, z, rumbo = p.salida()
+    cl.actor.setPos(x, plaza.suelo(x, z), z)
+    cl.jugador.rumbo = 180.0 - rumbo
+    cl.actor.setH(cl.jugador.rumbo)
+    cl.jugador.yaw = rumbo
+    cl.jugador.encuadrar()
+    fundido.desvanecer(0.4, retraso=0.1)
+    plaza.cerrar_pasillo()
+    cl.jugador.pasillo = (lambda px, pz: distancia_a_ruta((px, pz), p.ruta), ANCHO_PASILLO / 2)
+    plaza.preparar_persecucion(p.eventos)
+    cl.hud_persecucion = pantallas.PersecucionHUD()
+    cl.hud_persecucion.avisar("¡TE VIO!", E.GAITAN)
+    audio.efecto("vibracion")
+    audio.efecto("alarma")
+    audio.musica(audio.MUSICA_PERSECUCION, fundido=0.4, nivel=NIVEL_FASE[0])
+
+
+def persecucion_paso(dt):
+    p = cl.partida.persecucion
+    hud = cl.hud_persecucion
+    j = cl.jugador
+    x, z = cl.actor.getX(), cl.actor.getZ()
+    eventos = []
+    # Caer en el hueco entre las plataformas sin estar en el aire: golpe, y
+    # de vuelta al borde (se puede volver a intentar).
+    for ob in p.activos:
+        x0, x1, z0, z1 = ob["rect"]
+        if (ob["tipo"] == "brecha" and x0 < x < x1 and z0 < z < z1
+                and not j.en_el_aire() and j.trepa is None):
+            eventos += p.chocar("brecha")
+            cl.actor.setPos(x, plaza.suelo(x, z0 - 1.0), z0 - 1.0)
+            hud.avisar("¡AL HUECO!", E.GAITAN, 0.8)
+    # Estrellarse contra algo de parkour a la carrera: golpe.
+    cl.reloj_choque = max(0.0, cl.reloj_choque - dt)
+    if j.choque is not None and j.corriendo and cl.reloj_choque <= 0.0:
+        eventos += p.chocar(j.choque)
+        cl.reloj_choque = REPETIR_CHOQUE
+    j.choque = None
+    eventos += p.actualizar(dt, cl.actor.getX(), cl.actor.getZ(),
+                            saltando=j.en_el_aire() or j.trepa is not None)
+    for evento, dato in eventos:
+        if evento == "fase":
+            nombre = p.fases[dato - 1][1]
+            hud.avisar(f"FASE {dato} · {nombre}", E.LLERAS, 1.4)
+            audio.musica(audio.MUSICA_PERSECUCION, nivel=NIVEL_FASE[dato - 1])
+        elif evento == "aviso":
+            desde = (p.sx, p.sz) if dato.get("desde") == "sospechoso" else None
+            plaza.avisar_evento(dato, desde)
+            if dato["tipo"] == "lanza":
+                audio.efecto("silbido")
+        elif evento == "cae":
+            plaza.caer_evento(dato)
+            audio.efecto("estrepito")
+            _parkour_al_jugador()
+        elif evento == "impacto":
+            plaza.impacto_evento(dato)
+            audio.efecto("cristal" if dato.get("objeto") == "botella" else "golpe", 0.6)
+        elif evento == "golpe":
+            j.golpe()
+            hud.golpe()
+            audio.efecto("golpe")
+        elif evento == "acorralado":
+            hud.avisar("¡ESTÁ ACORRALADO!", E.RESTREPO)
+        elif evento == "escapo":
+            escapo(dato)
+            return
+    plaza.vivir_persecucion(dt, p.eventos)
+    # El sospechoso, por su ruta (y por la escalera o las plataformas).
+    actor = cl.sospechoso
+    x, z = cl.actor.getX(), cl.actor.getZ()
+    y = plaza.suelo(p.sx, p.sz)
+    if p.acorralado:
+        actor.setPos(p.sx, y, p.sz)
+        actor.setH(180.0 - math.degrees(math.atan2(x - p.sx, z - p.sz)))
+        if actor.getCurrentAnim() != "idle":
+            actor.loop("idle")
+    else:
+        mundo.mover_actor(actor, p.sx, p.sz, p.rumbo, True, corriendo=True)
+        actor.setY(y)
+    # Lo que se oye: Mateo jadea a la carrera y la mochila pita si esta cerca.
+    cl.jadeo -= dt
+    if j.corriendo and cl.jadeo <= 0.0:
+        audio.efecto("respiracion", 0.5)
+        cl.jadeo = JADEO
+    cl.pitido -= dt
+    if p.distancia < CERCA_PITIDO and cl.pitido <= 0.0:
+        audio.efecto("toque", 0.6)
+        cl.pitido = PITIDO
+    fase = p.fases[p.fase - 1][1]
+    objetivo = ("¡Lo tienes! Pulsa E para atraparlo" if p.al_alcance(x, z)
+                else OBJETIVOS_PERSECUCION[p.fase])
+    accion = "¡ATRÁPALO! · E" if p.al_alcance(x, z) else p.proximo_aviso()
+    hud.poner(p.restante, p.distancia, p.proximidad(), p.progreso(), fase, objetivo, accion)
+
+
+def capturar():
+    """La captura, sin violencia: Mateo se lanza, lo frena por la mochila y
+    se la quita. Luego hablan: la pista de quien esta detras."""
+    from direct.interval.IntervalGlobal import Func as FuncIv, LerpPosInterval, Sequence
+    cl.persigue = False
+    cerrar_libre()
+    cl.estado = "juego"
+    p = cl.partida.persecucion
+    sosp = cl.sospechoso
+    audio.efecto("golpe", 0.7)
+    audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.35)
+    mx, my, mz = cl.actor.getPos()
+    dx, dz = p.sx - mx, p.sz - mz
+    largo = max(0.1, math.hypot(dx, dz))
+    destino = Vec3(p.sx - dx / largo * 0.75, plaza.suelo(p.sx, p.sz), p.sz - dz / largo * 0.75)
+    cl.actor.setH(180.0 - math.degrees(math.atan2(dx, dz)))
+    sosp.setH(180.0 - math.degrees(math.atan2(-dx, -dz)))
+    animar("correr")
+    cl.captura = Sequence(LerpPosInterval(cl.actor, 0.35, destino),
+                          FuncIv(audio.efecto, "hecho"),
+                          FuncIv(plaza.entregar_mochila, cl.actor),
+                          FuncIv(animar, "celular"),
+                          FuncIv(mundo.reaccionar, sosp, "pensar"))
+    cl.captura.start()
+    # Por encima del hombro de Mateo: detras queda el pasillo, siempre
+    # despejado (de lado, la camara podia caer dentro de un edificio).
+    camera.fov = 46
+    camera.position = Vec3(mx - dx / largo * 2.6 + dz / largo * 0.7, destino.y + 1.75,
+                           mz - dz / largo * 2.6 - dx / largo * 0.7)
+    mundo.mirar(Vec3(p.sx, destino.y + 1.3, p.sz))
+    hud = cl.hud_persecucion
+    hud.poner(p.restante, p.distancia, 1.0, p.progreso(), "CAPTURA", "", None)
+    hud.avisar("¡MOCHILA RECUPERADA!", E.RESTREPO, 1.6)
+    t = 2.0
+    for quien, texto, dura in DIALOGO_CAPTURA:
+        etiqueta = "MATEO" if quien == "mateo" else "EL DE LA MOCHILA"
+        invoke(hud.decir, etiqueta, texto, delay=t)
+        t += dura + 0.3
+    invoke(_final_persecucion, "capturado", delay=t + 0.4)
+
+
+def escapo(motivo=None):
+    cl.persigue = False
+    cerrar_libre()
+    cl.estado = "juego"
+    audio.efecto("tiempo_agotado")
+    audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.35)
+    cl.hud_persecucion.avisar(TITULO_ESCAPE.get(motivo, "SE ESCAPÓ"), E.GAITAN, dura=None)
+    invoke(_final_persecucion, "escapo", delay=2.0)
+
+
+def _final_persecucion(resultado):
+    titulo, texto = FINAL_PERSECUCION[resultado]
+    cerrar_minijuegos()
+    abrir_aviso_papel("CAOS EN LA PLAZA", titulo.capitalize(), texto, cerrar_minijuego)
+
+
+def cerrar_minijuegos():
+    """Quita las interfaces del capitulo 5 (tambien al volver al menu)."""
+    if cl.ritmo is not None:
+        cl.ritmo.cerrar()
+        cl.ritmo = None
+    if cl.hud_persecucion is not None:
+        cl.hud_persecucion.cerrar()
+        cl.hud_persecucion = None
+    cl.persigue = False
+    cl.duelo_fin = None
+    if cl.jugador is not None:
+        cl.jugador.con_impulso = False
+        cl.jugador.pasillo = None
+    if cl.captura is not None:
+        cl.captura.finish()
+        cl.captura = None
+
+
+def cerrar_minijuego():
+    """El resultado del minijuego cierra el capitulo: la Partida toma su
+    rama del arbol (efectos y bandera) y se pasa al cierre del dia."""
+    cl.partida.terminar_minijuego()
+    plaza.terminar_minijuego()
+    cl.actor.setPos(0, 0, 0)
+    cl.actor.setH(0)
+    cl.estado = "juego"
+    cerrar_dia()
+
+
 def elegir_en_escena(i):
     """1-9 en una escena de decision: la opcion y, detras, su unica consecuencia."""
     id_opcion = cl.escena.elegir(i)
@@ -1566,13 +1964,31 @@ def terminar_escena():
 
 # Lo que se mira con E en cada capitulo con puntos (oficina y estudio).
 PUNTOS_DEL_DIA = {DIA_CAMPANA: PUNTOS_CAPITULO_3, DIA_ESTUDIO: PUNTOS_CAPITULO_4}
+# Y en la plaza, segun el estado: la pista del duelo, o el de la mochila.
+PUNTOS_PLAZA = {
+    "pacifica": {"duelo": {"verbo": "aceptar el duelo musical",
+                           "zona": (ZONA_DUELO_PLAZA[0], ZONA_DUELO_PLAZA[1],
+                                    ZONA_DUELO_PLAZA[2] - 4.0, ZONA_DUELO_PLAZA[3])}},
+    "caotica": {"sospechoso": {"verbo": "mirar al de la mochila",
+                               "zona": (-9.0, 9.0, 12.0, 28.0)}},
+}
+
+
+def puntos_del_dia():
+    p = cl.partida
+    if p is None:
+        return None
+    if p.dia_actual == DIA_PLAZA:
+        return None if cl.persigue or p.arbol_decision.termino() else PUNTOS_PLAZA.get(
+            p.estado_plaza)
+    return PUNTOS_DEL_DIA.get(p.dia_actual)
 
 
 def senalar_punto():
     """«E mirar las encuestas», el mapa o ir a la mesa (capitulo 3); «E
     empezar el directo» o los patrocinadores (capitulo 4)."""
     x, z = cl.actor.getX(), cl.actor.getZ()
-    puntos = PUNTOS_DEL_DIA[cl.partida.dia_actual]
+    puntos = puntos_del_dia() or {}
     cerca = next((i for i, punto in puntos.items()
                   if punto["zona"][0] < x < punto["zona"][1]
                   and punto["zona"][2] < z < punto["zona"][3]), None)
@@ -1593,6 +2009,13 @@ def mirar_punto(punto):
         return
     if punto == "consola":
         abrir_directo()
+        return
+    if punto == "duelo":
+        abrir_aviso_papel("EL RITMO DE LA VERDAD", "Un duelo contra el rumor", TEXTO_DUELO,
+                          empezar_duelo)
+        return
+    if punto == "sospechoso":
+        empezar_persecucion()
         return
     if punto == "patrocinadores":
         abrir_aviso_papel("PATROCINADORES", "Tres marcas pagan el estudio",
@@ -2619,6 +3042,10 @@ def update():
         directo_paso(time.dt)
         return
 
+    if cl.estado == "duelo" and cl.ritmo is not None:
+        duelo_paso(time.dt)
+        return
+
     if cl.estado == "intro" and cl.intro is not None:
         if cl.intro.actualizar(time.dt):
             terminar_intro()
@@ -2661,7 +3088,9 @@ def update():
                     apuntar_paso()
         if cl.npcs:
             senalar_cercano()
-        if cl.partida.dia_actual in PUNTOS_DEL_DIA:
+        if cl.persigue:
+            persecucion_paso(time.dt)
+        elif puntos_del_dia() is not None:
             senalar_punto()
         return
 
@@ -2775,6 +3204,7 @@ def volver_al_menu():
     quitar_asesor()
     quitar_figurantes()
     cerrar_directo()
+    cerrar_minijuegos()
     if cl.cine is not None:
         cl.cine.cerrar()
         cl.cine = None
@@ -2838,6 +3268,13 @@ def input(tecla):
         # Como la intro: Enter, espacio o Esc la saltan.
         if tecla in ("enter", "space", "escape") and cl.cine is not None:
             cl.cine.saltar()
+        return
+
+    elif cl.estado == "duelo":
+        # Flechas (o WASD): un carril cada una. Esc no pausa: es un directo.
+        carril = TECLAS_DUELO.get(tecla)
+        if carril is not None:
+            pulsar_duelo(carril)
         return
 
     elif cl.estado == "directo":
@@ -2922,6 +3359,23 @@ def input(tecla):
         elif tecla == "escape":
             audio.efecto("volver")
             cerrar_dialogo()
+        return
+
+    elif (cl.estado == "libre" and cl.partida is not None
+          and cl.partida.persecucion is not None
+          and (cl.persigue or tecla in ("space", "c"))):
+        # La plaza caotica: saltar y deslizarse valen siempre (sus vallas
+        # estan desde antes); en la persecucion, ademas, quitarle la mochila.
+        # Correr (Shift) lo lee el jugador.
+        if tecla == "space":
+            cl.jugador.saltar()
+        elif tecla == "c":
+            cl.jugador.deslizar()
+        elif tecla == "e" and cl.partida.persecucion.recuperar(cl.actor.getX(),
+                                                                cl.actor.getZ()):
+            capturar()
+        elif tecla == "escape":
+            abrir_confirmacion("menu")
         return
 
     elif cl.estado == "libre":

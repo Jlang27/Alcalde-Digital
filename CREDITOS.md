@@ -22,6 +22,16 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 | `assets/audio/fx_despertador.wav` | Campanas del despertador, 8 s (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
 | `assets/audio/fx_mecha.wav` | Mecha del petardo (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
 | `assets/audio/fx_petardo.wav` | Estallido del petardo con eco (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
+| `assets/audio/ritmo_1.wav` | Música de la ronda 1 del duelo «El ritmo de la verdad» (capítulo 5), compuesta sobre la partitura de `ritmo.py` | Generado por el proyecto (`herramientas/componer_ritmo.py`) | Propia | No | A · 2026-11-08 |
+| `assets/audio/ritmo_2.wav` | Música de la ronda 2 del duelo «El ritmo de la verdad» (capítulo 5), compuesta sobre la partitura de `ritmo.py` | Generado por el proyecto (`herramientas/componer_ritmo.py`) | Propia | No | A · 2026-11-08 |
+| `assets/audio/ritmo_3.wav` | Música de la ronda 3 del duelo «El ritmo de la verdad» (capítulo 5), compuesta sobre la partitura de `ritmo.py` | Generado por el proyecto (`herramientas/componer_ritmo.py`) | Propia | No | A · 2026-11-08 |
+| `assets/audio/persecucion.wav` | Música de la persecución, 165 bpm (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
+| `assets/audio/fx_golpe.wav` | Golpe al chocar (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
+| `assets/audio/fx_estrepito.wav` | Estructura metálica que cae (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
+| `assets/audio/fx_silbido.wav` | Objeto que pasa volando (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
+| `assets/audio/fx_cristal.wav` | Botella que se rompe (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
+| `assets/audio/fx_alarma.wav` | Alarma de coche (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
+| `assets/audio/fx_respiracion.wav` | Respiración a la carrera (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
 | `assets/audio/intro.ogg` | Música de la cinemática, sintetizada contra sus tiempos | Generada por el proyecto (`herramientas/componer_intro.py`) | Propia | No | A · 2026-10-20 |
 | `assets/audio/ui_mover.wav` | Efecto «Scroll» del menú | Canal GamingSFX (YouTube), pack «Game Menu Sound Effects 01» | **POR CONFIRMAR** | Probablemente sí | A · 2026-10-20 |
 | `assets/audio/ui_confirmar.wav` | Efecto «Select Confirm» | Canal GamingSFX (YouTube), mismo pack | **POR CONFIRMAR** | Probablemente sí | A · 2026-10-20 |

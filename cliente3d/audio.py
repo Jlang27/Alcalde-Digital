@@ -62,6 +62,7 @@ AMBIENTE_LLUVIA = "ambiente_lluvia.wav"
 # hay calle, hay ventilador y aire. Los compone herramientas/componer_ambientes.py.
 AMBIENTE_CIUDAD_ALTO = "ambiente_ciudad_alto.ogg"
 AMBIENTE_ESTUDIO = "ambiente_estudio.ogg"
+MUSICA_PERSECUCION = "persecucion.wav"      # 165 bpm, compuesta (componer_persecucion.py)
 
 # (archivo, peso, variacion de tono). El peso es relativo al ajuste de
 # efectos; la variacion evita que una tecla repetida suene a metralleta.
@@ -96,6 +97,13 @@ EFECTOS = {
     "despertador": ("fx_despertador.wav", 0.8, 0.0),
     "mecha": ("fx_mecha.wav", 0.7, 0.05),
     "petardo": ("fx_petardo.wav", 1.0, 0.04),
+    # la persecucion del capitulo 5 (herramientas/componer_persecucion.py)
+    "golpe": ("fx_golpe.wav", 1.0, 0.05),
+    "estrepito": ("fx_estrepito.wav", 1.0, 0.05),
+    "silbido": ("fx_silbido.wav", 0.8, 0.08),
+    "cristal": ("fx_cristal.wav", 0.9, 0.06),
+    "alarma": ("fx_alarma.wav", 0.5, 0.0),
+    "respiracion": ("fx_respiracion.wav", 0.6, 0.05),
 }
 
 # Los efectos de interfaz suenan MUCHAS veces seguidas. A volumen de
@@ -274,6 +282,16 @@ def musica(pista=MUSICA_MENU, fundido=0.0, nivel=1.0):
             _fundir(sonido, objetivo, fundido)
         return
     _ajustar_musica()
+
+
+def tiempo_musica():
+    """Segundos que lleva sonando la musica, o None si no suena (sin audio,
+    como en el banco de pruebas). El duelo del capitulo 5 se sincroniza con
+    esto: su musica y su partitura salen del mismo ritmo.partitura."""
+    sonido = _musica["sonido"]
+    if sonido is None or not getattr(sonido, "playing", False):
+        return None
+    return sonido.time
 
 
 def _ajustar_musica(duracion=0.0):

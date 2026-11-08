@@ -42,8 +42,10 @@ from PIL import ImageDraw
 from ursina import application, color
 
 import mundo as M
-from contenido import RUTA_PERSECUCION_PLAZA, ZONA_DUELO_PLAZA
+from contenido import (ESCALERAS_PLAZA, EVENTOS_PERSECUCION, RUTA_PERSECUCION_PLAZA,
+                       ZONA_DUELO_PLAZA)
 from juego import NOMBRES_CANDIDATOS
+from persecucion import ANCHO_PASILLO, AVISO, ESTATICOS, altura_en, distancia_a_ruta
 
 X0, X1, Z0, Z1 = -30.0, 30.0, -30.0, 46.0          # la plaza adoquinada
 LIMITES = (-35.5, 57.5, -77.5, 53.5)               # hasta donde se anda
@@ -302,14 +304,107 @@ def _puesto(t, x, z, toldo):
     t.caja(toldo, x - 1.3, x + 1.3, 2.4, 2.5, z - 0.9, z + 0.6)
 
 
-def _valla(t, x0, x1, z):
+def _valla(t, x0, x1, z, bloquea=True, y=0.0):
     """Valla de seguridad, de las de concierto, a lo largo de x."""
-    t.caja("valla_metal", x0, x1, 0.95, 1.0, z - 0.03, z + 0.03, bloquea=True)
-    t.caja("valla_metal", x0, x1, 0.2, 0.24, z - 0.03, z + 0.03)
+    t.caja("valla_metal", x0, x1, y + 0.95, y + 1.0, z - 0.03, z + 0.03, bloquea=bloquea)
+    t.caja("valla_metal", x0, x1, y + 0.2, y + 0.24, z - 0.03, z + 0.03)
     x = x0
     while x <= x1:
-        t.caja("valla_metal", x - 0.02, x + 0.02, 0, 1.0, z - 0.25, z + 0.25)
+        t.caja("valla_metal", x - 0.02, x + 0.02, y, y + 1.0, z - 0.25, z + 0.25)
         x += 0.5
+
+
+def _altura(rect):
+    return altura_en((rect[0] + rect[1]) / 2, (rect[2] + rect[3]) / 2, ESCALERAS_PLAZA)
+
+
+def _cinta(t, x0, x1, z0, z1, y):
+    """Cinta de peligro roja y blanca: lo que dice «aqui pasa algo»."""
+    largo_x = (x1 - x0) >= (z1 - z0)
+    a0, a1 = (x0, x1) if largo_x else (z0, z1)
+    a, rojo = a0, True
+    while a < a1:
+        b = min(a1, a + 0.5)
+        mat = "semaforo_rojo" if rojo else "linea_calle"
+        if largo_x:
+            t.caja(mat, a, b, y, y + 0.1, z0 - 0.01, z1 + 0.01)
+        else:
+            t.caja(mat, x0 - 0.01, x1 + 0.01, y, y + 0.1, a, b)
+        a, rojo = b, not rojo
+
+
+def _pieza_evento(t, tipo, objeto, rect):
+    """La forma de lo que se cruza en la ruta (contenido.EVENTOS_PERSECUCION),
+    construida en su sitio. La altura dice lo que hay que hacer: lo bajo se
+    salta (hasta 0,6 m), lo mediano se trepa (1,1 m), lo que deja hueco a
+    1,15 m se pasa agachado y lo que deja 0,75 m, deslizandose. No bloquea
+    en la obra: lo decide el jugador (saltables, trepables...)."""
+    x0, x1, z0, z1 = rect[:4]
+    y = _altura(rect)
+    largo_x = (x1 - x0) >= (z1 - z0)
+    if objeto == "banca":                 # una banca tumbada
+        t.caja("banca_madera", x0, x1, y, y + 0.42, z0, z1)
+        t.caja("hierro", x0, x1, y + 0.42, y + 0.48, (z0 + z1) / 2 - 0.02, (z0 + z1) / 2 + 0.02)
+    elif objeto == "motos":               # tres motos tiradas
+        n = 3
+        for k in range(n):
+            if largo_x:
+                a = x0 + (x1 - x0) * (k + 0.5) / n
+                t.girada(("coche_1", "coche_2", "coche_taxi")[k], a, (z0 + z1) / 2, 0.9, 1.7,
+                         y, y + 0.5, 70 + k * 15)
+                t.girada("rueda", a + 0.2, (z0 + z1) / 2, 0.5, 0.5, y, y + 0.55, 70 + k * 15)
+    elif objeto in ("valla", "valla_caida"):   # tramos de valla tirados en el suelo
+        if largo_x:
+            t.caja("valla_metal", x0, x1, y, y + 0.08, z0, z1)
+            t.caja("valla_metal", x0, x1, y + 0.08, y + 0.55, (z0 + z1) / 2 - 0.03,
+                   (z0 + z1) / 2 + 0.03)
+        else:
+            t.caja("valla_metal", x0, x1, y, y + 0.08, z0, z1)
+            t.caja("valla_metal", (x0 + x1) / 2 - 0.03, (x0 + x1) / 2 + 0.03, y + 0.08,
+                   y + 0.55, z0, z1)
+        _cinta(t, x0, x1, z0, z1, y + 0.55)
+    elif objeto == "valla_alta":          # barrera mediana: se trepa
+        t.caja("valla_metal", x0, x1, y, y + 1.1, z0, z1)
+        _cinta(t, x0, x1, z0, z1, y + 1.0)
+    elif objeto == "mesa":                # el mostrador de un puesto, volcado
+        t.caja("madera", x0, x1, y, y + 1.05, z0, z1)
+        t.caja("toldo_amarillo", x0 - 0.05, x1 + 0.05, y + 0.6, y + 0.75, z0, z1)
+    elif objeto in ("andamio", "tuberia", "pancarta"):   # se pasa agachado
+        if tipo == "agacharse" or objeto == "pancarta":
+            alto = 1.18
+            if largo_x:
+                for xp in (x0, x1 - 0.1):
+                    t.caja("hierro", xp, xp + 0.1, y, y + alto + 0.3, z0, z1)
+                t.caja("truss" if objeto == "andamio" else "hierro", x0, x1, y + alto,
+                       y + alto + 0.22, z0, z1)
+                if objeto == "pancarta":
+                    t.caja("toldo_rojo", x0, x1, y + alto + 0.22, y + alto + 1.6,
+                           (z0 + z1) / 2 - 0.03, (z0 + z1) / 2 + 0.03)
+                else:
+                    _cinta(t, x0, x1, z0, z1, y + alto + 0.22)
+            else:
+                for zp in (z0, z1 - 0.1):
+                    t.caja("hierro", x0, x1, y, y + alto + 0.3, zp, zp + 0.1)
+                t.caja("hierro", x0, x1, y + alto, y + alto + 0.22, z0, z1)
+                _cinta(t, x0, x1, z0, z1, y + alto + 0.22)
+        else:                             # andamio caido: tubos en el suelo, se salta
+            t.caja("truss", x0, x1, y, y + 0.35, z0, z1)
+            _cinta(t, x0, x1, z0, z1, y + 0.35)
+    elif objeto == "persiana":            # persiana a medio bajar: hueco de 0,75 m
+        t.caja("valla_metal", x0, x1, y + 0.75, y + 2.8, z0, z1)
+        for k in range(8):
+            yy = y + 0.85 + k * 0.25
+            t.caja("hierro", x0 - 0.01, x1 + 0.01, yy, yy + 0.03, z0, z1)
+        _cinta(t, x0, x1, z0, z1, y + 0.75)
+    elif objeto == "cajas":               # cajas caidas: se saltan
+        for k in range(3):
+            a = x0 + (x1 - x0) * k / 3
+            t.caja("caja_madera", a, a + (x1 - x0) / 3 - 0.05, y, y + 0.5, z0, z1)
+    elif objeto == "coche":               # el coche atravesado: hay que rodearlo
+        _coche(t, (x0 + x1) / 2, (z0 + z1) / 2, 90.0, "coche_2", bloquea=False)
+    elif objeto == "plataformas":         # el hueco entre las cajas: cinta en los bordes
+        for zb in (z0, z1):
+            _cinta(t, x0, x1, zb - 0.05, zb + 0.05, 1.0)
 
 
 def _valla_girada(t, x, z, giro):
@@ -517,11 +612,11 @@ def _obra_base():
         _banca(t, xb, 13.6)
     for zb in (-8.0, 0.0, 20.0):
         _banca(t, -27.5, zb, "z")
-    for x, z in ((-10, -12), (10, -12), (-10, 20), (10, 20), (-20, 0), (20, 10),
+    for x, z in ((-10, -12), (10, -12), (-10, 20), (10, 20), (-20, 0), (25, 10),
                  (-28.5, -28.5), (28.5, -28.5), (-28.5, 34), (28.5, 34), (0, -20),
                  (-18, 34), (18, 34)):
         _farola(t, x, z)
-    for x, z in ((-9.2, 2.6), (9.2, 13.6), (-27.5, -4.0), (12.0, -20.0), (25.0, -10.0),
+    for x, z in ((-9.2, 2.6), (9.2, 13.6), (-27.5, -4.0), (12.8, -16.5), (25.0, -10.0),
                  (-6.0, 30.5), (6.0, 30.5)):
         _papelera(t, x, z)
 
@@ -554,10 +649,26 @@ def _obra_base():
         o.caja("muro_bajo", 50.5, 51.0, 0, 0.9, z0 + 0.1, zc - 0.5, bloquea=True)
         for y in (2.5, 3.2):                              # tuberias
             o.pared("hierro", "z", z0, 1, 42.0, 54.0, y, y + 0.1, 0, 0.12)
-    # Escaleras de la calle sur hacia la ciudad baja: rellanos a los lados.
-    for k in range(3):
-        o.caja("piedra_clara", -5.0, -4.0 + 0 * k, 0, 0.4 * (k + 1), -60.0 + k, -59.0 + k)
-        o.caja("piedra_clara", 4.0, 5.0, 0, 0.4 * (k + 1), -60.0 + k, -59.0 + k)
+        for xl in (44.5, 49.0, 53.0):                     # farolas de pared: brillan
+            o.pared("farol", "z", z1, -1, xl - 0.2, xl + 0.2, 2.8, 3.1, 0, 0.25)
+    # Y en la calle de servicio de detras, por donde se salta el hueco.
+    for zl in (-9.0, -3.0, 6.0, 12.0):
+        o.pared("farol", "x", 57.5, -1, zl - 0.2, zl + 0.2, 2.8, 3.1, 0, 0.25)
+    # La escalinata de la calle sur (contenido.ESCALERAS_PLAZA): se sube, un
+    # rellano y se baja. Se anda por encima (jugador.suelo); no bloquea.
+    for x0, x1, z0, z1, y0, y1 in ESCALERAS_PLAZA:
+        mat = "caja_madera" if x0 > 40 else "piedra_clara"
+        if y0 == y1:
+            o.caja(mat, x0, x1, 0, y0, z0, z1)
+            continue
+        pasos = 8
+        for k in range(pasos):
+            za, zb = z0 + (z1 - z0) * k / pasos, z0 + (z1 - z0) * (k + 1) / pasos
+            alto = max(altura_en(0.0, za + 0.001, ESCALERAS_PLAZA),
+                       altura_en(0.0, zb - 0.001, ESCALERAS_PLAZA))
+            o.caja(mat, x0, x1, 0, alto, min(za, zb), max(za, zb))
+    for xb in (-5.0, 4.9):                                # barandas
+        o.caja("hierro", xb, xb + 0.1, 1.5, 2.5, -56.0, -48.0)
 
     # --- postes para los carteles en las aceras de la avenida ---
     for z in (-26.0, -14.0, 2.0, 22.0, 34.0):
@@ -612,18 +723,31 @@ def _obra_pacifica():
     return t
 
 
+FUEGOS = ((14.0, -8.0), (39.5, 22.0), (-14.0, -36.0))
+
+
+def _lejos_de_ruta(x, z, margen=3.0):
+    """Lo que se tira al azar no puede caer en la ruta de la persecucion."""
+    for (ax, az), (bx, bz) in zip(RUTA_PERSECUCION_PLAZA, RUTA_PERSECUCION_PLAZA[1:]):
+        dx, dz = bx - ax, bz - az
+        f = max(0.0, min(1.0, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+        if math.dist((x, z), (ax + dx * f, az + dz * f)) < margen:
+            return False
+    return True
+
+
 def _obra_caotica():
     t = _Taller()
     o = t.o
     azar = random.Random(53)
     # Barricadas en la avenida y en la calle sur, con fuego.
-    for cx, cz, giro in ((35.0, 20.0, 15.0), (36.0, -18.0, -10.0), (-14.0, -36.0, 80.0)):
+    for cx, cz, giro in ((39.5, 22.0, 15.0), (39.5, -16.0, -10.0), (-14.0, -36.0, 80.0)):
         for k in range(6):
             t.girada(azar.choice(("caja_madera", "escombro", "quemado")),
                      cx + azar.uniform(-2.5, 2.5), cz + azar.uniform(-0.8, 0.8),
                      azar.uniform(0.6, 1.6), azar.uniform(0.5, 1.0), 0,
                      azar.uniform(0.4, 1.3), giro + azar.uniform(-30, 30), bloquea=True)
-    for cx, cz in ((14.0, -8.0), (35.0, 20.0), (-14.0, -36.0)):
+    for cx, cz in FUEGOS:
         t.girada("rueda", cx, cz, 1.2, 1.2, 0, 0.35, 20)                # neumaticos
         o.caja("brasas", cx - 0.7, cx + 0.7, 0, 0.05, cz - 0.7, cz + 0.7)
         for k in range(4):
@@ -633,12 +757,13 @@ def _obra_caotica():
     o.solido((13.0, 15.0, -9.0, -7.0), 1.0)
     # Coches cruzados que cortan media calle y uno quemado.
     _coche(t, 36.5, 4.0, 62.0, "coche_2")
-    _coche(t, 33.5, -27.0, -40.0, "coche_taxi")
-    _coche(t, 2.5, -38.0, 75.0, "quemado")
+    _coche(t, 14.0, -39.0, 75.0, "quemado")
     _coche(t, -24.0, -36.5, 105.0, "coche_1")
     # Vallas desplazadas y tiradas, y papeleras volcadas con la basura fuera.
     for _ in range(14):
-        _valla_girada(t, azar.uniform(-22, 22), azar.uniform(-24, 34), azar.uniform(0, 180))
+        x, z = azar.uniform(-22, 22), azar.uniform(-24, 34)
+        if _lejos_de_ruta(x, z):
+            _valla_girada(t, x, z, azar.uniform(0, 180))
     for _ in range(9):
         x, z = azar.uniform(-24, 26), azar.uniform(-26, 30)
         giro = azar.uniform(0, 180)
@@ -650,8 +775,14 @@ def _obra_caotica():
         t.girada(azar.choice(("escombro", "linea_calle")), azar.uniform(-28, 28),
                  azar.uniform(-28, 44), azar.uniform(0.1, 0.4), azar.uniform(0.1, 0.3),
                  0, 0.03, azar.uniform(0, 180))
+    # Lo que hay que saltar o pasar por debajo en la ruta de la persecucion.
+    for ev in EVENTOS_PERSECUCION:
+        if ev["tipo"] in ESTATICOS:
+            _pieza_evento(t, ev["tipo"], ev.get("objeto"), ev["rect"])
+        elif ev["tipo"] == "lanza" and ev["desde"] != "sospechoso" and ev["desde"][1] > -7:
+            pass                                          # la ventana: sin nadie a la vista
     # Las patrullas al fondo de la avenida, con la fila de antidisturbios.
-    for x, z, giro in ((36.0, 38.0, 20.0), (33.0, -33.0, 160.0), (-6.0, -66.0, 90.0)):
+    for x, z, giro in ((40.6, 43.0, 20.0), (39.6, -39.0, 160.0), (-6.0, -66.0, 90.0)):
         t.girada("patrulla", x, z, 1.9, 4.6, 0.25, 1.05, giro, bloquea=True)
         t.girada("patrulla_franja", x, z, 1.95, 4.0, 0.55, 0.75, giro)
         t.girada("cristal_coche", x, z, 1.7, 2.3, 1.05, 1.55, giro)
@@ -667,8 +798,9 @@ def _munecos(nodo, estado):
     zonas = []
     if estado == "pacifica":
         pancartas = ("pancarta_paz", "pancarta_azul", "pancarta_verde", None, None, None)
-        for x0, x1, z0, z1 in ((-14.0, -7.0, 22.0, 34.0), (7.0, 14.0, 22.0, 34.0),
-                               (-5.0, 5.0, 20.0, 25.5)):
+        # Dos bloques a los lados de la pista: el centro queda libre para el
+        # plano del duelo, que se mira desde ahi.
+        for x0, x1, z0, z1 in ((-14.0, -7.0, 22.0, 34.0), (7.0, 14.0, 22.0, 34.0)):
             for _ in range(int((x1 - x0) * (z1 - z0) / 2.2)):
                 M._muneco(azar.uniform(x0, x1), azar.uniform(z0, z1), azar, caras,
                           azar.choice(pancartas))
@@ -681,14 +813,21 @@ def _munecos(nodo, estado):
                 M._muneco(azar.uniform(x0, x1), azar.uniform(z0, z1), azar, caras,
                           azar.choice(pancartas))
             zonas.append((x0, x1, z0, z1))
-        # La fila de antidisturbios cortando la avenida al norte.
-        x = 31.0
-        while x < 41.0:
-            caras["uniforme"].extend(M._caras_caja(x - 0.25, x + 0.25, 0.15, 1.45, 44.0, 44.35))
-            caras["casco"].extend(M._caras_esfera(x, 1.62, 44.15, 0.16))
-            caras["escudo"].extend(M._caras_caja(x - 0.3, x + 0.3, 0.4, 1.4, 43.75, 43.8))
-            x += 0.75
-        zonas.append((30.5, 41.5, 43.6, 44.5))
+        # La fila de antidisturbios cortando la calle de detras de la tarima:
+        # ahi acaba la persecucion, el sospechoso queda entre ellos y Mateo.
+        z = 46.6
+        while z < 53.5:
+            caras["uniforme"].extend(M._caras_caja(-12.35, -12.0, 0.15, 1.45, z - 0.25, z + 0.25))
+            caras["casco"].extend(M._caras_esfera(-12.17, 1.62, z, 0.16))
+            caras["escudo"].extend(M._caras_caja(-11.75, -11.7, 0.4, 1.4, z - 0.3, z + 0.3))
+            z += 0.75
+        zonas.append((-12.6, -11.6, 46.3, 53.7))
+        # Los que lanzan cosas, en su sitio (contenido.EVENTOS_PERSECUCION).
+        for ev in EVENTOS_PERSECUCION:
+            if ev["tipo"] == "lanza" and ev["desde"] != "sospechoso" and ev["desde"][1] < 0 \
+                    and ev["desde"] != (52.0, -6.1):
+                M._muneco(ev["desde"][0], ev["desde"][1], azar, caras, "pancarta_protesta")
+    piezas = []
     for nombre, lista in caras.items():
         if lista:
             base, rug, met, emi = MATERIALES[nombre]
@@ -696,6 +835,8 @@ def _munecos(nodo, estado):
                 (*base, 1), rugosidad=rug, metalico=met,
                 emision=(*emi, 1) if emi else None))
             e.y = -0.15                    # _muneco pisa la acera de la intro
+            piezas.append(e)
+    _PLAZA.setdefault("publico", {})[estado] = piezas
     return zonas
 
 
@@ -797,7 +938,7 @@ def _carteles(nodo):
     tex = [M._textura(f"cartel_{i}", _pintar_cartel(i), 300, 420) for i in range(4)]
     for k, z in enumerate((-22.0, -2.0, 25.0, 38.0)):   # vallas en las fachadas
         _lamina(nodo, tex[k], (41.9, 6.0, z), 4.2, 5.8, (30.0, 6.0, z))
-    sitios = ((-10, -12), (10, -12), (-10, 20), (10, 20), (-20, 0), (20, 10), (0, -20),
+    sitios = ((-10, -12), (10, -12), (-10, 20), (10, 20), (-20, 0), (25, 10), (0, -20),
               (-18, 34), (18, 34))
     for k, (x, z) in enumerate(sitios):                 # banderolas en las farolas
         _lamina(nodo, tex[k % 4], (x + 0.12, 2.6, z), 0.62, 0.9, (x + 5.0, 2.6, z))
@@ -856,10 +997,10 @@ ESTADOS = {
         "cielo": (1.0, 1.0, 1.0),
     },
     "caotica": {
-        "ambiente": (0.035, 0.045, 0.075),
+        "ambiente": (0.05, 0.06, 0.095),
         "sol": ((0.20, 0.28, 0.48), (40, -38, 0)),          # la luna
         "puntos": (("fuego", (14.0, 1.4, -8.0), (2.6, 1.0, 0.25), (1, 0.06, 0.03)),
-                   ("fuego_avenida", (35.0, 1.4, 20.0), (2.4, 0.9, 0.2), (1, 0.06, 0.03)),
+                   ("fuego_avenida", (39.5, 1.4, 22.0), (2.4, 0.9, 0.2), (1, 0.06, 0.03)),
                    ("sirena", (33.0, 3.0, -30.0), (2.0, 0.15, 0.10), (1, 0.04, 0.012)),
                    ("pantallas", (0.0, 6.0, 33.0), (1.6, 0.15, 0.1), (1, 0.03, 0.008))),
         "niebla": ((0.06, 0.06, 0.08), 0.03),
@@ -956,7 +1097,7 @@ def construir(mundo):
     # Humo: columnas sobre cada fuego y bancos bajos por la plaza.
     azar = random.Random(57)
     humo = []
-    for x, z in ((14.0, -8.0), (35.0, 20.0), (-14.0, -36.0)):
+    for x, z in FUEGOS:
         for k in range(4):
             humo.append(M._destello_suelto((x + azar.uniform(-1, 1), 2.5 + k * 2.6,
                                             z + azar.uniform(-1, 1)), 5 + k * 2.5,
@@ -967,20 +1108,22 @@ def construir(mundo):
                                         azar.uniform(-30, 40)), azar.uniform(7, 12),
                                        (0.26, 0.26, 0.30), 0.2))
     llamas = [M._destello_suelto((x, 1.1, z), s, (1.0, 0.42, 0.10), 0.95)
-              for x, z in ((14.0, -8.0), (35.0, 20.0), (-14.0, -36.0)) for s in (2.2, 4.5)]
+              for x, z in FUEGOS for s in (2.2, 4.5)]
     quietos, caminantes, gentio = _gente(mundo)
+    publico = _PLAZA.get("publico", {})
     _PLAZA.clear()
-    _PLAZA.update(nodos=nodos, zonas=zonas, pantallas=pantallas, humo=humo + llamas,
+    _PLAZA.update(publico=publico, nodo=mundo, nodos=nodos, zonas=zonas, pantallas=pantallas, humo=humo + llamas,
                   luces={e: _luces(mundo, e) for e in OBRAS}, quietos=quietos,
                   caminantes=caminantes, gentio=gentio, raiz=mundo.getParent(),
                   estado=None, reloj=0.0)
     estado("pacifica")
 
 
-def estado(nuevo=None):
+def estado(nuevo=None, forzar=False):
     """Pone la plaza en "pacifica" o "caotica" y devuelve el estado activo.
-    Sin argumento solo lo dice."""
-    if nuevo is None or nuevo == _PLAZA.get("estado"):
+    Sin argumento solo lo dice. forzar: vuelve a poner a cada uno en su
+    sitio aunque el estado no cambie (tras un minijuego)."""
+    if nuevo is None or (nuevo == _PLAZA.get("estado") and not forzar):
         return _PLAZA.get("estado")
     datos, raiz = ESTADOS[nuevo], _PLAZA["raiz"]
     for e, nodo in _PLAZA["nodos"].items():
@@ -1050,8 +1193,13 @@ def vivir(dt):
     caotica = _PLAZA["estado"] == "caotica"
     velocidad = M.CARRERA_RONDA if caotica else M.VELOCIDAD_RONDA
     for k, (actor, vuelta) in enumerate(zip(_PLAZA["caminantes"], _PLAZA["paseos"])):
+        if actor is _PLAZA.get("sospechoso"):
+            continue                      # ese lo lleva la persecucion
         x, z, rumbo = _en_vuelta(vuelta, t * velocidad + k * 17.0)
         M.mover_actor(actor, x, z, rumbo, True, corriendo=caotica)
+    luz = _PLAZA.get("led_mochila")
+    if luz is not None:
+        luz.show() if int(t / 0.25) % 2 else luz.hide()
     if caotica:
         luces = {l.getName(): l for l in _PLAZA["luces"]["caotica"]}
         fase = int(t / 0.35) % 2
@@ -1075,3 +1223,278 @@ def muros():
 
 def desmontar():
     _PLAZA.clear()
+
+
+# ===================================================================
+#  LOS MINIJUEGOS: lo que la plaza pone para cada uno
+# ===================================================================
+
+DUELO_MATEO = (-2.8, 31.2)        # sobre la pista, frente a la tarima
+DUELO_RIVAL = (2.8, 31.2)
+PLANO_DUELO = (M.Vec3(0.0, 2.1, 21.5), M.Vec3(0.0, 1.8, 31.5), 52)
+
+
+def preparar_duelo():
+    """El rival del duelo (uno de los musicos) se pone en la pista, frente
+    a Mateo. Devuelve su Actor."""
+    rival = next(a for a, sitios in _PLAZA["quietos"]
+                 if sitios.get("pacifica") and sitios["pacifica"][3] == "hablar2")
+    x, z = DUELO_RIVAL
+    rival.show()
+    rival.setPos(x, 0, z)
+    rival.setH(180.0 - math.degrees(math.atan2(-1.5 - x, 22.0 - z)))
+    rival.loop("idle")
+    return rival
+
+
+def pulso(fuerza):
+    """Al ritmo: la luz de la tarima late y el publico bota (fuerza 0..1)."""
+    luces = {l.getName(): l for l in _PLAZA.get("luces", {}).get("pacifica", [])}
+    if "tarima" in luces:
+        f = 1.0 + 0.8 * fuerza
+        luces["tarima"].node().setColor((2.2 * f, 1.7 * f, 1.2 * f, 1))
+    for e in _PLAZA.get("publico", {}).get("pacifica", []):
+        e.y = -0.15 + 0.07 * fuerza
+
+
+def preparar_sospechoso():
+    """El de la chaqueta negra (el caminante de traje, oscurecido) espera
+    junto a la tarima con la mochila repetidora a la espalda. Devuelve su
+    Actor; vivir() deja de pasearlo."""
+    actor = _PLAZA["caminantes"][-1]
+    _PLAZA["sospechoso"] = actor
+    actor.setColorScale(0.42, 0.42, 0.46, 1)
+    x, z = RUTA_PERSECUCION_PLAZA[0]
+    actor.setPos(x, 0, z)
+    actor.setH(180.0 - 0.0)                       # de cara a las pantallas
+    actor.loop("idle")
+    mochila = actor.attachNewNode("mochila")
+    negro = M._material((0.02, 0.02, 0.025, 1), rugosidad=0.6)
+    M._pieza(mochila, "cube", negro, (0.38, 0.5, 0.2), (0, 1.25, 0.2))
+    M._pieza(mochila, "cube", M._material((0.3, 0.3, 0.32, 1), 0.3, 1.0),
+             (0.02, 0.55, 0.02), (0.12, 1.75, 0.22))
+    _PLAZA["led_mochila"] = M._pieza(mochila, "cube", M._material(
+        (0.1, 0, 0, 1), emision=(3.0, 0.1, 0.05, 1)), (0.05, 0.05, 0.05), (0.12, 2.04, 0.22))
+    _PLAZA["mochila"] = mochila
+    return actor
+
+
+# ---------------- la persecucion: lo que cae, vuela y se cruza ----------------
+
+# Desde que altura cae cada cosa (lo que se ve colgando o temblando antes).
+ALTO_CAIDA = {"valla": 3.0, "mesa": 0.9, "cajas": 6.0, "andamio": 5.0, "pancarta": 4.0}
+TIEMPO_CAIDA = 0.35
+
+
+def _pasillo():
+    """Las calles cerradas de la persecucion: vallas de policia con cinta a
+    los dos lados de toda la ruta, y gente detras mirando. Hacen visible el
+    pasillo que el jugador no puede dejar (jugador.pasillo). Sin vallas
+    donde ya cierra un edificio (los callejones) ni donde pasa la ruta."""
+    t = _Taller()
+    caras = {n: [] for n in MATERIALES}
+    azar = random.Random(59)
+    mitad = ANCHO_PASILLO / 2 + 0.35
+    solidos = OBRA_BASE.o.paso
+    k = 0
+    for (ax, az), (bx, bz) in zip(RUTA_PERSECUCION_PLAZA, RUTA_PERSECUCION_PLAZA[1:]):
+        largo = math.dist((ax, az), (bx, bz))
+        dx, dz = (bx - ax) / largo, (bz - az) / largo
+        giro = math.degrees(math.atan2(-dz, dx))
+        n = max(1, int(largo / 2.0))
+        for i in range(n):
+            f = (i + 0.5) / n
+            px, pz = ax + (bx - ax) * f, az + (bz - az) * f
+            for lado in (-1, 1):
+                cx, cz = px - dz * mitad * lado, pz + dx * mitad * lado
+                if distancia_a_ruta((cx, cz), RUTA_PERSECUCION_PLAZA) < ANCHO_PASILLO / 2 + 0.2:
+                    continue                          # cortaria otro tramo de la ruta
+                if any(r[0] < cx < r[1] and r[2] < cz < r[3] for r in solidos):
+                    continue                          # ahi ya cierra un edificio
+                y = altura_en(cx, cz, ESCALERAS_PLAZA)
+                t.girada("valla_metal", cx, cz, largo / n - 0.1, 0.06, y + 0.95, y + 1.05, giro)
+                t.girada("valla_metal", cx, cz, largo / n - 0.1, 0.06, y + 0.25, y + 0.3, giro)
+                t.girada("semaforo_rojo" if k % 2 else "linea_calle", cx, cz, largo / n - 0.1,
+                         0.07, y + 0.6, y + 0.7, giro)
+                for e in (-0.45, 0.45):
+                    t.girada("valla_metal", cx + dx * e * (largo / n), cz + dz * e * (largo / n),
+                             0.05, 0.5, y, y + 1.05, giro)
+                k += 1
+                if k % 3 == 0:                        # gente detras de la valla
+                    M._muneco(cx - dz * 0.9 * lado, cz + dx * 0.9 * lado, azar, caras,
+                              "pancarta_protesta" if k % 9 == 0 else None)
+    nodo = _PLAZA["nodos"]["caotica"].attachNewNode("pasillo")
+    t.volcar(nodo)
+    for nombre, lista in caras.items():
+        if lista:
+            base, rug, met, emi = MATERIALES[nombre]
+            e = M._pieza_malla(nodo, lista, M._material(
+                (*base, 1), rugosidad=rug, metalico=met, emision=(*emi, 1) if emi else None))
+            e.y = -0.15
+    nodo.hide()
+    return nodo
+
+
+def cerrar_pasillo(cerrado=True):
+    """Pone (o quita) las vallas de las calles cerradas."""
+    if "pasillo" not in _PLAZA:
+        _PLAZA["pasillo"] = _pasillo()
+    _PLAZA["pasillo"].show() if cerrado else _PLAZA["pasillo"].hide()
+
+
+def preparar_persecucion(eventos):
+    """Lo que se mueve en la ruta: lo que va a caer (en alto, ya visible: es
+    el aviso), y quien va a cruzarse (escondido hasta que sale). eventos:
+    los de la Persecucion de la Partida, con su id."""
+    nodo = _PLAZA["nodos"]["caotica"]
+    vivos = {}
+    azar = random.Random(58)
+    for ev in eventos:
+        if ev["tipo"] == "cae":
+            pieza = nodo.attachNewNode(f"cae_{ev['id']}")
+            t = _Taller()
+            _pieza_evento(t, ev.get("queda", "saltar"), ev.get("objeto"), ev["rect"])
+            t.volcar(pieza)
+            alto = ALTO_CAIDA.get(ev.get("objeto"), 3.0)
+            pieza.setY(alto)
+            vivos[ev["id"]] = {"tipo": "cae", "nodo": pieza, "alto": alto, "t": None}
+        elif ev["tipo"] == "cruza":
+            pieza = nodo.attachNewNode(f"cruza_{ev['id']}")
+            caras = {n: [] for n in MATERIALES}
+            # En contra van en grupo; a traves, uno solo.
+            (ax, az), (bx, bz) = ev["desde"], ev["hasta"]
+            en_contra = abs(bz - az) > abs(bx - ax)
+            for k in range(3 if en_contra else 1):
+                M._muneco((k - 1) * 0.7 if en_contra else 0.0, 0.0, azar, caras,
+                          "pancarta_protesta" if k == 1 else None)
+            for nombre, lista in caras.items():
+                if lista:
+                    base, rug, met, emi = MATERIALES[nombre]
+                    M._pieza_malla(pieza, lista, M._material(
+                        (*base, 1), rugosidad=rug, metalico=met,
+                        emision=(*emi, 1) if emi else None))
+            pieza.setH(math.degrees(math.atan2(bx - ax, bz - az)))
+            pieza.hide()
+            vivos[ev["id"]] = {"tipo": "cruza", "nodo": pieza}
+    _PLAZA["vivos"] = vivos
+    _PLAZA["vuelos"] = {}
+
+
+def avisar_evento(ev, desde=None):
+    """Lo que se anuncia: lo lanzado sale volando hacia su marca."""
+    if ev["tipo"] != "lanza":
+        if ev["tipo"] == "cae" and ev["id"] in _PLAZA.get("vivos", {}):
+            _PLAZA["vivos"][ev["id"]]["t"] = 0.0          # empieza a temblar
+        return
+    nodo = _PLAZA["nodos"]["caotica"]
+    t = _Taller()
+    x, z = ev["en"]
+    # La marca de donde caera: un cuadro rojo en el suelo.
+    for a in ((x - 0.9, x + 0.9, z - 0.95, z - 0.85), (x - 0.9, x + 0.9, z + 0.85, z + 0.95),
+              (x - 0.95, x - 0.85, z - 0.9, z + 0.9), (x + 0.85, x + 0.95, z - 0.9, z + 0.9)):
+        t.caja("semaforo_rojo", a[0], a[1], 0.0, 0.03, a[2], a[3])
+    marca = nodo.attachNewNode(f"marca_{ev['id']}")
+    t.volcar(marca)
+    objeto = nodo.attachNewNode(f"vuela_{ev['id']}")
+    tv = _Taller()
+    if ev.get("objeto") == "botella":
+        tv.caja("toldo_verde", -0.06, 0.06, 0, 0.3, -0.06, 0.06)
+    elif ev.get("objeto") == "maceta":
+        tv.caja("maceta", -0.18, 0.18, 0, 0.3, -0.18, 0.18)
+        tv.esfera("hojas", 0, 0.45, 0, 0.22)
+    else:
+        tv.caja("caja_madera", -0.25, 0.25, 0, 0.4, -0.25, 0.25)
+    tv.volcar(objeto)
+    ox, oz = desde if desde is not None else ev["desde"]
+    alto = 6.0 if ev.get("objeto") == "maceta" else 1.9
+    _PLAZA["vuelos"][ev["id"]] = {"objeto": objeto, "marca": marca, "t": 0.0,
+                                   "desde": (ox, alto, oz), "hasta": (x, 0.1, z)}
+
+
+def caer_evento(ev):
+    if ev["id"] in _PLAZA.get("vivos", {}):
+        _PLAZA["vivos"][ev["id"]]["cae"] = 0.0
+
+
+def impacto_evento(ev):
+    """Lo lanzado llega: se quita y deja los pedazos."""
+    vuelo = _PLAZA.get("vuelos", {}).pop(ev["id"], None)
+    if vuelo is None:
+        return
+    vuelo["objeto"].removeNode()
+    vuelo["marca"].removeNode()
+    t, azar = _Taller(), random.Random(ev["id"])
+    x, z = ev["en"]
+    for _k in range(7):
+        t.girada("toldo_verde" if ev.get("objeto") == "botella" else "escombro",
+                 x + azar.uniform(-0.7, 0.7), z + azar.uniform(-0.7, 0.7), 0.12, 0.2, 0, 0.04,
+                 azar.uniform(0, 180))
+    t.volcar(_PLAZA["nodos"]["caotica"])
+
+
+def vivir_persecucion(dt, eventos):
+    """Cada fotograma: lo que tiembla antes de caer, lo que cae, lo que
+    vuela y quien se cruza (con la posicion que da la regla)."""
+    vivos = _PLAZA.get("vivos", {})
+    for ev in eventos:
+        v = vivos.get(ev["id"])
+        if v is None:
+            continue
+        if v["tipo"] == "cae" and v["t"] is not None:
+            v["t"] += dt
+            if "cae" in v:
+                v["cae"] += dt
+                f = min(1.0, v["cae"] / TIEMPO_CAIDA)
+                v["nodo"].setY(v["alto"] * (1 - f * f))
+                v["nodo"].setX(0)
+            elif v["alto"] > 0:
+                v["nodo"].setX(0.06 * math.sin(v["t"] * 40))   # tiembla: va a caer
+        elif v["tipo"] == "cruza":
+            if ev["estado"] == "activo" and "pos" in ev:
+                v["nodo"].show()
+                v["nodo"].setPos(ev["pos"][0], 0, ev["pos"][1])
+            else:
+                v["nodo"].hide()
+    for vuelo in _PLAZA.get("vuelos", {}).values():
+        vuelo["t"] += dt
+        f = min(1.0, vuelo["t"] / AVISO)
+        (ax, ay, az), (bx, by, bz) = vuelo["desde"], vuelo["hasta"]
+        y = ay + (by - ay) * f + 2.5 * 4 * f * (1 - f)        # el arco, bien visible
+        vuelo["objeto"].setPos(ax + (bx - ax) * f, y, az + (bz - az) * f)
+        vuelo["objeto"].setH(f * 540)
+
+
+def entregar_mochila(actor_mateo):
+    """La captura: la mochila pasa de su espalda a las manos de Mateo."""
+    mochila = _PLAZA.get("mochila")
+    if mochila is not None:
+        mochila.wrtReparentTo(actor_mateo)
+        mochila.setPos(0, -0.55, -0.35)
+        mochila.setHpr(0, 0, 0)
+
+
+def terminar_minijuego():
+    """Cada uno vuelve a su sitio de la plaza (el rival, el sospechoso)."""
+    _PLAZA.pop("sospechoso", None)
+    if "pasillo" in _PLAZA:
+        _PLAZA["pasillo"].hide()
+    pulso(0.0)
+    estado(_PLAZA.get("estado"), forzar=True)
+
+
+def _pintar_flecha(img):
+    """Una flecha gruesa hacia arriba, blanca sobre transparente: las notas y
+    las marcas del duelo la giran y la tinen."""
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.polygon(((w * 0.5, h * 0.08), (w * 0.92, h * 0.52), (w * 0.66, h * 0.52),
+               (w * 0.66, h * 0.92), (w * 0.34, h * 0.92), (w * 0.34, h * 0.52),
+               (w * 0.08, h * 0.52)), fill=(255, 255, 255, 255))
+
+
+def textura_flecha():
+    return M._textura("flecha_duelo", _pintar_flecha, 128, 128, srgb=False)
+
+
+def suelo(x, z):
+    """El alto del piso de la plaza en (x, z): la escalinata de la calle sur."""
+    return altura_en(x, z, ESCALERAS_PLAZA)

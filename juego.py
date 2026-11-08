@@ -43,17 +43,21 @@ from contenido import (
     OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2, OBJETIVOS_CAPITULO_2,
     SALIDA_CAPITULO_2,
     construir_arbol_habilidades, construir_arbol_decision, construir_arbol_capitulo_2,
-    construir_arbol_capitulo_3, construir_arbol_capitulo_4,
+    construir_arbol_capitulo_3, construir_arbol_capitulo_4, construir_arbol_capitulo_5,
+    RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION, EVENTOS_PERSECUCION,
     aplicar_habilidades, aplicar_banderas,
 )
 from sigilo import Sigilo
 from transmision import Transmision
+from ritmo import Duelo
+from persecucion import Persecucion
 
 # Los capitulos que deciden en su propia escena, con su arbol: sin
 # telefono, sin habilidades ni banderas que inserten ramas.
 ARBOL_DEL_CAPITULO = {DIA_SIGILO: construir_arbol_capitulo_2,
                       DIA_CAMPANA: construir_arbol_capitulo_3,
-                      DIA_ESTUDIO: construir_arbol_capitulo_4}
+                      DIA_ESTUDIO: construir_arbol_capitulo_4,
+                      DIA_PLAZA: construir_arbol_capitulo_5}
 # Lo que mueve en los indicadores llevar bien (o mal) el chat del directo.
 EFECTOS_CHAT = {True: {"desinformacion": -4, "confianza": 4},
                 False: {"desinformacion": 6, "confianza": -3}}
@@ -271,6 +275,8 @@ class Partida:
         self.sigilo = None
         self.transmision = None       # el directo del dia 4
         self.estado_plaza = None      # "pacifica" o "caotica", el dia 5
+        self.duelo = None             # el minijuego de la pacifica (ritmo.py)
+        self.persecucion = None       # el de la caotica (persecucion.py)
         self.con_telefono = True      # lo fija iniciar_dia
 
         # --- lo que el jugador sabe de los candidatos (dura toda la partida) ---
@@ -345,8 +351,12 @@ class Partida:
         # El telefono es del capitulo 1 (y de los dias aun provisionales):
         # el 2 y el 3 deciden en su propia escena.
         self.con_telefono = indice not in ARBOL_DEL_CAPITULO
+        # La plaza del 5 se decide antes que su arbol: de ella depende cual.
+        self.estado_plaza = self._estado_plaza() if indice == DIA_PLAZA else None
         if indice in ARBOL_DEL_CAPITULO:
-            self.arbol_decision = ARBOL_DEL_CAPITULO[indice]()
+            construir = ARBOL_DEL_CAPITULO[indice]
+            self.arbol_decision = (construir(self.estado_plaza) if indice == DIA_PLAZA
+                                   else construir())
             propias = memoria = 0
         else:
             self.arbol_decision = construir_arbol_decision(self.publicacion)
@@ -365,7 +375,11 @@ class Partida:
                        if indice == DIA_SIGILO else None)
         self.transmision = (Transmision(RELLENO_CHAT_4, PEDIDOS_CHAT_4)
                             if indice == DIA_ESTUDIO else None)
-        self.estado_plaza = self._estado_plaza() if indice == DIA_PLAZA else None
+        caotica = self.estado_plaza == "caotica"
+        self.duelo = Duelo() if indice == DIA_PLAZA and not caotica else None
+        self.persecucion = (Persecucion(RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION,
+                                        EVENTOS_PERSECUCION)
+                            if indice == DIA_PLAZA and caotica else None)
         # El reloj del dia se fija antes de repartir: las cartas se
         # programan contra el, no contra el de serie.
         self.tiempo_total = (self.publicacion.get("tiempo", TIEMPO_ESCENA)
@@ -467,6 +481,20 @@ class Partida:
         si la desinformacion y los conflictos subieron, se desborda."""
         tension = self.indicadores["desinformacion"] + self.indicadores["conflictos"]
         return "caotica" if tension > TENSION_PLAZA else "pacifica"
+
+    def terminar_minijuego(self):
+        """El capitulo 5 se cierra con lo que salio del minijuego: se toma
+        su opcion del arbol (y su unica hoja), que aplica efectos y bandera."""
+        if self.duelo is not None:
+            elegida = self.duelo.resultado()
+        elif self.persecucion is not None:
+            elegida = self.persecucion.resultado or "escapo"
+        else:
+            return None
+        self.elegir(elegida)
+        while self.arbol_decision is not None and not self.arbol_decision.termino():
+            self.elegir(self.arbol_decision.opciones_actuales()[0].id)
+        return elegida
 
     def partida_terminada(self):
         return self.dias_completados >= self.total_dias

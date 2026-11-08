@@ -15,6 +15,7 @@ Si no se separan, o no puedes mirar o no puedes hacer clic.
 """
 
 import math
+import random
 
 from panda3d.core import LMatrix3f, LMatrix4f, LVector3f, TransparencyAttrib, rotate_to
 from ursina import Vec3, camera, held_keys, mouse
@@ -125,7 +126,23 @@ CLIPS = {
     "correr": (("correr", 1.0), ("caminar", 1.7)),
     "agachado": (("agachado", 1.0), ("idle", 1.0)),
     "agachado_andar": (("agachado_caminar", 1.0), ("caminar", 0.55)),
+    # Deslizarse por debajo de una barrera: la pose agachada, a la carrera.
+    "deslizar": (("agachado", 1.0), ("agachado_caminar", 1.6)),
 }
+# Saltar y deslizarse (la persecucion del capitulo 5). El salto es un arco
+# de ALTO_SALTO en DURA_SALTO; por encima de PASA_SALTANDO se pasa sobre lo
+# saltable. Deslizarse dura DURA_DESLIZ, y mientras se pasa bajo lo
+# deslizable, un poco mas rapido que corriendo.
+ALTO_SALTO, DURA_SALTO, PASA_SALTANDO = 0.75, 0.62, 0.3
+DURA_DESLIZ, VELOCIDAD_DESLIZ = 0.8, 5.8
+# Trepar (vault): Espacio con una valla mediana delante (a menos de
+# ALCANCE_TREPAR): un arco de TREPAR_ALTO que la salva, con impulso propio.
+TREPAR_ALTO, DURA_TREPAR, ALCANCE_TREPAR, VELOCIDAD_TREPAR = 1.3, 0.5, 1.5, 5.0
+# La carrera de la persecucion acelera: hasta IMPULSO_MAX m/s mas despues de
+# RAMPA_IMPULSO s corriendo sin parar ni chocar.
+IMPULSO_MAX, RAMPA_IMPULSO = 1.1, 2.5
+# Un golpe: LENTO s a una fraccion de la velocidad, y la camara tiembla.
+LENTO, FACTOR_LENTO, TEMBLOR = 1.0, 0.45, 0.35
 # A que velocidad avanza el personaje en cada estado. Sirve para que el
 # clip se reproduzca al ritmo al que de verdad pisa el suelo: los
 # numeros de CLIPS eran multiplicadores a ojo y dejaban los pies
@@ -135,6 +152,7 @@ VELOCIDAD_DE = {
     "andar": VELOCIDAD,
     "correr": VELOCIDAD_CORRER,
     "agachado_andar": VELOCIDAD_AGACHADO,
+    "deslizar": VELOCIDAD_DESLIZ,
 }
 
 
@@ -236,6 +254,31 @@ class Jugador:
         # Hasta donde puede subir la camara: el techo de la sala menos un
         # dedo. La cafeteria mide 2,5 m; el colegio y la oficina, 3,2.
         self.techo = ALTURA_TECHO
+        # Saltar y deslizarse: segundos desde que empezo (None = no) y lo
+        # que solo se pasa saltando o deslizandose (rectangulos). suelo:
+        # el alto del piso en (x, z), para escaleras; None = plano.
+        self.salto = None
+        self.desliz = None
+        self.saltables = []
+        self.deslizables = []
+        self.suelo = None
+        # La persecucion del capitulo 5: lo que se trepa (Espacio delante),
+        # lo que se pasa agachado (Ctrl) o deslizandose, la carrera que
+        # acelera (con_impulso), el frenazo de un golpe y el temblor de la
+        # camara. choque: el tipo del ultimo obstaculo contra el que se
+        # estrello (lo lee y lo borra quien lleve las reglas).
+        self.trepables = []
+        self.agachables = []
+        self.trepa = None
+        self.con_impulso = False
+        self.impulso = 0.0
+        self.lento = 0.0
+        self.temblor = 0.0
+        self.choque = None
+        # La persecucion es lineal: (distancia al eje de la ruta, mitad del
+        # ancho). Fuera del pasillo no se puede ir; si ya se esta fuera,
+        # solo hacia dentro (asi nunca se queda atascado).
+        self.pasillo = None
 
     def _bloqueado(self, x, z):
         """True si el personaje no cabe ahi.
@@ -249,7 +292,111 @@ class Jugador:
         for x0, x1, z0, z1 in self.bloqueos:
             if x0 - RADIO < x < x1 + RADIO and z0 - RADIO < z < z1 + RADIO:
                 return True
+        if self.pasillo is not None:
+            distancia, mitad = self.pasillo
+            lejos = distancia(x, z)
+            if lejos > mitad - RADIO:
+                ax, _ay, az = self.actor.getPos()
+                if lejos > distancia(ax, az) - 1e-4:
+                    return True
+        # Lo de parkour solo se pasa haciendo lo que pide.
+        trepando = self.trepa is not None
+        for lista, pasa in ((self.saltables, self.en_el_aire() or trepando),
+                            (self.trepables, trepando),
+                            (self.agachables, self.agachado or self.desliz is not None),
+                            (self.deslizables, self.desliz is not None)):
+            if pasa:
+                continue
+            for x0, x1, z0, z1, *tipo in lista:
+                if x0 - RADIO < x < x1 + RADIO and z0 - RADIO < z < z1 + RADIO:
+                    self.choque = tipo[0] if tipo else "obstaculo"
+                    return True
         return False
+
+    # ----------------------------------------------------------------
+    #  saltar y deslizarse
+    # ----------------------------------------------------------------
+
+    def saltar(self):
+        """Espacio. Con una valla mediana justo delante, la trepa; si no,
+        salta. Devuelve "trepa", "salto" o None."""
+        if (self.salto is not None or self.trepa is not None or self.desliz is not None
+                or self.cubierta is not None):
+            return None
+        if self._trepable_delante():
+            self.trepa = 0.0
+            self._animar("deslizar")              # recogido, como al saltar una valla
+            return "trepa"
+        self.salto = 0.0
+        return "salto"
+
+    def _adelante(self):
+        a = math.radians(180.0 - self.rumbo)
+        return math.sin(a), math.cos(a)
+
+    def _trepable_delante(self):
+        x, _, z = self.actor.getPos()
+        fx, fz = self._adelante()
+        for d in (0.4, 0.8, 1.2, ALCANCE_TREPAR):
+            px, pz = x + fx * d, z + fz * d
+            for x0, x1, z0, z1, *_t in self.trepables:
+                if x0 - RADIO < px < x1 + RADIO and z0 - RADIO < pz < z1 + RADIO:
+                    return True
+        return False
+
+    def golpe(self):
+        """Le dieron o se estrello: frena un momento y la camara tiembla."""
+        self.lento = LENTO
+        self.temblor = TEMBLOR
+        self.impulso = 0.0
+
+    def altura_trepa(self):
+        if self.trepa is None:
+            return 0.0
+        return TREPAR_ALTO * math.sin(math.pi * min(1.0, self.trepa / DURA_TREPAR))
+
+    def deslizar(self):
+        """C a la carrera: se tira al suelo y pasa por debajo."""
+        if self.desliz is not None or self.salto is not None or not self.corriendo:
+            return False
+        self.desliz = 0.0
+        return True
+
+    def altura_salto(self):
+        if self.salto is None:
+            return 0.0
+        f = self.salto / DURA_SALTO
+        return ALTO_SALTO * 4 * f * (1 - f)
+
+    def en_el_aire(self):
+        return self.altura_salto() > PASA_SALTANDO
+
+    def _piso(self, x, z):
+        return self.altura_suelo + (self.suelo(x, z) if self.suelo else 0.0)
+
+    def _avanzar_salto(self, dt):
+        self.lento = max(0.0, self.lento - dt)
+        if self.trepa is not None:
+            # Por encima de la valla, hacia delante, con impulso propio.
+            fx, fz = self._adelante()
+            x, _, z = self.actor.getPos()
+            nx, nz = x + fx * VELOCIDAD_TREPAR * dt, z + fz * VELOCIDAD_TREPAR * dt
+            if not self._bloqueado(nx, nz):
+                self.actor.setX(nx)
+                self.actor.setZ(nz)
+            self.trepa += dt
+            if self.trepa >= DURA_TREPAR:
+                self.trepa = None
+        if self.salto is not None:
+            self.salto += dt
+            if self.salto >= DURA_SALTO:
+                self.salto = None
+        if self.desliz is not None:
+            self.desliz += dt
+            if self.desliz >= DURA_DESLIZ:
+                self.desliz = None
+        x, _, z = self.actor.getPos()
+        self.actor.setY(self._piso(x, z) + self.altura_salto() + self.altura_trepa())
 
     # ----------------------------------------------------------------
     #  modos
@@ -266,6 +413,8 @@ class Jugador:
         self.salir_de_cobertura()
         self.cancelar_lanzamiento()
         self.agachado = self.corriendo = self.moviendose = self.agachado_fijo = False
+        self.salto = self.desliz = self.trepa = None
+        self.lento = self.temblor = self.impulso = 0.0
         _raton(False)
         self._animar("quieto")
         # Los planos fijos de decision necesitan al personaje entero.
@@ -302,8 +451,10 @@ class Jugador:
                 # Agachado gana: con Ctrl pulsado no se puede correr.
                 self.agachado = bool(held_keys["control"]) or self.agachado_fijo
                 self.corriendo = (bool(held_keys["shift"]) and not self.agachado
-                                  and not self.apuntando)
-                self._caminar(avance, lado, dt)
+                                  and not self.apuntando) or self.desliz is not None
+                if self.trepa is None:        # trepando lo lleva el impulso
+                    self._caminar(avance, lado, dt)
+                self._avanzar_salto(dt)
             if self.apuntando or self.lanzado is not None:
                 # Apuntando mira a donde mira la camara, ande hacia donde ande.
                 self.rumbo = 180.0 - self.yaw
@@ -553,12 +704,21 @@ class Jugador:
             return
         d = Vec3(d.x / largo, 0, d.z / largo)
 
-        if self.agachado:
+        if self.desliz is not None:
+            velocidad, estado = VELOCIDAD_DESLIZ, "deslizar"
+        elif self.agachado:
             velocidad, estado = VELOCIDAD_AGACHADO, "agachado_andar"
         elif self.corriendo:
             velocidad, estado = VELOCIDAD_CORRER, "correr"
+            if self.con_impulso:
+                self.impulso += dt
+                velocidad += IMPULSO_MAX * min(1.0, self.impulso / RAMPA_IMPULSO)
         else:
             velocidad, estado = VELOCIDAD, "andar"
+        if not self.corriendo:
+            self.impulso = 0.0
+        if self.lento > 0.0:
+            velocidad *= FACTOR_LENTO
         x, _, z = self.actor.getPos()
         paso = velocidad * dt
         # Un eje cada vez: al chocar de lado con un mueble se desliza a lo
@@ -574,7 +734,7 @@ class Jugador:
             x = max(x_min, min(x_max, x))
             z = max(z_min, min(z_max, z))
         antes = self.actor.getPos()
-        self.actor.setPos(x, self.altura_suelo, z)
+        self.actor.setPos(x, self._piso(x, z) + self.altura_salto(), z)
         # Contra un muro no hay pasos: empujar la pared no hace ruido.
         self.moviendose = abs(antes.x - x) + abs(antes.z - z) > 1e-4
 
@@ -627,7 +787,7 @@ class Jugador:
             # mueble seguia tapando lo que hay detras.
             x += self.lado.x * ASOMAR_CAMARA * self.asomada
             z += self.lado.z * ASOMAR_CAMARA * self.asomada
-        return Vec3(x, self.altura_suelo + alto, z)
+        return Vec3(x, self._piso(x, z) + alto, z)
 
     def _distancia_util(self, origen, rad, rad_p, maximo=DISTANCIA):
         """Cuanto puede alejarse la camara sin salirse del cuarto.
@@ -750,9 +910,15 @@ class Jugador:
             pos.x = max(x0, min(x1, pos.x))
             pos.z = max(z0, min(z1, pos.z))
 
+        if self.temblor > 0.0:
+            # El golpe sacude la camara y se apaga solo, sin quitar el control.
+            pos += Vec3(random.uniform(-1, 1), random.uniform(-1, 1),
+                        random.uniform(-1, 1)) * self.temblor * 0.3
+            self.temblor = max(0.0, self.temblor - dt * 0.8)
         camera.position = pos
         camera.rotation = Vec3(pitch + PICADO * self.cerca, self.yaw, 0)
         lente = (self.fov + (ABRIR_CORRER if self.corriendo else 0)
+                 + ABRIR_CORRER * min(1.0, self.impulso / RAMPA_IMPULSO)
                  + ABRIR_CERCA * self.cerca - (CERRAR_APUNTAR if self.apuntando else 0))
         camera.fov = lente if inmediato else _acercar(camera.fov, lente, factor * 0.6)
 

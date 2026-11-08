@@ -406,6 +406,268 @@ class Sospecha:
         _limpiar(self.piezas)
 
 
+class DueloRitmo:
+    """El duelo musical del capitulo 5 («El ritmo de la verdad»).
+
+    Arriba, las cuatro marcas de Mateo a la izquierda y las del rival a la
+    derecha; las notas suben desde abajo y hay que pulsar cuando tapan la
+    marca. Abajo, la barra entre los dos, puntos, combo con multiplicador
+    y precision. Las tintas de los carriles son las de la pista del suelo.
+    Lo que vale cada pulsacion lo decide ritmo.Duelo: aqui solo se pinta.
+    """
+
+    X_MATEO = (-0.70, -0.58, -0.46, -0.34)
+    X_RIVAL = (0.34, 0.46, 0.58, 0.70)
+    Y_MARCA = 0.33
+    LADO = 0.088
+    GIRO = (-90, 180, 0, 90)                  # izquierda, abajo, arriba, derecha
+    TINTAS = (E.OSPINA, E.GAITAN, E.LLERAS, E.RESTREPO)
+    ANCHO_BARRA = 0.9
+
+    def __init__(self, textura, rival="TAVO, EL DEL RUMOR"):
+        from panda3d.core import TransparencyAttrib
+        self._tex, self._alfa = textura, TransparencyAttrib.MAlpha
+        self.piezas, self.notas_vivas, self.cartel = [], [], []
+        a = self.piezas.append
+        self.piezas += E.degradado_vertical(0.5, 0.12, alfa=150)
+        self.piezas += E.degradado_vertical(-0.5, -0.22, alfa=200)
+        self.marcas = {"mateo": [], "rival": []}
+        for quien, xs in (("mateo", self.X_MATEO), ("rival", self.X_RIVAL)):
+            for c, x in enumerate(xs):
+                m = self._flecha(x, self.Y_MARCA, c, E.luz(70), z=0.02)
+                self.marcas[quien].append(m)
+                a(m)
+        a(E.pequena("MATEO", (self.X_MATEO[0] - 0.04, self.Y_MARCA + 0.085), E.OSPINA,
+                    escala=0.6))
+        a(E.pequena(rival, (self.X_RIVAL[-1] + 0.04, self.Y_MARCA + 0.085), E.GAITAN,
+                    escala=0.6, origen=(0.5, 0.5)))
+        self.ronda = E.pequena("", (0, 0.462), E.TEXTO, escala=0.62, origen=(0, 0.5))
+        a(self.ronda)
+        self.juicio = E.titular("", (-0.52, 0.19), 1.4, E.TEXTO, origen=(0, 0))
+        a(self.juicio)
+        # La barra entre los dos: azul de Mateo contra rojo del rival.
+        y = -0.355
+        a(E.banda(self.ANCHO_BARRA + 0.012, 0.03, (0, y), E.tinta(220)))
+        self.barra_rival = E.banda(self.ANCHO_BARRA, 0.02, (0, y), E.GAITAN)
+        # Delante de la roja (z menor): si no, la tapaba entera.
+        self.barra_mateo = E.banda(self.ANCHO_BARRA / 2, 0.02, (-self.ANCHO_BARRA / 2, y),
+                                   E.OSPINA, z=E.Z_ADORNO - 0.01)
+        self.barra_mateo.origin = (-0.5, 0)
+        self.corte = E.banda(0.008, 0.05, (0, y), E.TEXTO, z=E.Z_ADORNO - 0.02)
+        self.piezas += [self.barra_rival, self.barra_mateo, self.corte]
+        a(E.pequena("MATEO", (-self.ANCHO_BARRA / 2 - 0.02, y + 0.012), E.OSPINA,
+                    escala=0.55, origen=(0.5, 0.5)))
+        a(E.pequena("RIVAL", (self.ANCHO_BARRA / 2 + 0.02, y + 0.012), E.GAITAN,
+                    escala=0.55))
+        self.puntos = E.etiqueta("", (-0.45, -0.425), 0.95, E.TEXTO, origen=(-0.5, 0))
+        self.combo = E.etiqueta("", (-0.08, -0.425), 0.95, E.LLERAS, origen=(-0.5, 0))
+        self.precision = E.etiqueta("", (0.45, -0.425), 0.95, E.TEXTO, origen=(0.5, 0))
+        self.piezas += [self.puntos, self.combo, self.precision]
+        self.quien = E.pequena("", (0, -0.235), E.TEXTO_TENUE, escala=0.5, origen=(0, 0))
+        self.letra = E.entradilla("", (0, -0.27), 0.86, E.TEXTO, origen=(0, 0.5), ancho=60)
+        self.piezas += [self.quien, self.letra]
+        # El fallo: un fogonazo rojo que se apaga.
+        self.fallo_velo = E.banda(2.4, 1.2, (0, 0), color.rgba(0.77, 0.23, 0.2, 0), z=0.09)
+        a(self.fallo_velo)
+        self.cifras(0, 0, 1, 1.0, 0.5)
+
+    def _flecha(self, x, y, carril, col, z=0.0, lado=None):
+        e = Entity(parent=camera.ui, model="quad", position=(x, y, z),
+                   scale=lado or self.LADO, rotation_z=self.GIRO[carril], color=col)
+        e.setTexture(self._tex, 1)
+        e.setTransparency(self._alfa)
+        return e
+
+    # ---- notas ----
+
+    def preparar(self, notas):
+        """Las notas de la ronda: [(t, carril, quien)]. Se crean todas y se
+        enseñan cuando entran en pantalla."""
+        _limpiar([e for *_r, e in self.notas_vivas])
+        self.notas_vivas = []
+        for t, c, quien in notas:
+            xs = self.X_MATEO if quien == "mateo" else self.X_RIVAL
+            e = self._flecha(xs[c], -0.6, c, self.TINTAS[c], z=0.01)
+            e.enabled = False
+            self.notas_vivas.append([t, c, quien, e])
+
+    def mover(self, t, velocidad):
+        """Cada nota a su altura: llega a la marca en su tiempo."""
+        for tn, _c, _q, e in self.notas_vivas:
+            y = self.Y_MARCA - (tn - t) * velocidad
+            e.enabled = -0.62 < y < self.Y_MARCA + 0.12
+            e.y = y
+
+    def _quitar(self, carril, quien):
+        """La nota mas temprana de ese carril y de ese lado."""
+        for n in self.notas_vivas:
+            if n[1] == carril and n[2] == quien:
+                self.notas_vivas.remove(n)
+                destroy(n[3])
+                return
+
+    def _destello(self, marca, tinta):
+        marca.color = tinta
+        marca.scale = self.LADO * 1.3
+        marca.animate_scale(self.LADO, duration=0.12)
+        marca.animate_color(E.luz(70), duration=0.25)
+
+    def acierto(self, carril, nombre):
+        self._quitar(carril, "mateo")
+        self._destello(self.marcas["mateo"][carril], self.TINTAS[carril])
+        self._juicio(nombre)
+
+    def fallo(self, carril):
+        self._quitar(carril, "mateo")
+        self._juicio("MISS")
+        self.fallo_velo.color = color.rgba(0.77, 0.23, 0.2, 0.22)
+        self.fallo_velo.animate_color(color.rgba(0.77, 0.23, 0.2, 0), duration=0.3)
+
+    def canta(self, carril):
+        self._quitar(carril, "rival")
+        self._destello(self.marcas["rival"][carril], self.TINTAS[carril])
+
+    def _juicio(self, nombre):
+        tinta = {"PERFECT": E.ACENTO_UI, "GOOD": E.RESTREPO, "BAD": E.LLERAS}.get(
+            nombre, E.GAITAN)
+        j = self.juicio
+        for s in list(getattr(j, "animations", [])):
+            s.kill()
+        j.text, j.color, j.alpha = nombre, tinta, 1
+        j.scale = 1.6
+        j.animate_scale(1.25, duration=0.12)
+        j.fade_out(duration=0.3, delay=0.35)
+
+    # ---- cifras y textos ----
+
+    def cifras(self, puntos, combo, multiplicador, precision, barra):
+        self.puntos.text = f"PUNTOS  {puntos:,}".replace(",", " ")
+        self.combo.text = f"COMBO {combo}  ·  x{multiplicador}" if combo else "COMBO —"
+        self.precision.text = f"PRECISIÓN  {precision * 100:.0f} %"
+        ancho = self.ANCHO_BARRA * barra
+        self.barra_mateo.scale_x = ancho
+        self.corte.x = -self.ANCHO_BARRA / 2 + ancho
+
+    def poner_ronda(self, texto):
+        self.ronda.text = texto
+
+    def cantar(self, quien, texto):
+        """La letra de la frase que suena, con quien la canta."""
+        self.quien.text = "MATEO" if quien == "mateo" else "EL RIVAL"
+        self.quien.color = E.OSPINA if quien == "mateo" else E.GAITAN
+        self.letra.text, self.letra.wordwrap = texto, 60
+
+    def titulo(self, arriba, grande, abajo=""):
+        """Cartel en el centro: la ronda que empieza o el resultado."""
+        _limpiar(self.cartel)
+        self.cartel += E.degradado_vertical(-0.08, 0.2, alfa=0)
+        self.cartel.append(E.banda(1.2, 0.26, (0, 0.04), E.tinta(215), z=0.03))
+        self.cartel.append(E.pequena(arriba, (0, 0.13), E.LLERAS, escala=0.6, origen=(0, 0.5)))
+        self.cartel.append(E.titular(grande, (0, 0.04), 2.2, E.TEXTO, origen=(0, 0)))
+        if abajo:
+            self.cartel.append(E.pequena(abajo, (0, -0.045), E.TEXTO_TENUE, escala=0.55,
+                                         origen=(0, 0.5)))
+
+    def sin_titulo(self):
+        _limpiar(self.cartel)
+
+    def cerrar(self):
+        _limpiar([e for *_r, e in self.notas_vivas])
+        self.notas_vivas = []
+        _limpiar(self.cartel)
+        for p in (self.juicio, self.fallo_velo):
+            for s in list(getattr(p, "animations", [])):
+                s.kill()
+        _limpiar(self.piezas)
+
+
+class PersecucionHUD:
+    """La persecucion del capitulo 5 («Caos en la plaza»), sin tapar la
+    escena: arriba el reloj y la fase; debajo, la barra de la persecucion con
+    Mateo y el de la mochila; la distancia, en el color de la proximidad
+    (verde encima, rojo a punto de perderlo). El aviso de lo que viene
+    («¡SALTA!») sale en grande en el centro ANTES del obstaculo; el golpe,
+    con un fogonazo rojo."""
+
+    ANCHO = 0.56
+
+    def __init__(self):
+        self.piezas = []
+        a = self.piezas.append
+        self.piezas += E.degradado_vertical(0.5, 0.33, alfa=140)
+        self.fase = E.pequena("", (0, 0.468), E.GAITAN, escala=0.55, origen=(0, 0.5))
+        self.reloj = E.titular("", (0, 0.44), 1.45, E.TEXTO, origen=(0, 0.5))
+        self.piezas += [self.fase, self.reloj]
+        y = 0.355
+        a(E.banda(self.ANCHO + 0.008, 0.012, (0, y), E.tinta(200)))
+        self.recorrido = E.banda(self.ANCHO, 0.006, (-self.ANCHO / 2, y), E.luz(60))
+        self.recorrido.origin = (-0.5, 0)
+        a(self.recorrido)
+        self.marca_mateo = E.banda(0.012, 0.03, (-self.ANCHO / 2, y), E.OSPINA,
+                                   z=E.Z_ADORNO - 0.02)
+        self.marca_el = E.banda(0.012, 0.03, (-self.ANCHO / 2, y), E.GAITAN,
+                                z=E.Z_ADORNO - 0.02)
+        self.metros = E.etiqueta("", (self.ANCHO / 2 + 0.025, y), 0.85, E.TEXTO,
+                                 origen=(-0.5, 0))
+        self.piezas += [self.marca_mateo, self.marca_el, self.metros]
+        a(E.pequena("MATEO", (-self.ANCHO / 2 - 0.02, y + 0.01), E.OSPINA, escala=0.45,
+                    origen=(0.5, 0.5)))
+        self.objetivo = E.entradilla("", (0.86, 0.465), 0.62, E.TEXTO_TENUE, ancho=36,
+                                     origen=(0.5, 0.5))
+        a(self.objetivo)
+        self.accion = E.titular("", (0, 0.13), 2.6, E.LLERAS, origen=(0, 0))
+        self.mensaje = E.titular("", (0, 0.0), 2.2, E.TEXTO, origen=(0, 0))
+        self.quien = E.pequena("", (0, -0.36), E.TEXTO_TENUE, escala=0.5, origen=(0, 0))
+        self.dicho = E.entradilla("", (0, -0.385), 0.84, E.TEXTO, origen=(0, 0.5), ancho=70)
+        self.velo = E.banda(2.4, 1.2, (0, 0), color.rgba(0.77, 0.12, 0.08, 0), z=0.09)
+        self.piezas += [self.accion, self.mensaje, self.quien, self.dicho, self.velo]
+        self.piezas += E.leyenda((("shift", "correr"), ("espacio", "saltar / trepar"),
+                                  ("ctrl", "agacharse"), ("c", "deslizarse"),
+                                  ("e", "atrapar")), -0.448)
+
+    def poner(self, restante, distancia, proximidad, progreso, fase, objetivo, accion):
+        self.reloj.text = f"{int(restante) // 60}:{int(restante) % 60:02d}"
+        self.reloj.color = E.GAITAN if restante < 20 else E.TEXTO
+        self.fase.text = fase
+        mateo, el = progreso
+        self.recorrido.scale_x = self.ANCHO * max(0.0, min(1.0, mateo))
+        self.marca_mateo.x = -self.ANCHO / 2 + self.ANCHO * min(1.0, mateo)
+        self.marca_el.x = -self.ANCHO / 2 + self.ANCHO * min(1.0, el)
+        self.metros.text = f"{distancia:.0f} m"
+        self.metros.color = (E.RESTREPO if proximidad > 0.6 else
+                             E.LLERAS if proximidad > 0.3 else E.GAITAN)
+        self.objetivo.text, self.objetivo.wordwrap = objetivo, 36
+        if accion != self.accion.text:
+            # El aviso entra de golpe, grande, y se asienta: se ve sin buscarlo.
+            self.accion.text = accion or ""
+            if accion:
+                self.accion.scale = 3.4
+                self.accion.animate_scale(2.6, duration=0.15)
+
+    def avisar(self, texto, tinta=None, dura=1.6):
+        m = self.mensaje
+        for s in list(getattr(m, "animations", [])):
+            s.kill()
+        m.text, m.color, m.alpha = texto, tinta or E.TEXTO, 1
+        if dura:
+            m.fade_out(duration=0.4, delay=dura)
+
+    def golpe(self):
+        self.velo.color = color.rgba(0.77, 0.12, 0.08, 0.32)
+        self.velo.animate_color(color.rgba(0.77, 0.12, 0.08, 0), duration=0.45)
+
+    def decir(self, quien, texto):
+        self.quien.text = quien
+        self.quien.color = E.OSPINA if quien == "MATEO" else E.GAITAN
+        self.dicho.text, self.dicho.wordwrap = texto, 70
+
+    def cerrar(self):
+        for p in (self.mensaje, self.accion, self.velo):
+            for s in list(getattr(p, "animations", [])):
+                s.kill()
+        _limpiar(self.piezas)
+
+
 class Directo:
     """El directo de Santiago (capitulo 4): la interfaz de su plataforma
     encima del plano de la camara del tripode.
