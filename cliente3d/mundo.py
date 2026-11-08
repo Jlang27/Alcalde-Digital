@@ -3154,6 +3154,9 @@ def fondo_vivo(dt):
     if _ACTUAL["nombre"] == "campana":
         seguir_cielo()
         mover_trafico(dt)
+    elif _ACTUAL["nombre"] == "plaza_central":
+        import plaza
+        plaza.vivir(dt)
     elif _ACTUAL["nombre"] == "estudio":
         t = _ACTUAL["reloj"] = _ACTUAL.get("reloj", 0.0) + dt
         for e in _ACTUAL.get("pantallas_chat", ()):
@@ -3287,6 +3290,11 @@ def _montar(mundo, escenario):
         f.setColor(NIEBLA_CIUDAD)
         f.setExpDensity(DENSIDAD_CIUDAD)
         mundo.setFog(f)
+    elif escenario == "plaza_central":
+        # Capitulo 5: la plaza vive en su propio modulo, con sus dos estados.
+        import plaza
+        PLANOS = plaza.PLANOS_PLAZA_CENTRAL
+        plaza.construir(cont)
     elif escenario == "estudio":
         PLANOS = PLANOS_ESTUDIO
         _estudio(cont)
@@ -3346,12 +3354,16 @@ MUROS_CAMARA = {
 
 def muros():
     """Rectangulos que la camara no puede atravesar."""
+    if _ACTUAL["nombre"] == "plaza_central":
+        import plaza
+        return plaza.muros()
     return MUROS_CAMARA.get(_ACTUAL["nombre"], ())
 
 
 # Hasta donde sube la camara de exploracion: el techo menos un dedo. La
 # cafeteria (el .glb) mide 2,5 m; colegio y oficina, 3,2.
 TECHOS = {"rectoria": ALTO_COLEGIO - 0.25, "campana": ALTO_CAMPANA - 0.25,
+          "plaza_central": 9.0,                     # al aire libre
           "estudio": ALTO_ESTUDIO - 0.25}
 
 
@@ -3362,7 +3374,7 @@ def techo():
 # Lente de la camara de exploracion (grados horizontales). La cafeteria
 # usa la cerrada de cine; en el colegio hay que ver a los vigilantes a
 # los lados, y la oficina es grande y abierta.
-LENTES = {"rectoria": 56, "campana": 50, "estudio": 52}
+LENTES = {"rectoria": 56, "campana": 50, "estudio": 52, "plaza_central": 60}
 
 
 def lente():
@@ -3383,11 +3395,17 @@ def coberturas():
 
 def limites():
     """Rectangulo andable del escenario activo."""
+    if _ACTUAL["nombre"] == "plaza_central":
+        import plaza
+        return plaza.LIMITES
     return LIMITES.get(_ACTUAL["nombre"], LIMITES["cafeteria"])
 
 
 def bloqueos():
     """Rectangulos por los que no se puede pasar."""
+    if _ACTUAL["nombre"] == "plaza_central":
+        import plaza                     # cambian con el estado de la plaza
+        return plaza.bloqueos()
     return BLOQUEOS.get(_ACTUAL["nombre"], ())
 
 
@@ -3432,6 +3450,9 @@ def cambiar_escenario(mundo, escenario):
                   "luz_ambiente", "objetos", "usados", "arco", "en_mano",
                   "expediente", "pantallas_chat", "monitor_privado"):
         _ACTUAL.pop(clave, None)
+    if _ACTUAL["nombre"] == "plaza_central":
+        import plaza
+        plaza.desmontar()
     if _ACTUAL["contenedor"] is not None:
         _ACTUAL["contenedor"].removeNode()
     _montar(mundo, escenario)

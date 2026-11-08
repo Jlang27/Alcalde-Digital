@@ -38,7 +38,7 @@ from contenido import (
     VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1, NIVEL_INICIAL, RONDAS_POR_NIVEL,
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
-    OPCIONES_QUE_PROTEGEN, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO,
+    OPCIONES_QUE_PROTEGEN, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO, DIA_PLAZA, TENSION_PLAZA,
     RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, RELLENO_CHAT_4, PEDIDOS_CHAT_4,
     OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2, OBJETIVOS_CAPITULO_2,
     SALIDA_CAPITULO_2,
@@ -270,6 +270,7 @@ class Partida:
         # --- sigilo del dia 2: la ronda de vigilantes del colegio ---
         self.sigilo = None
         self.transmision = None       # el directo del dia 4
+        self.estado_plaza = None      # "pacifica" o "caotica", el dia 5
         self.con_telefono = True      # lo fija iniciar_dia
 
         # --- lo que el jugador sabe de los candidatos (dura toda la partida) ---
@@ -364,6 +365,7 @@ class Partida:
                        if indice == DIA_SIGILO else None)
         self.transmision = (Transmision(RELLENO_CHAT_4, PEDIDOS_CHAT_4)
                             if indice == DIA_ESTUDIO else None)
+        self.estado_plaza = self._estado_plaza() if indice == DIA_PLAZA else None
         # El reloj del dia se fija antes de repartir: las cartas se
         # programan contra el, no contra el de serie.
         self.tiempo_total = (self.publicacion.get("tiempo", TIEMPO_ESCENA)
@@ -459,6 +461,12 @@ class Partida:
             self.avisar(f"{prota.nombre} cierra el día: +1 punto.", "bien", prota)
             for j in self.secundarios_de(self.dia_actual):
                 j.puntos += 1
+
+    def _estado_plaza(self):
+        """La plaza del capitulo 5 es la que dejaron los dias anteriores:
+        si la desinformacion y los conflictos subieron, se desborda."""
+        tension = self.indicadores["desinformacion"] + self.indicadores["conflictos"]
+        return "caotica" if tension > TENSION_PLAZA else "pacifica"
 
     def partida_terminada(self):
         return self.dias_completados >= self.total_dias

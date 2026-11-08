@@ -609,6 +609,21 @@ DIA_CAMPANA = 2
 # El capitulo 4, «La oferta», en el estudio de Santiago: un directo con el
 # chat a toda velocidad (transmision.py) y la oferta en un privado cifrado.
 DIA_ESTUDIO = 3
+# El capitulo 5, «La plaza», en la Plaza Central de Ciudad Nova: la misma
+# plaza en dos estados, segun lo que se hizo antes (Partida.estado_plaza).
+DIA_PLAZA = 4
+# Desinformacion + conflictos desde los que la plaza se desborda. Se
+# empieza en 46: una sola decision irresponsable (+20 o mas) la cruza; las
+# responsables bajan la suma.
+TENSION_PLAZA = 60
+# Donde pasa cada cosa en la plaza (x0, x1, z0, z1 en el plano de
+# cliente3d/plaza.py): el duelo musical frente a la tarima, en la pacifica;
+# y la persecucion del de la mochila repetidora, en la caotica, por la
+# plaza, el callejon del este, la avenida y la calle del sur.
+ZONA_DUELO_PLAZA = (-6.0, 6.0, 27.0, 34.0)
+RUTA_PERSECUCION_PLAZA = ((0.0, 16.0), (18.0, 14.0), (30.0, 12.0), (47.0, 12.0),
+                          (56.0, 12.0), (56.0, -8.0), (35.0, -8.0), (35.0, -36.0),
+                          (0.0, -36.0), (0.0, -70.0))
 
 # La ronda de cada vigilante, ida y vuelta, en puntos (x, z) del plano de
 # mundo.py. Cada una pasa junto a un folio: no hay foto gratis.

@@ -27,6 +27,7 @@ import audio
 import cierre
 import cine_campana
 import cine_estudio
+import plaza
 import cine_colegio
 import estilo as E
 import intro
@@ -40,7 +41,7 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
                        MENSAJE_ANONIMO, DIA_CAMPANA, PUNTOS_CAPITULO_3,
                        TEXTO_MAPA_DISTRITOS, DIALOGO_EXPEDIENTE,
-                       DIALOGO_ASESOR_PREOCUPADO, DIA_ESTUDIO, PUNTOS_CAPITULO_4,
+                       DIALOGO_ASESOR_PREOCUPADO, DIA_ESTUDIO, DIA_PLAZA, PUNTOS_CAPITULO_4,
                        TEXTO_PATROCINADORES, MENSAJE_CIFRADO)
 from transmision import BORRAR, RESPONDER
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
@@ -289,7 +290,7 @@ def rehacer_ajustes(_clave):
 
 # Los siete dias del guion; los primeros se pueden jugar sueltos desde el
 # menu. Antes la lista llegaba a doce, que nunca existieron.
-CAPITULOS_JUGABLES = 4
+CAPITULOS_JUGABLES = 5
 CAPITULOS = [(f"{i + 1:02d}",
               titulo if i < CAPITULOS_JUGABLES else f"{titulo} · próximamente",
               i < CAPITULOS_JUGABLES)
@@ -297,7 +298,7 @@ CAPITULOS = [(f"{i + 1:02d}",
 # Quien protagoniza un capitulo jugado suelto, segun el guion. El 1 lo
 # juega el rol que ya tengas; el 2 es de Valeria, la periodista; el 3,
 # de Daniel Ospina, el candidato, y el 4, de Santiago, el influencer.
-ROL_CAPITULO = {1: "periodista", 2: "candidato", 3: "influencer"}
+ROL_CAPITULO = {1: "periodista", 2: "candidato", 3: "influencer", 4: "ciudadano"}
 
 
 def abrir_capitulos(seleccion=0):
@@ -994,7 +995,7 @@ def capitulo_de(indice):
     return titulo, pantallas.dias_que_faltan(indice), lugar
 
 
-ESCENARIO_DIA = {1: "rectoria", 2: "campana", 3: "estudio"}   # indice de dia -> escenario
+ESCENARIO_DIA = {1: "rectoria", 2: "campana", 3: "estudio", 4: "plaza_central"}   # indice de dia -> escenario
 
 
 def iniciar_dia(indice):
@@ -1018,6 +1019,9 @@ def iniciar_dia(indice):
     # Solo el capitulo 2 tiene escenario propio; los demas siguen en la
     # cafeteria hasta que se construya el suyo.
     mundo.cambiar_escenario(cl.mundo, ESCENARIO_DIA.get(indice, "cafeteria"))
+    # La plaza del capitulo 5 es la que dejaron los dias anteriores.
+    if cl.partida.estado_plaza is not None:
+        plaza.estado(cl.partida.estado_plaza)
     # Cada dia empieza en la marca: el anterior pudo dejar al protagonista
     # en cualquier sitio (la calle del colegio, tras la decision del cap. 2)
     # y en el escenario nuevo eso cae fuera de las paredes.
@@ -1051,6 +1055,11 @@ SONIDO_LUGAR = {
 
 
 def sonido_del_lugar():
+    if mundo.escenario() == "plaza_central":
+        # Musica tranquila en la pacifica; la tension, mas alta, en la caotica.
+        if plaza.estado() == "caotica":
+            return audio.MUSICA_TENSION, 0.5, audio.AMBIENTE_CALLE
+        return audio.MUSICA_CAFETERIA, 0.6, audio.AMBIENTE_CALLE
     return SONIDO_LUGAR.get(mundo.escenario(), (audio.MUSICA_CAFETERIA, 0.8,
                                                 audio.AMBIENTE_CAFETERIA))
 
@@ -1179,6 +1188,15 @@ def abrir_libre():
         cl.dia_avisado = p.dia_actual
         abrir_aviso_papel("TU DIRECTO", "Cien mil personas te esperan", TEXTO_ESTUDIO,
                           abrir_libre)
+        return
+    if p is not None and p.dia_actual == DIA_PLAZA and cl.dia_avisado != p.dia_actual:
+        cl.dia_avisado = p.dia_actual
+        if p.estado_plaza == "caotica":
+            abrir_aviso_papel("LA PLAZA ARDE", "Lo que se compartió ya está en la calle",
+                              TEXTO_PLAZA_CAOTICA, abrir_libre)
+        else:
+            abrir_aviso_papel("TU TARDE EN LA PLAZA", "Ciudad Nova está en paz",
+                              TEXTO_PLAZA_PACIFICA, abrir_libre)
         return
     cl.estado = "libre"
     animar("idle")
@@ -1335,6 +1353,14 @@ TEXTO_CAMPANA = (
     "Mira las pantallas de encuestas y el mapa de distritos de la sala de "
     "guerra. Cuando estés listo, ve a la oficina de tu asesor, la sala de "
     "conferencias: te espera en la mesa con algo.")
+TEXTO_PLAZA_PACIFICA = (
+    "La Plaza Central se llenó para el cierre de campaña: músicos, puestos "
+    "de comida y la tarima encendida. Pasea, mira las pantallas y acércate "
+    "a la pista frente a la tarima: esta tarde se canta.")
+TEXTO_PLAZA_CAOTICA = (
+    "Los rumores de estos días llegaron a la calle: humo, barricadas y "
+    "pantallas con noticias falsas. Alguien con una mochila repetidora "
+    "está alimentando el caos: muévete con cuidado por la plaza.")
 TEXTO_ESTUDIO = (
     "Tus seguidores ya están conectados. Ve a la consola y empieza el "
     "directo: responde (1) las preguntas de buena fe y borra (2) los "
