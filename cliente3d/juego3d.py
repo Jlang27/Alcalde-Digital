@@ -1772,6 +1772,11 @@ def empezar_persecucion():
     fundido.desvanecer(0.4, retraso=0.1)
     plaza.cerrar_pasillo()
     cl.jugador.pasillo = (lambda px, pz: distancia_a_ruta((px, pz), p.ruta), ANCHO_PASILLO / 2)
+    # Camara fija detras de Mateo, mirando hacia donde sigue la ruta (unos
+    # metros por delante, para doblar las esquinas antes de llegar), y
+    # hacia delante siempre a la carrera.
+    cl.jugador.rail = lambda px, pz: p.punto(p.proyectar((px, pz), p.s_mateo) + 4.0)[2]
+    cl.jugador.siempre_corre = True
     plaza.preparar_persecucion(p.eventos)
     cl.hud_persecucion = pantallas.PersecucionHUD()
     cl.hud_persecucion.avisar("¡TE VIO!", E.GAITAN)
@@ -1928,6 +1933,8 @@ def cerrar_minijuegos():
     if cl.jugador is not None:
         cl.jugador.con_impulso = False
         cl.jugador.pasillo = None
+        cl.jugador.rail = None
+        cl.jugador.siempre_corre = False
     if cl.captura is not None:
         cl.captura.finish()
         cl.captura = None
@@ -3179,6 +3186,11 @@ def volver_al_menu():
     audio.callar_todo()
     audio.agachar(False)
     cerrar_libre()
+    # Desde la pausa («VOLVER AL MENÚ»): sin esto la pausa se quedaba
+    # pintada encima del menu.
+    limpiar(cl.pausa_marca)
+    limpiar(cl.pausa)
+    cl.tapados = []
     # Si el jugador se fue andando y vuelve al menu, el protagonista se
     # queda donde lo dejo y la portada se queda sin nadie delante.
     if cl.actor is not None:

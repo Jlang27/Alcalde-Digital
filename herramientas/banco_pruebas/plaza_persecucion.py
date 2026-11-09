@@ -81,6 +81,16 @@ if not ESCAPA:
     assert x < 41.7, x
     x, _z = correr((40.5, -8.0), 90.0, 0.9, "c", 0.08)
     assert x > 42.8, x
+    # Y sin Shift, solo yendo hacia delante (antes pedia correr y fallaba).
+    J.cl.actor.setPos(40.5, 0, -8.0)
+    j.yaw, j.rumbo = 90.0, 90.0
+    J.cl.actor.setH(j.rumbo)
+    held_keys["w"] = 1
+    pasar(0.1)
+    J.input("c")
+    held_keys["w"] = 0                    # aunque se suelte, la inercia lo lleva
+    pasar(1.0)
+    assert J.cl.actor.getX() > 42.8, J.cl.actor.getX()
     foto("persecucion_desliz")
     # Las plataformas de cajas: arriba se esta a 1 m; el hueco se salta.
     x, z = correr((56.0, -1.5), 0.0, 0.5)
@@ -107,11 +117,19 @@ foto("persecucion_pasillo")
 x0, z0 = J.cl.actor.getX(), J.cl.actor.getZ()
 assert per.en_pasillo(x0, z0) and math.dist((x0, z0), per.salida()[:2]) < 3.0, (x0, z0)
 assert J.cl.jugador.pasillo is not None and per.distancia > 4.0, per.distancia
-# Corriendo hacia un lado de la ruta no se sale del pasillo.
-j.yaw = per.salida()[2] + 90.0
-held_keys["w"] = held_keys["shift"] = 1
+# La camara la lleva la ruta (no el raton) y hacia delante se corre sin Shift.
+assert j.rail is not None and j.siempre_corre
+j.yaw += 70.0                             # como si el raton la hubiera girado
+held_keys["w"] = 1
+pasar(0.8)
+assert j.corriendo, "hacia delante tiene que ir corriendo"
+rumbo = per.punto(per.proyectar((J.cl.actor.getX(), J.cl.actor.getZ())) + 4.0)[2]
+assert abs((j.yaw - rumbo + 180) % 360 - 180) < 12, (j.yaw, rumbo)
+held_keys["w"] = 0
+# Hacia un lado de la ruta no se sale del pasillo.
+held_keys["d"] = 1
 pasar(1.2)
-held_keys["w"] = held_keys["shift"] = 0
+held_keys["d"] = 0
 assert per.en_pasillo(J.cl.actor.getX(), J.cl.actor.getZ()), (J.cl.actor.getX(), J.cl.actor.getZ())
 
 if ESCAPA:
@@ -169,7 +187,7 @@ else:
 pasar(3.0)
 foto("persecucion_cierre")
 
-assert J.cl.jugador.pasillo is None                    # al acabar se abre
+assert J.cl.jugador.pasillo is None and J.cl.jugador.rail is None   # al acabar se abre
 J.volver_al_menu()
 pasar(0.5)
 assert J.cl.hud_persecucion is None and not J.cl.persigue

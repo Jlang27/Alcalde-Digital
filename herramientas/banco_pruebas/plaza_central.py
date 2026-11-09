@@ -97,8 +97,18 @@ assert len(plaza.bloqueos()) > len(plaza.OBRA_BASE.o.paso) + 10
 p.indicadores["desinformacion"] += 30
 assert p._estado_plaza() == "caotica"
 
-J.volver_al_menu()
+# Al menu por la pausa: «VOLVER AL MENÚ» y confirmar. La pausa no se puede
+# quedar pintada encima del menu.
+tecla("escape", 0.4)
+assert estado() == "pausa", estado()
+tecla("down arrow", 0.2)
+tecla("down arrow", 0.2)
+tecla("enter", 0.3)
+assert J.cl.confirmando == "menu", J.cl.confirmando
+tecla("s", 0.6)
+assert not J.cl.pausa and not J.cl.pausa_marca, "la pausa se quedo en pantalla"
 pasar(0.5)
+foto("plaza_vuelta_al_menu")
 assert J.mundo.escenario() == "cafeteria" and not plaza._PLAZA
 informe()
 print("plaza_central: todo bien")

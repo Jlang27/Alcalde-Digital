@@ -134,7 +134,9 @@ CLIPS = {
 # saltable. Deslizarse dura DURA_DESLIZ, y mientras se pasa bajo lo
 # deslizable, un poco mas rapido que corriendo.
 ALTO_SALTO, DURA_SALTO, PASA_SALTANDO = 0.75, 0.62, 0.3
-DURA_DESLIZ, VELOCIDAD_DESLIZ = 0.8, 5.8
+DURA_DESLIZ, VELOCIDAD_DESLIZ = 1.0, 5.8
+GIRO_RAIL = 5.0              # lo rapido que la camara de la persecucion dobla las esquinas
+PICADO_RAIL = 12.0           # y lo que mira hacia abajo, fijo
 # Trepar (vault): Espacio con una valla mediana delante (a menos de
 # ALCANCE_TREPAR): un arco de TREPAR_ALTO que la salva, con impulso propio.
 TREPAR_ALTO, DURA_TREPAR, ALCANCE_TREPAR, VELOCIDAD_TREPAR = 1.3, 0.5, 1.5, 5.0
@@ -279,6 +281,12 @@ class Jugador:
         # ancho). Fuera del pasillo no se puede ir; si ya se esta fuera,
         # solo hacia dentro (asi nunca se queda atascado).
         self.pasillo = None
+        # La camara de la persecucion: rail(x, z) da hacia donde va la ruta
+        # ahi, y la camara se queda detras de Mateo mirando hacia alla, sin
+        # raton (como en la huida de Seek). siempre_corre: hacia delante se
+        # corre sin Shift.
+        self.rail = None
+        self.siempre_corre = False
 
     def _bloqueado(self, x, z):
         """True si el personaje no cabe ahi.
@@ -356,8 +364,10 @@ class Jugador:
         return TREPAR_ALTO * math.sin(math.pi * min(1.0, self.trepa / DURA_TREPAR))
 
     def deslizar(self):
-        """C a la carrera: se tira al suelo y pasa por debajo."""
-        if self.desliz is not None or self.salto is not None or not self.corriendo:
+        """C a la carrera: se tira al suelo y pasa por debajo. Vale con ir
+        hacia delante (corriendo o no): pedir Shift ademas lo hacia fallar."""
+        if (self.desliz is not None or self.salto is not None or self.trepa is not None
+                or not (self.corriendo or self.moviendose or held_keys["w"])):
             return False
         self.desliz = 0.0
         return True
@@ -441,17 +451,26 @@ class Jugador:
 
     def paso(self, dt):
         if self.explorando:
-            self._mirar(mouse.velocity[0], mouse.velocity[1])
             avance = held_keys["w"] - held_keys["s"]
             lado = held_keys["d"] - held_keys["a"]
+            if self.rail is not None:
+                # La camara la lleva la ruta, no el raton.
+                x, _y, z = self.actor.getPos()
+                self.yaw += _angulo_corto(self.yaw, self.rail(x, z)) * min(1.0, GIRO_RAIL * dt)
+                self.pitch = PICADO_RAIL
+            else:
+                self._mirar(mouse.velocity[0], mouse.velocity[1])
+            if self.desliz is not None and avance == 0 and lado == 0:
+                avance = 1                # el deslizamiento sigue solo: es inercia
             if self.cubierta is not None:
                 self._asomarse(lado, dt)
             else:
                 # Ursina junta izquierda y derecha en «control» y «shift».
                 # Agachado gana: con Ctrl pulsado no se puede correr.
                 self.agachado = bool(held_keys["control"]) or self.agachado_fijo
-                self.corriendo = (bool(held_keys["shift"]) and not self.agachado
-                                  and not self.apuntando) or self.desliz is not None
+                self.corriendo = ((bool(held_keys["shift"]) or (self.siempre_corre and avance > 0))
+                                  and not self.agachado and not self.apuntando
+                                  ) or self.desliz is not None
                 if self.trepa is None:        # trepando lo lleva el impulso
                     self._caminar(avance, lado, dt)
                 self._avanzar_salto(dt)
