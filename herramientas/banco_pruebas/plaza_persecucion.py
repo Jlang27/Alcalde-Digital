@@ -72,10 +72,10 @@ if not ESCAPA:
     assert x > 49.0, x
     foto("persecucion_trepa")
     # Agacharse: el andamio de la avenida (z -9,8..-9,4): de pie no.
-    _x, z = correr((34.0, -11.5), 0.0, 1.0)
-    assert z < -9.9, z
-    _x, z = correr((34.0, -11.0), 0.0, 2.2, agachado=True)
-    assert z > -9.0, z
+    _x, z = correr((34.0, -13.9), 0.0, 1.0)
+    assert z < -12.3, z
+    _x, z = correr((34.0, -13.4), 0.0, 2.2, agachado=True)
+    assert z > -11.4, z
     # Deslizarse bajo la persiana (x 42..42,4).
     x, _z = correr((40.5, -8.0), 90.0, 0.9)
     assert x < 41.7, x

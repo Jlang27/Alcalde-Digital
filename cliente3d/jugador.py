@@ -287,6 +287,10 @@ class Jugador:
         # corre sin Shift.
         self.rail = None
         self.siempre_corre = False
+        # Y hacia donde lleva W en la persecucion: la ruta justo donde esta
+        # Mateo. Con la camara (que mira por delante, para doblar antes) W
+        # empujaba en diagonal contra las vallas en las esquinas.
+        self.marcha = None
 
     def _bloqueado(self, x, z):
         """True si el personaje no cabe ahi.
@@ -711,8 +715,10 @@ class Jugador:
             return
         self.sin_andar = 0.0
 
-        # Direccion relativa a la camara: W va hacia donde miras.
-        rad = math.radians(self.yaw)
+        # Direccion relativa a la camara: W va hacia donde miras (en la
+        # persecucion, hacia donde sigue la ruta).
+        x, _, z = self.actor.getPos()
+        rad = math.radians(self.marcha(x, z) if self.marcha else self.yaw)
         frente = Vec3(math.sin(rad), 0, math.cos(rad))
         derecha = Vec3(math.cos(rad), 0, -math.sin(rad))
         d = frente * avance + derecha * lado

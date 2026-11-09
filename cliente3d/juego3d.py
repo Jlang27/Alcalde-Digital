@@ -1776,6 +1776,7 @@ def empezar_persecucion():
     # metros por delante, para doblar las esquinas antes de llegar), y
     # hacia delante siempre a la carrera.
     cl.jugador.rail = lambda px, pz: p.punto(p.proyectar((px, pz), p.s_mateo) + 4.0)[2]
+    cl.jugador.marcha = lambda px, pz: p.punto(p.proyectar((px, pz), p.s_mateo) + 0.8)[2]
     cl.jugador.siempre_corre = True
     plaza.preparar_persecucion(p.eventos)
     cl.hud_persecucion = pantallas.PersecucionHUD()
@@ -1934,6 +1935,7 @@ def cerrar_minijuegos():
         cl.jugador.con_impulso = False
         cl.jugador.pasillo = None
         cl.jugador.rail = None
+        cl.jugador.marcha = None
         cl.jugador.siempre_corre = False
     if cl.captura is not None:
         cl.captura.finish()

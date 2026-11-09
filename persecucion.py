@@ -45,7 +45,7 @@ RADIO_IMPACTO = 1.3
 RADIO_CRUCE = 0.8
 # La persecucion es lineal: un pasillo de este ancho a lo largo de la ruta
 # (la policia cierra las calles a los lados). Nadie sale de el.
-ANCHO_PASILLO = 4.4
+ANCHO_PASILLO = 6.4
 VENTAJA = 7.0              # metros de ruta que te saca al echar a correr
 ESTATICOS = ("saltar", "trepar", "agacharse", "deslizar", "bloqueo", "brecha")
 ACCION = {"saltar": "¡SALTA!", "trepar": "¡TREPA!", "agacharse": "¡AGÁCHATE!",
@@ -381,8 +381,8 @@ def _pruebas():
     p = Persecucion(ruta, fases, ())
     p.empezar()
     assert p.s == VENTAJA and p.salida()[:2] == (0.0, 0.0)
-    assert p.en_pasillo(2.0, 10.0) and not p.en_pasillo(3.0, 10.0)
-    assert p.en_pasillo(20.0, 41.5) and not p.en_pasillo(20.0, 43.0)
+    assert p.en_pasillo(3.0, 10.0) and not p.en_pasillo(3.4, 10.0)
+    assert p.en_pasillo(20.0, 43.0) and not p.en_pasillo(20.0, 43.4)
 
     # La escalera: sube, rellano y baja.
     escaleras = ((-5, 5, -48, -44, 1.5, 0.0), (-5, 5, -56, -48, 1.5, 1.5),

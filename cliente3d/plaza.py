@@ -378,7 +378,7 @@ def _pieza_evento(t, tipo, objeto, rect):
                 t.caja("truss" if objeto == "andamio" else "hierro", x0, x1, y + alto,
                        y + alto + 0.22, z0, z1)
                 if objeto == "pancarta":
-                    t.caja("toldo_rojo", x0, x1, y + alto + 0.22, y + alto + 1.6,
+                    t.caja("toldo_rojo", x0, x1, y + alto + 0.22, y + alto + 0.7,
                            (z0 + z1) / 2 - 0.03, (z0 + z1) / 2 + 0.03)
                 else:
                     _cinta(t, x0, x1, z0, z1, y + alto + 0.22)
@@ -391,8 +391,16 @@ def _pieza_evento(t, tipo, objeto, rect):
             t.caja("truss", x0, x1, y, y + 0.35, z0, z1)
             _cinta(t, x0, x1, z0, z1, y + 0.35)
     elif objeto == "persiana":            # persiana a medio bajar: hueco de 0,75 m
-        t.caja("valla_metal", x0, x1, y + 0.75, y + 2.8, z0, z1)
-        for k in range(8):
+        # Solo una franja hasta 1,5 m: entera tapaba la camara al pasar por debajo.
+        # Un poste en cada extremo (no a todo lo ancho: eso era un muro negro).
+        if largo_x:
+            for xp in (x0, x1 - 0.1):
+                t.caja("hierro", xp, xp + 0.1, y, y + 2.6, z0, z1)
+        else:
+            for zp in (z0, z1 - 0.1):
+                t.caja("hierro", x0, x1, y, y + 2.6, zp, zp + 0.1)
+        t.caja("valla_metal", x0, x1, y + 0.75, y + 1.5, z0, z1)
+        for k in range(3):
             yy = y + 0.85 + k * 0.25
             t.caja("hierro", x0 - 0.01, x1 + 0.01, yy, yy + 0.03, z0, z1)
         _cinta(t, x0, x1, z0, z1, y + 0.75)
@@ -997,11 +1005,13 @@ ESTADOS = {
         "cielo": (1.0, 1.0, 1.0),
     },
     "caotica": {
-        "ambiente": (0.05, 0.06, 0.095),
+        "ambiente": (0.075, 0.085, 0.13),
         "sol": ((0.20, 0.28, 0.48), (40, -38, 0)),          # la luna
         "puntos": (("fuego", (14.0, 1.4, -8.0), (2.6, 1.0, 0.25), (1, 0.06, 0.03)),
                    ("fuego_avenida", (39.5, 1.4, 22.0), (2.4, 0.9, 0.2), (1, 0.06, 0.03)),
-                   ("sirena", (33.0, 3.0, -30.0), (2.0, 0.15, 0.10), (1, 0.04, 0.012)),
+                   # La farola de los callejones: sin luz de verdad, en el parkour
+                   # solo se veia negro (las del muro brillan pero no iluminan).
+                   ("callejon", (48.0, 4.5, 2.5), (1.9, 1.5, 1.05), (1, 0.03, 0.006)),
                    ("pantallas", (0.0, 6.0, 33.0), (1.6, 0.15, 0.1), (1, 0.03, 0.008))),
         "niebla": ((0.06, 0.06, 0.08), 0.03),
         "cielo": (0.10, 0.11, 0.20),
@@ -1184,8 +1194,7 @@ def _en_vuelta(vuelta, s):
 
 
 def vivir(dt):
-    """Lo que se mueve solo: la gente que pasea (o corre), la sirena de las
-    patrullas y el fuego que tiembla en la caotica."""
+    """Lo que se mueve solo: la gente que pasea (o corre) y el fuego que tiembla en la caotica."""
     if not _PLAZA:
         return
     M.seguir_cielo()
@@ -1202,8 +1211,6 @@ def vivir(dt):
         luz.show() if int(t / 0.25) % 2 else luz.hide()
     if caotica:
         luces = {l.getName(): l for l in _PLAZA["luces"]["caotica"]}
-        fase = int(t / 0.35) % 2
-        luces["sirena"].node().setColor((2.0, 0.15, 0.1, 1) if fase else (0.15, 0.35, 2.4, 1))
         for nombre in ("fuego", "fuego_avenida"):
             f = 0.8 + 0.2 * math.sin(t * 13.0 + len(nombre)) * math.sin(t * 7.3)
             luces[nombre].node().setColor((2.6 * f, 1.0 * f, 0.25 * f, 1))
