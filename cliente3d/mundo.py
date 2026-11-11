@@ -4058,15 +4058,17 @@ def _abanico(entidad, centro, rayos, y_rayos, rgb, alfa_centro, alfa_borde):
     malla.generate()
 
 
-def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta, corriendo=False):
+def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta, corriendo=False,
+                    velocidad=None):
     """Lo pone donde dicen las reglas y le redibuja la luz.
 
     rayos: los extremos del cono (sigilo.Vigilante.rayos), ya cortados
     contra muros y estantes. alerta: te esta viendo; la luz vira a rojo.
-    corriendo: va hacia un ruido que oyo.
+    corriendo: va hacia un ruido que oyo. velocidad: la de su ronda, si
+    no es la de serie (una ronda reforzada anda mas rapido).
     """
     actor, abanico, _foco, haz = par
-    mover_actor(actor, x, z, rumbo, andando, corriendo)
+    mover_actor(actor, x, z, rumbo, andando, corriendo, velocidad)
     rgb = LINTERNA_ALERTA if alerta else LINTERNA
     # Fuerte al pie de la linterna y casi nada en el borde: se lee como luz.
     _abanico(abanico, (x, 0.03, z), rayos, 0.03, rgb, 0.42, 0.05)
@@ -4076,7 +4078,7 @@ def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta, corriendo=False):
     _abanico(haz, pecho, rayos, 0.03, rgb, 0.22, 0.0)
 
 
-def mover_actor(actor, x, z, rumbo, andando, corriendo=False):
+def mover_actor(actor, x, z, rumbo, andando, corriendo=False, velocidad=None):
     """Pone a alguien que hace una ronda donde le toca, andando, corriendo
     o parado."""
     actor.setPos(x, 0, z)
@@ -4087,7 +4089,7 @@ def mover_actor(actor, x, z, rumbo, andando, corriendo=False):
         # El ritmo sale de lo que el clip pisa y de lo que corre la ronda,
         # no de una constante a ojo: si no, el vigilante se desliza igual
         # que se deslizaba el jugador.
-        velocidad = VELOCIDAD_RONDA if clip == "caminar" else (
+        velocidad = (velocidad or VELOCIDAD_RONDA) if clip == "caminar" else (
             CARRERA_RONDA if clip == "correr" else 0.0)
         if velocidad:
             actor.setPlayRate(ritmo_para(actor, clip, velocidad), clip)

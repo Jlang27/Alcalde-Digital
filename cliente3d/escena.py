@@ -13,8 +13,9 @@ consecuencia() pinta lo que respondio.
 
 import math
 
-from ursina import Entity, Vec3, camera, color, curve, destroy
+from ursina import Entity, Vec3, camera, color, curve, destroy, invoke
 
+import audio
 import estilo as E
 import mundo
 from intro import Intro, NEGRO_CORTE, _suave
@@ -166,8 +167,10 @@ class EscenaDecision:
         """Las opciones, impresas en la hoja de la decision."""
         self.fase = "decide"
         self.rotulo_saltar.fade_out(duration=0.3)
-        paso = 0.105 if len(self.opciones) < 3 else 0.098
-        primera = -0.128
+        # Con cuatro (la que trae otro capitulo) se aprietan: si no, la
+        # ultima queda debajo de la barra de cine.
+        paso = {1: 0.105, 2: 0.105, 3: 0.098}.get(len(self.opciones), 0.074)
+        primera = -0.128 if len(self.opciones) < 4 else -0.100
         # La hoja mide justo lo que ocupan las opciones: antes reservaba
         # un alto fijo y sobraban cien pixeles de papel en blanco.
         ultima = primera - (len(self.opciones) - 1) * paso
@@ -190,8 +193,10 @@ class EscenaDecision:
         self.elegida = self.opciones[i][0]
         return self.elegida
 
-    def consecuencia(self, titulo, detalle):
-        """Lo que contesto la Partida: se cambia el panel por la consecuencia."""
+    def consecuencia(self, titulo, detalle, anotado=False):
+        """Lo que contesto la Partida: se cambia el panel por la consecuencia.
+        anotado: la hoja deja bandera, asi que la ciudad lo recordara y
+        cambiara un dia siguiente: se dice con un sello."""
         self.fase, self.t_consecuencia = "consecuencia", 0.0
         self._borrar_panel()
         tinta = self._en_papel(self.TINTAS.get(self.elegida, E.TINTA))
@@ -202,6 +207,10 @@ class EscenaDecision:
         a(E.titular(titulo, (-0.775, -0.088), 1.6, E.TINTA, padre=c))
         a(E.entradilla(detalle, (-0.835, -0.178), 0.86, E.TINTA_TENUE,
                        ancho=58, padre=c))
+        if anotado:
+            self.panel += E.sello("La ciudad lo anotó", (0.66, -0.150), tinta,
+                                  padre=c, retraso=0.5)
+            invoke(audio.efecto, "sello", delay=0.55)
         self._reaccion()
 
     # ---------------------------------------------------------------

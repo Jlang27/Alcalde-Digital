@@ -66,7 +66,9 @@ class ExpedienteCampana(EscenaDecision):
     T_DECIDE = INICIOS[5] + 0.8
     PREGUNTA = "¿QUÉ HACES CON EL EXPEDIENTE?"
     # Las tres tintas del guion: rojo, verde y amarillo.
-    TINTAS = {"rumor": E.GAITAN, "prensa": E.RESTREPO, "espiar": E.LLERAS}
+    TINTAS = {"rumor": E.GAITAN, "prensa": E.RESTREPO, "espiar": E.LLERAS,
+              # la que trae el capitulo 2 si Valeria publico: la tinta de Ospina
+              "defender": E.OSPINA}
 
     def __init__(self, actor, asesor, opciones, dialogo, protagonista, nodo_mundo):
         self.asesor = asesor
@@ -152,6 +154,9 @@ class ExpedienteCampana(EscenaDecision):
             self._anima("caminar",
                         mundo.ritmo_para(self.actor, "caminar", V_DANIEL_SALE))
             self._anima("pensar", actor=self.asesor)
+        elif self.elegida == "defender":
+            self._anima("celular")                        # enseña la propuesta publicada
+            self._anima("pensar", actor=self.asesor)      # no era lo que queria
         else:
             self._anima("celular")                        # llama a quien va a espiar
             self._anima("asentir", actor=self.asesor)

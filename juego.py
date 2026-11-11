@@ -46,8 +46,10 @@ from contenido import (
     construir_arbol_capitulo_3, construir_arbol_capitulo_4, construir_arbol_capitulo_5,
     RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION, EVENTOS_PERSECUCION,
     aplicar_habilidades, aplicar_banderas,
+    HERENCIAS, TITULARES, TEXTO_ESTADO_PLAZA,
+    dialogo_expediente, dialogo_captura, pedidos_chat_4,
 )
-from sigilo import Sigilo
+from sigilo import Sigilo, VELOCIDAD as VELOCIDAD_RONDA, AVISOS_MAXIMOS
 from transmision import Transmision
 from ritmo import Duelo
 from persecucion import Persecucion
@@ -58,6 +60,8 @@ ARBOL_DEL_CAPITULO = {DIA_SIGILO: construir_arbol_capitulo_2,
                       DIA_CAMPANA: construir_arbol_capitulo_3,
                       DIA_ESTUDIO: construir_arbol_capitulo_4,
                       DIA_PLAZA: construir_arbol_capitulo_5}
+# Lo que la herencia del dia 1 le hace a la ronda del colegio.
+RONDA_REFORZADA = 1.25         # los vigilantes andan un 25 % mas rapido
 # Lo que mueve en los indicadores llevar bien (o mal) el chat del directo.
 EFECTOS_CHAT = {True: {"desinformacion": -4, "confianza": 4},
                 False: {"desinformacion": 6, "confianza": -3}}
@@ -278,6 +282,8 @@ class Partida:
         self.duelo = None             # el minijuego de la pacifica (ritmo.py)
         self.persecucion = None       # el de la caotica (persecucion.py)
         self.con_telefono = True      # lo fija iniciar_dia
+        # Lo que el dia de hoy hereda de los anteriores (contenido.HERENCIAS)
+        self.herencias = []
 
         # --- lo que el jugador sabe de los candidatos (dura toda la partida) ---
         self.expediente = set()
@@ -351,12 +357,18 @@ class Partida:
         # El telefono es del capitulo 1 (y de los dias aun provisionales):
         # el 2 y el 3 deciden en su propia escena.
         self.con_telefono = indice not in ARBOL_DEL_CAPITULO
+        self.herencias = self.herencias_de(indice)
+        heredado = self.heredado()
         # La plaza del 5 se decide antes que su arbol: de ella depende cual.
         self.estado_plaza = self._estado_plaza() if indice == DIA_PLAZA else None
         if indice in ARBOL_DEL_CAPITULO:
             construir = ARBOL_DEL_CAPITULO[indice]
-            self.arbol_decision = (construir(self.estado_plaza) if indice == DIA_PLAZA
-                                   else construir())
+            if indice == DIA_PLAZA:
+                self.arbol_decision = construir(self.estado_plaza)
+            elif indice == DIA_CAMPANA:
+                self.arbol_decision = construir(heredado)
+            else:
+                self.arbol_decision = construir()
             propias = memoria = 0
         else:
             self.arbol_decision = construir_arbol_decision(self.publicacion)
@@ -371,9 +383,13 @@ class Partida:
         self._preparar_investigacion()
         self.sigilo = (Sigilo(RONDAS_CAPITULO_2, REGRESO_CAPITULO_2,
                               OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2,
-                              SALIDA_CAPITULO_2, OBJETIVOS_CAPITULO_2)
+                              SALIDA_CAPITULO_2, OBJETIVOS_CAPITULO_2,
+                              velocidad=VELOCIDAD_RONDA * (
+                                  RONDA_REFORZADA if "colegio_en_alerta" in heredado else 1.0),
+                              avisos_maximos=AVISOS_MAXIMOS + (
+                                  1 if "portero_amigo" in heredado else 0))
                        if indice == DIA_SIGILO else None)
-        self.transmision = (Transmision(RELLENO_CHAT_4, PEDIDOS_CHAT_4)
+        self.transmision = (Transmision(RELLENO_CHAT_4, pedidos_chat_4(heredado))
                             if indice == DIA_ESTUDIO else None)
         caotica = self.estado_plaza == "caotica"
         self.duelo = Duelo() if indice == DIA_PLAZA and not caotica else None
@@ -412,6 +428,8 @@ class Partida:
         self.opcion_nueva = None
 
         self.avisar(f"Día {indice + 1}: protagoniza {prota.nombre}.", "info", prota)
+        for h in self.herencias:
+            self.avisar(h["texto"], "info")
         if propias:
             self.avisar(f"Sus habilidades abrieron {propias} opción(es).",
                         "bien", prota)
@@ -475,6 +493,54 @@ class Partida:
             self.avisar(f"{prota.nombre} cierra el día: +1 punto.", "bien", prota)
             for j in self.secundarios_de(self.dia_actual):
                 j.puntos += 1
+
+    # =============================================================
+    #  MEMORIA ENTRE CAPITULOS  (contenido.HERENCIAS)
+    # =============================================================
+
+    def herencias_de(self, indice):
+        """Lo que el dia indice hereda de las banderas que ya hay."""
+        return [h for h in HERENCIAS
+                if h["dia"] == indice and self.banderas.intersection(h["si"])]
+
+    def heredado(self):
+        """Los ids de lo que hoy se hereda, para preguntar con «in»."""
+        return {h["id"] for h in self.herencias}
+
+    def portada(self):
+        """La primera plana de Nova Noticias de manana, o None si el dia no
+        dejo titular ni cambia nada manana. Se llama con el dia ya cerrado.
+
+        manana: lo que el dia siguiente heredara, en palabras (con las
+        banderas de hoy ya puestas), y el estado de la plaza si el siguiente
+        es el capitulo 5: era la consecuencia mas grande y no se contaba.
+        """
+        nombre = self.protagonista.nombre
+        titular = next((TITULARES[b] for b in self.banderas_del_dia if b in TITULARES),
+                       None)
+        siguiente = self.dia_actual + 1
+        manana = []
+        if siguiente < self.total_dias:
+            if siguiente == DIA_PLAZA:
+                manana.append(TEXTO_ESTADO_PLAZA[self._estado_plaza()])
+            manana += [h["texto"] for h in self.herencias_de(siguiente)]
+        if titular is None and not manana:
+            return None
+        return {"titular": titular[0].format(nombre=nombre) if titular else "",
+                "bajada": titular[1].format(nombre=nombre) if titular else "",
+                "manana": manana, "dia": siguiente}
+
+    def dialogo_expediente(self):
+        """Lo que le dice el asesor a Daniel en la mesa, con la caida real
+        de la encuesta (o el guion, si el capitulo se juega suelto)."""
+        caida = None
+        if self.dias_completados >= self.dia_actual:      # hubo dias antes
+            antes = self.porcentajes(ENCUESTA_INICIAL)["Daniel Ospina"]
+            caida = antes - self.porcentajes()["Daniel Ospina"]
+        return dialogo_expediente(caida, self.heredado())
+
+    def dialogo_captura(self):
+        return dialogo_captura(self.heredado())
 
     def _estado_plaza(self):
         """La plaza del capitulo 5 es la que dejaron los dias anteriores:

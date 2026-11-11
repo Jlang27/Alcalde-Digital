@@ -497,6 +497,7 @@ VOTOS_POR_NODO = {
     "r3_rumor": {"Daniel Ospina": 6, "Hugo Bravo": -6},
     "r3_prensa": {"Daniel Ospina": 1},
     "r3_espiar": {},
+    "r3_defensa": {"Daniel Ospina": 4, "Hugo Bravo": -2},
     # capitulo 4: el montaje contra Bravo que le ofrecen a Santiago
     "a4_dinero": {"Hugo Bravo": -5, "Daniel Ospina": 2, "Juan Medina": 2, "Elena Ruiz": 1},
     "a4_rechazo": {},
@@ -524,6 +525,7 @@ TEXTO_BANDERA = {
     "ospina_jugo_sucio": "Que Ospina publicó un rumor sobre Bravo.",
     "ospina_dio_la_cara": "Que Ospina rechazó la guerra sucia y dio la cara en vivo.",
     "asesor_a_tus_espaldas": "Que el asesor de Ospina empezó a actuar a sus espaldas.",
+    "ospina_se_defendio_con_datos": "Que Ospina se defendió con su propuesta publicada.",
     "vendiste_tu_directo": "Que transmitiste por dinero un montaje contra Bravo.",
     "rechazaste_el_soborno": "Que rechazaste el soborno aunque perdiste patrocinadores.",
     "expusiste_la_red_fantasma": "Que expusiste en vivo a la red que pagaba montajes.",
@@ -1110,16 +1112,18 @@ def construir_arbol_capitulo_5(estado="pacifica"):
     return arbol
 
 
-def construir_arbol_capitulo_3():
+def construir_arbol_capitulo_3(herencias=()):
     """El dilema de Daniel con el expediente sobre Bravo:
 
         raiz (el expediente)
         |- Publicar el rumor            -> violencia en las calles (hoja)
         |- No publicarlo: rueda prensa  -> frente a los microfonos (hoja)
         |- Investigar a Bravo           -> el asesor se adelanta (hoja)
+        |- [si se publico la propuesta el dia 2]
+           Defenderte con la propuesta  -> la propuesta habla por ti (hoja)
 
-    Como el del capitulo 2, sin ramas de habilidades ni de banderas: es
-    una decision de Daniel, no una publicacion de Civitas.
+    Sin ramas de habilidades ni de RAMAS_POR_BANDERA: lo que hereda del
+    capitulo 2 llega por HERENCIAS.
     """
     raiz = NodoDecision("raiz", "«Podemos publicar esto sobre Bravo.»", corto="EL EXPEDIENTE")
     arbol = ArbolDecision(raiz)
@@ -1152,6 +1156,20 @@ def construir_arbol_capitulo_3():
         bandera="asesor_a_tus_espaldas",
         detalle="Ganas tiempo, pero tu asesor empieza a actuar a tus espaldas.",
         corto="A TUS ESPALDAS"))
+    # Lo que Valeria publico el dia 2 abre aqui una salida que sin ella no
+    # existe: la misma insercion que hacen las banderas en los dias genericos.
+    if "propuesta_publica" in herencias:
+        defender = NodoDecision(
+            "defender", "Defenderte con la propuesta publicada", rasgo="rigor", puntos=3,
+            detalle="Nova Noticias ya publicó tu propuesta: la muestras tal cual.",
+            corto="LA PROPUESTA")
+        arbol.insertar_opcion("raiz", defender)
+        defender.agregar_hijo(NodoDecision(
+            "r3_defensa", "La propuesta habla por ti",
+            efectos={"confianza": 10, "info_verificada": 10, "desinformacion": -8},
+            rasgo="rigor", bandera="ospina_se_defendio_con_datos",
+            detalle="Sin atacar a nadie, el rumor del colegio se queda sin piso.",
+            corto="CON DATOS"))
     return arbol
 
 
@@ -1423,6 +1441,164 @@ RAMAS_POR_BANDERA = {
         "Completas la historia que ayer contaste a medias.",
         "Poner contexto"),
 }
+
+
+# ===================================================================
+#  MEMORIA ENTRE CAPITULOS  (PLAN_MEJORAS P1)
+# ===================================================================
+# Los capitulos 2-5 no salen de una publicacion: su arbol es propio y
+# RAMAS_POR_BANDERA no les llega. Lo que heredan de los anteriores va
+# aqui: cada herencia mira las banderas al empezar su dia (basta una de
+# "si") y cambia algo que se ve (dificultad, una opcion, el chat, un
+# dialogo). Su texto sale en la portada del dia anterior y en un aviso.
+#   id: lo que consultan Partida y los constructores
+HERENCIAS = (
+    {"id": "colegio_en_alerta", "dia": DIA_SIGILO,
+     "si": ("difundiste_una_falsa", "dejaste_correr_una_falsa"),
+     "texto": "El colegio refuerza la ronda por el rumor: los vigilantes andan más rápido."},
+    {"id": "portero_amigo", "dia": DIA_SIGILO,
+     "si": ("desmentiste_una_falsa", "reportaste_con_prueba", "expusiste_bots",
+            "rastreaste_el_origen"),
+     "texto": "El portero del colegio vio el desmentido: te perdona un aviso más."},
+    {"id": "propuesta_publica", "dia": DIA_CAMPANA, "si": ("publicaste_la_propuesta",),
+     "texto": "La propuesta de Ospina ya es pública: Daniel tiene con qué defenderse."},
+    {"id": "sin_propuesta", "dia": DIA_CAMPANA,
+     "si": ("guardaste_la_propuesta", "te_sacaron_del_colegio"),
+     "texto": "Nadie vio la propuesta de Ospina: el asesor llega desesperado."},
+    {"id": "chat_contra_bravo", "dia": DIA_ESTUDIO, "si": ("ospina_jugo_sucio",),
+     "texto": "El rumor de Ospina contra Bravo llega a tu chat: más bulos que borrar."},
+    {"id": "chat_sereno", "dia": DIA_ESTUDIO, "si": ("ospina_dio_la_cara",),
+     "texto": "La rueda de prensa de Ospina calmó la red: tu chat llega más tranquilo."},
+    {"id": "sofia_en_el_chat", "dia": DIA_ESTUDIO,
+     "si": ("desmentiste_una_falsa", "publicaste_la_propuesta"),
+     "texto": "Sofía, la del colegio, entra al directo a preguntar por el video."},
+    {"id": "logo_de_la_red", "dia": DIA_PLAZA, "si": ("expusiste_la_red_fantasma",),
+     "texto": "Santiago expuso a la red fantasma: su logo ya es conocido en la plaza."},
+)
+
+# Lo que dice la portada del dia anterior del estado de la plaza: la
+# tension ya decidia el capitulo 5, pero nadie se lo contaba al jugador.
+TEXTO_ESTADO_PLAZA = {
+    "pacifica": "La Plaza Central amanece en calma: hay música frente a la tarima.",
+    "caotica": "La Plaza Central amanece tomada: humo, barricadas y el bulo en las pantallas.",
+}
+
+# La portada de Nova Noticias del dia siguiente: el titular que deja cada
+# desenlace, en el orden en que se buscan (la primera bandera del dia que
+# tenga titular). {nombre} es el protagonista del dia.
+TITULARES = {
+    "difundiste_una_falsa": ("El video del colegio arrasa en Civitas",
+                             "{nombre} lo compartió sin verificar y ya lo creen cientos de vecinos."),
+    "desmentiste_una_falsa": ("El video del colegio estaba recortado",
+                              "{nombre} publica el original: Ospina hablaba de remodelar, no de cerrar."),
+    "reportaste_con_prueba": ("Moderación baja el bulo del colegio",
+                              "{nombre} lo reportó con la prueba y la publicación cayó en minutos."),
+    "dejaste_correr_una_falsa": ("Nadie frena el rumor del colegio",
+                                 "El video recortado sigue corriendo por los grupos del barrio."),
+    "expusiste_bots": ("Cuarenta cuentas falsas movieron el rumor",
+                       "{nombre} expone a los bots que lo compartieron en el mismo minuto."),
+    "rastreaste_el_origen": ("@NovaAlerta, al descubierto",
+                             "{nombre} sigue la cadena del rumor hasta la cuenta que lo inventó."),
+    "publicaste_la_propuesta": ("Sale a la luz la propuesta de Ospina",
+                                "{nombre} la publica pese a las amenazas: remodelar, no cerrar."),
+    "guardaste_la_propuesta": ("Silencio en Nova Noticias",
+                               "La propuesta de Ospina sigue en un cajón y el ataque no para."),
+    "te_sacaron_del_colegio": ("Intrusa en el Colegio Técnico Nova",
+                               "Sacan a {nombre} de los archivos sin la propuesta."),
+    "ospina_jugo_sucio": ("Ospina responde con otro rumor",
+                          "El expediente sobre Bravo enciende la calle: hay indignación y peleas."),
+    "ospina_dio_la_cara": ("Ospina da la cara en vivo",
+                           "Rechaza la guerra sucia y explica su propuesta frente a los micrófonos."),
+    "asesor_a_tus_espaldas": ("Movimientos raros en la campaña de Ospina",
+                              "Su asesor investiga a Bravo por su cuenta."),
+    "ospina_se_defendio_con_datos": ("Ospina se defiende con su propuesta",
+                                     "Muestra el documento publicado y deja sin piso al rumor."),
+    "vendiste_tu_directo": ("Montaje en vivo contra Bravo",
+                            "{nombre} lo transmitió por dinero a cientos de miles de seguidores."),
+    "rechazaste_el_soborno": ("{nombre} rechaza 40 millones",
+                              "No transmite el montaje contra Bravo y pierde a sus patrocinadores."),
+    "expusiste_la_red_fantasma": ("La red fantasma, expuesta en directo",
+                                  "{nombre} rastrea en vivo a quien pagaba montajes."),
+    "cantaste_la_verdad": ("La plaza corea contra el bulo",
+                           "{nombre} gana el duelo y el rumor del colegio se queda sin eco."),
+    "el_rumor_gano_el_duelo": ("El rumor suena más fuerte en la plaza",
+                               "{nombre} pierde el duelo y el bulo vuelve a los teléfonos."),
+    "recuperaste_la_mochila": ("Una mochila destapa a «Nodo»",
+                               "{nombre} atrapa al de la chaqueta negra: catorce plazas, una sola cuenta."),
+    "la_red_sigue_activa": ("La propaganda sigue en las pantallas",
+                            "El de la mochila se escapa y la repetidora sigue emitiendo."),
+    "informaste_bien": ("Una noticia con su contexto",
+                        "{nombre} comparte lo que verificó, explicado de principio a fin."),
+    "compartiste_sin_contexto": ("Media verdad, conflicto entero",
+                                 "{nombre} compartió algo cierto sin contexto y encendió la discusión."),
+    "calmaste_una_opinion": ("Una opinión no es un hecho",
+                             "{nombre} baja el tono de la pelea en los comentarios."),
+    "encendiste_una_discusion": ("Pelea en los comentarios",
+                                 "{nombre} compartió una opinión como si fuera un hecho."),
+    "reportaste_algo_cierto": ("Reportan una noticia verdadera",
+                               "{nombre} mandó a moderación algo que era cierto."),
+}
+
+
+def dialogo_expediente(caida, herencias):
+    """El dialogo de la mesa del capitulo 3, con lo que paso de verdad.
+
+    caida: puntos que perdio Ospina desde el inicio (None si el capitulo se
+    juega suelto y no hay historia: entonces se cuenta el guion). Mismo
+    numero de lineas y de hablantes que DIALOGO_EXPEDIENTE: la escena
+    las cronometra por posicion (cine_campana.T_LINEAS).
+    """
+    lineas = [list(l) for l in DIALOGO_EXPEDIENTE]
+    if caida is not None:
+        if caida >= 1:
+            lineas[0][1] = (f"Daniel, por la mentira del colegio caímos "
+                            f"{caida} punto{'s' if caida != 1 else ''}.")
+        else:
+            lineas[0][1] = "Daniel, aguantamos lo del colegio, pero Bravo nos pisa los talones."
+    if "sin_propuesta" in herencias:
+        lineas[1][1] = "Nadie vio tu propuesta. Hay que reaccionar: publiquemos esto sobre Bravo."
+    elif "propuesta_publica" in herencias:
+        lineas[1][1] = "Tu propuesta ya salió, sí... pero con esto sobre Bravo lo rematamos."
+    return tuple(tuple(l) for l in lineas)
+
+
+def dialogo_captura(herencias):
+    """Lo que confiesa el de la mochila. Si Santiago ya expuso a la red
+    fantasma, Mateo reconoce el logo (misma cantidad de lineas)."""
+    if "logo_de_la_red" not in herencias:
+        return DIALOGO_CAPTURA
+    return (
+        ("mateo", "Ese logo... es el de la red que Santiago expuso en su directo.", 3.2),
+        ("sospechoso", "¡Suéltame! Yo solo cargo la mochila: me pagan por plaza.", 3.0),
+        ("sospechoso", "Un tal «Nodo». Todo va a la misma cuenta… mira la lista.", 3.4),
+    )
+
+
+# Pedidos del chat que trae lo de dias anteriores (ver pedidos_chat_4).
+PEDIDOS_CONTRA_BRAVO = (
+    {"autor": "expediente_bravo", "tipo": "bulo",
+     "texto": "Lo dijo la campaña de Ospina: Bravo tiene cuentas en el extranjero. ¡Compartan!"},
+    {"autor": "fuera_bravo_ya", "tipo": "odio",
+     "texto": "Los que votan por Bravo son unos ladrones igual que él."},
+)
+PEDIDO_SOFIA = {"autor": "sofia.colegio", "tipo": "pregunta",
+                "texto": "Santi, ¿es verdad que el video del colegio estaba recortado?"}
+
+
+def pedidos_chat_4(herencias):
+    """Los pedidos del directo segun lo que paso antes: con la guerra sucia
+    de Ospina entra mas odio contra Bravo; con su rueda de prensa, un bulo
+    menos; y Sofia vuelve si alguien desmintio el video del colegio."""
+    pedidos = list(PEDIDOS_CHAT_4)
+    if "chat_sereno" in herencias:
+        pedidos = [p for p in pedidos if p["autor"] != "verdad_oculta"]
+    if "chat_contra_bravo" in herencias:
+        # intercalados, para que no lleguen los dos de golpe
+        pedidos.insert(3, PEDIDOS_CONTRA_BRAVO[0])
+        pedidos.insert(7, PEDIDOS_CONTRA_BRAVO[1])
+    if "sofia_en_el_chat" in herencias:
+        pedidos.insert(2, PEDIDO_SOFIA)
+    return tuple(pedidos)
 
 
 def aplicar_banderas(arbol_decision, banderas):

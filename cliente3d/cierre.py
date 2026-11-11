@@ -409,7 +409,8 @@ def x_de(prof):
     return X_INICIO if prof == 0 else -0.25 + (prof - 1) * 0.345
 
 
-def _foto_prensa(pg, foto, pos, pie_foto, t, ancho=0.27, alto=0.155):
+def _foto_prensa(pg, foto, pos, pie_foto, t, ancho=0.27, alto=0.155,
+                 recorte=(0.06, 0.50, 0.32, 0.88)):
     """La escena del dia como foto de prensa pegada en la pagina: borde
     de papel, sombra, un leve giro y su pie de foto."""
     x, y = pos
@@ -422,7 +423,7 @@ def _foto_prensa(pg, foto, pos, pie_foto, t, ancho=0.27, alto=0.155):
         e.rotation_z = giro
         pg.aparecer(e, t, 0.35, dy=0.03)
     if foto is not None:
-        u0, u1, v0, v1 = 0.06, 0.50, 0.32, 0.88
+        u0, u1, v0, v1 = recorte
         img = caja(pg, ancho, alto, (x, y), color.white, Z_CAJA + 0.001)
         img.texture = foto
         img.texture_scale = (u1 - u0, v1 - v0)
@@ -1025,6 +1026,98 @@ def _columna(pg, c, x, t, lider):
     elif not c["hechos"]:
         pg.aparecer(texto(pg, "Aún no sabes nada de su campaña.", (x, y),
                           0.34, E.TINTA_TENUE), t + 1.6)
+
+
+def _alto(t, por_linea):
+    """Alto de un Text con wordwrap: Text.height no cuenta las lineas que
+    mete el ajuste, asi que se cuentan a mano."""
+    # el ajuste deja un salto al final que no es una linea
+    return (t.text.strip("\n").count("\n") + 1) * por_linea
+
+
+def portada(datos, foto=None, animado=True):
+    """La cuarta pagina: la primera plana de Nova Noticias de manana.
+
+    Es donde la memoria entre capitulos se vuelve visible (PLAN_MEJORAS
+    P1): el titular que dejo el dia y, en un despiece, lo que el dia
+    siguiente va a heredar. Sin esto, la ronda reforzada o la opcion extra
+    del expediente pasaban sin que nadie supiera por que.
+    """
+    pg = Pagina(animado)
+    acento = datos["acento"]
+    fondo(pg, datos["dia"], acento)
+    fija = camera.ui
+    pg.aparecer(texto(pg, datos["arriba"], (-0.84, 0.478), 0.48, E.TINTA_TENUE,
+                      padre=fija), 0.15)
+    # la cabecera del diario, centrada, entre dos filetes
+    cab = pg.add(E.titular("Nova Noticias", (0, 0.440), 3.0, E.TINTA,
+                           origen=(0, 0.5), padre=pg.lienzo))
+    pg.aparecer(cab, 0.25, 0.5)
+    for e in E.filete(1.68, (-0.84, 0.352), E.TINTA, padre=pg.lienzo):
+        e.z = Z_GUIA
+        pg.add(e)
+        pg.crecer(e, 0.35, 0.6)
+    pg.aparecer(texto(pg, datos["fecha"], (-0.84, 0.326), 0.42, E.TINTA_TENUE),
+                0.4)
+    pg.aparecer(texto(pg, "EDICIÓN DE MAÑANA", (0.84, 0.326), 0.42, E.TINTA_TENUE,
+                      origen=(0.5, 0.5), gruesa=True), 0.4)
+
+    y = 0.290
+    if datos["titular"]:
+        # el titular con su registro corrido en la tinta del protagonista,
+        # igual que la cabecera de las otras paginas
+        registro = pg.add(E.titular(datos["titular"], (-0.836, y - 0.004), 2.1,
+                                    con_alfa(acento, 0.55), padre=pg.lienzo))
+        registro.wordwrap = 30
+        registro.z = 0.02
+        pg.aparecer(registro, 0.65, 0.5, dx=0.04)
+        tit = pg.add(E.titular(datos["titular"], (-0.840, y), 2.1, E.TINTA,
+                               padre=pg.lienzo))
+        tit.wordwrap = 30
+        pg.aparecer(tit, 0.55, 0.45, dx=0.03)
+        pg.sonar(0.55, "sello", 0.6)
+        y -= _alto(tit, 0.0245 * 2.1) + 0.018
+        baj = pg.add(E.entradilla(datos["bajada"], (-0.84, y), 0.95, E.TINTA,
+                                  ancho=78, padre=pg.lienzo))
+        pg.aparecer(baj, 0.85, dx=0.02)
+        y -= _alto(baj, 0.030) + 0.026
+    regla = caja(pg, 1.68, 0.0016, (0.0, y), con_alfa(E.TINTA, 0.35), Z_GUIA)
+    pg.aparecer(regla, 0.9)
+
+    # la foto del dia, a la izquierda
+    alto_foto = min(0.30, y + 0.33)
+    # la escena entera sin las barras de cine, no el recorte del diagrama
+    _foto_prensa(pg, foto, (-0.58, y - 0.03 - alto_foto / 2), datos["pie_foto"], 1.0,
+                 ancho=0.50, alto=alto_foto, recorte=(0.15, 0.85, 0.14, 0.86))
+
+    # el despiece: lo que manana trae lo de hoy
+    x, top = 0.02, y - 0.030
+    items = datos["manana"] or ["Nada cambia mañana por lo de hoy."]
+    t = 1.3
+    pg.aparecer(caja(pg, 0.82, 0.006, (x + 0.41, top), acento, Z_CAJA), t)
+    pg.aparecer(texto(pg, "LO QUE CAMBIA MAÑANA", (x + 0.014, top - 0.016), 0.44,
+                      E.TINTA, gruesa=True), t + 0.05)
+    yy = top - 0.064
+    for i, item in enumerate(items):
+        ti = t + 0.25 + i * 0.18
+        for p in E.casilla((x + 0.026, yy - 0.010), E.TINTA, marcada=True,
+                           lado=0.018, padre=pg.lienzo, z=Z_CAJA):
+            pg.add(p)
+            pg.aparecer(p, ti)
+        linea_txt = texto(pg, item, (x + 0.050, yy), 0.52, E.TINTA)
+        linea_txt.wordwrap = 50
+        pg.aparecer(linea_txt, ti + 0.03, dx=0.02)
+        pg.sonar(ti, "tecla", 0.8)
+        yy -= _alto(linea_txt, 0.0135) + 0.024
+    fondo_r = caja(pg, 0.82, top - yy + 0.010, (x + 0.41, (top + yy) / 2 - 0.005),
+                   con_alfa(E.PAPEL_SOMBRA, 0.9), Z_GUIA + 0.001)
+    pg.aparecer(fondo_r, t, 0.4)
+    _sello(pg, "EN IMPRENTA", (0.68, max(yy - 0.065, -0.33)), acento,
+           t + 0.4 + 0.18 * len(items))
+
+    pie(pg, "Nova Noticias · lo que Ciudad Nova leerá al despertar.",
+        max(t + 0.6 + 0.18 * len(items), 2.4))
+    return pg
 
 
 def encuesta(datos, animado=True):

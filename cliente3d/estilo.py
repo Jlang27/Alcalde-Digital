@@ -249,6 +249,33 @@ def banda(ancho, alto, posicion, col, padre=None, z=Z_ADORNO):
                   scale=(ancho, alto), position=(x, y, z))
 
 
+def sello(texto, posicion, col, padre=None, retraso=0.0, giro=-8):
+    """Sello de goma: marco y letra en una tinta, girado, que cae sobre el
+    papel (de 1,35 a 1). Devuelve las piezas con el contenedor al final:
+    destroy() de Ursina no se lleva a los hijos, y asi caen primero."""
+    from ursina import curve
+    x, y = posicion
+    caja = Entity(parent=padre or camera.ui, position=(x, y, -0.01),
+                  rotation_z=giro)
+    ancho = 0.0105 * len(texto) + 0.05
+    piezas = [Entity(parent=caja, model="quad", color=col, scale=(a, b),
+                     position=(dx, dy))
+              for a, b, dx, dy in ((ancho, 0.0035, 0, 0.024), (ancho, 0.0035, 0, -0.024),
+                                   (0.0035, 0.048, -ancho / 2, 0),
+                                   (0.0035, 0.048, ancho / 2, 0))]
+    piezas.append(Text(text=texto.upper(), parent=caja, origin=(0, 0),
+                       position=(0, 0), scale=0.72, color=col, **fuente_titular()))
+    caja.scale = 1.35
+    caja.enabled = retraso <= 0
+    if retraso > 0:
+        from ursina import invoke
+        # si la pieza ya se limpio antes del retraso, no hay nada que encender
+        invoke(lambda: caja.is_empty() or setattr(caja, "enabled", True),
+               delay=retraso)
+    caja.animate_scale(1.0, duration=0.30, delay=retraso, curve=curve.out_back)
+    return piezas + [caja]
+
+
 # ===================================================================
 #  MARCAS DE VOTO
 # ===================================================================

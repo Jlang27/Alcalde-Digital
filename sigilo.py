@@ -346,8 +346,12 @@ class Sigilo:
     """La ronda entera y lo que sabe de ti: sospecha, avisos y lo que llevas."""
 
     def __init__(self, rutas, regreso, objetos=None, zonas_seguras=(),
-                 salida=None, objetivos=()):
-        self.vigilantes = [Vigilante(i, r) for i, r in rutas.items()]
+                 salida=None, objetivos=(), velocidad=VELOCIDAD,
+                 avisos_maximos=AVISOS_MAXIMOS):
+        # velocidad y avisos_maximos los fija lo que paso en dias anteriores
+        # (contenido.HERENCIAS): ronda reforzada o un aviso de gracia.
+        self.vigilantes = [Vigilante(i, r, velocidad) for i, r in rutas.items()]
+        self.avisos_maximos = avisos_maximos
         self.regreso = regreso        # (x, z, rumbo): a donde te llevan al pillarte
         # La noche acaba al llegar a la salida (x0, x1, z0, z1) con el
         # objetivo en la mano; sin el, la salida solo avisa de que falta.
@@ -385,7 +389,7 @@ class Sigilo:
 
     @property
     def expulsada(self):
-        return self.avisos >= AVISOS_MAXIMOS
+        return self.avisos >= self.avisos_maximos
 
     @property
     def tiene_objetivo(self):

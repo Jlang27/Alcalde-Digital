@@ -40,18 +40,18 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
                        HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
                        MENSAJE_ANONIMO, DIA_CAMPANA, PUNTOS_CAPITULO_3,
-                       TEXTO_MAPA_DISTRITOS, DIALOGO_EXPEDIENTE,
+                       TEXTO_MAPA_DISTRITOS,
                        DIALOGO_ASESOR_PREOCUPADO, DIA_ESTUDIO, DIA_PLAZA, PUNTOS_CAPITULO_4,
                        TEXTO_PATROCINADORES, MENSAJE_CIFRADO, ZONA_DUELO_PLAZA,
                        LETRAS_RITMO, TEXTO_DUELO, FINAL_DUELO, TEXTO_SOSPECHOSO,
-                       FINAL_PERSECUCION, OBJETIVOS_PERSECUCION, DIALOGO_CAPTURA)
+                       FINAL_PERSECUCION, OBJETIVOS_PERSECUCION)
 import ritmo
 from transmision import BORRAR, RESPONDER
 from persecucion import ANCHO_PASILLO, distancia_a_ruta
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
 import sigilo
-from sigilo import AVISOS_MAXIMOS, Vigilante
+from sigilo import Vigilante
 
 DURACION_CARGA = 2.8
 
@@ -151,7 +151,7 @@ class Cliente:
         self.inventario = None        # lo que llevas, abajo a la derecha
         self.dialogo = None
         self.con_quien = None
-        self.pagina_cierre = None     # "arbol", "red" o "encuesta"
+        self.pagina_cierre = None     # "arbol", "red", "encuesta" o "portada"
         self.pagina = None            # la cierre.Pagina en pantalla
         self.foto_cierre = None       # la escena del dia, para la miniatura
         self.agotado = False          # el reloj llego a cero y se esta contando
@@ -985,6 +985,11 @@ def mostrar_consecuencia(nodo):
     titulo_con = E.etiqueta(nodo.texto, (0.14, 0.095), 1.35, E.TEXTO)
     titulo_con.wordwrap = 34
     cl.opciones.append(titulo_con)
+    if nodo.bandera:
+        # deja memoria: algun dia siguiente cambia por esto
+        cl.opciones += E.sello("La ciudad lo anotó", (0.62, 0.150), E.ALERTA,
+                               retraso=0.6)
+        invoke(audio.efecto, "sello", delay=0.65)
     colocar_reloj(2)
 
 
@@ -1460,7 +1465,8 @@ def dibujar_ronda():
     s = cl.partida.sigilo
     for v in s.vigilantes:
         mundo.mover_vigilante(cl.vigilantes[v.id], v.x, v.z, v.rumbo,
-                              v.andando, s.rayos(v), v.id == s.quien, v.corriendo)
+                              v.andando, s.rayos(v), v.id == s.quien, v.corriendo,
+                              v.velocidad)
 
 
 def ronda(dt):
@@ -1471,7 +1477,7 @@ def ronda(dt):
     evento = s.actualizar(dt, cl.actor.getX(), cl.actor.getZ(),
                           j.agachado, j.corriendo, j.moviendose)
     dibujar_ronda()
-    cl.sospecha.poner(s.sospecha, s.avisos, AVISOS_MAXIMOS, s.a_salvo)
+    cl.sospecha.poner(s.sospecha, s.avisos, s.avisos_maximos, s.a_salvo)
     for ruido in s.sonaron:
         # Mas flojo cuanto mas lejos: el sonido no es 3D, pero asi se
         # sabe si el petardo cayo al lado o en la otra punta.
@@ -1509,7 +1515,7 @@ def abrir_expediente():
     cerrar_libre()
     cl.estado = "escena"
     cl.escena = cine_campana.ExpedienteCampana(
-        cl.actor, cl.asesor, opciones_del_dia(), DIALOGO_EXPEDIENTE,
+        cl.actor, cl.asesor, opciones_del_dia(), cl.partida.dialogo_expediente(),
         cl.partida.protagonista.nombre, cl.mundo)
 
 
@@ -1898,7 +1904,7 @@ def capturar():
     hud.poner(p.restante, p.distancia, 1.0, p.progreso(), "CAPTURA", "", None)
     hud.avisar("¡MOCHILA RECUPERADA!", E.RESTREPO, 1.6)
     t = 2.0
-    for quien, texto, dura in DIALOGO_CAPTURA:
+    for quien, texto, dura in cl.partida.dialogo_captura():
         etiqueta = "MATEO" if quien == "mateo" else "EL DE LA MOCHILA"
         invoke(hud.decir, etiqueta, texto, delay=t)
         t += dura + 0.3
@@ -1961,7 +1967,8 @@ def elegir_en_escena(i):
     audio.efecto("decidir")
     cl.partida.elegir(id_opcion)
     hoja = cl.partida.elegir(cl.partida.opciones()[0].id)
-    cl.escena.consecuencia(hoja.texto, cl.partida.ultimo_detalle)
+    cl.escena.consecuencia(hoja.texto, cl.partida.ultimo_detalle,
+                           anotado=hoja.bandera is not None)
 
 
 def terminar_escena():
@@ -2070,10 +2077,10 @@ def pillada(evento):
     audio.efecto("vibracion")
     if evento == "expulsada":
         abrir_aviso_papel("TE SACARON DEL COLEGIO",
-                          f"Aviso {s.avisos} de {AVISOS_MAXIMOS}",
+                          f"Aviso {s.avisos} de {s.avisos_maximos}",
                           TEXTO_EXPULSADA, terminar_noche)
     else:
-        abrir_aviso_papel("TE VIERON", f"Aviso {s.avisos} de {AVISOS_MAXIMOS}",
+        abrir_aviso_papel("TE VIERON", f"Aviso {s.avisos} de {s.avisos_maximos}",
                           TEXTO_PILLADA, abrir_libre)
 
 
@@ -2865,6 +2872,31 @@ def dibujar_encuesta(animado=True):
     nueva_pagina(cierre.encuesta(datos_encuesta(cl.partida), animado))
 
 
+def datos_portada(p):
+    """La portada de manana (Partida.portada) con lo que necesita para
+    dibujarse, o None si el dia no dejo nada que contar."""
+    d = p.portada()
+    if d is None:
+        return None
+    if d["dia"] >= p.total_dias:
+        # tras la vispera ya no hay otro dia: la portada es la del voto
+        fecha, pie_foto = "HOY SE VOTA", f"{p.protagonista.nombre}, ayer."
+    else:
+        restan = pantallas.dias_que_faltan(d["dia"])
+        verbo = "FALTA" if restan.startswith("1 ") else "FALTAN"
+        titulo, _dias, lugar = capitulo_de(d["dia"])
+        fecha = f"DÍA {d['dia'] + 1:02d}  ·  {verbo} {restan.upper()} PARA LA ELECCIÓN"
+        pie_foto = f"{p.protagonista.nombre}, ayer. Hoy: «{titulo}», {lugar.lower()}."
+    return dict(d, arriba=_arriba(p), dia=f"{d['dia'] + 1:02d}",
+                acento=color.rgb32(*p.protagonista.color),
+                fecha=fecha, pie_foto=pie_foto)
+
+
+def dibujar_portada(animado=True):
+    cl.pagina_cierre = "portada"
+    nueva_pagina(cierre.portada(datos_portada(cl.partida), cl.foto_cierre, animado))
+
+
 def siguiente_dia():
     cl.pagina_cierre = None
     cl.pagina = None
@@ -3535,8 +3567,11 @@ def input(tecla):
                 dibujar_red(animado=False)
             elif cl.pagina_cierre == "encuesta":
                 dibujar_encuesta(animado=False)
+            elif cl.pagina_cierre == "portada":
+                dibujar_portada(animado=False)
             return
-        # arbol -> red (solo el dia que la tiene) -> encuesta -> otro dia
+        # arbol -> red (solo el dia que la tiene) -> encuesta -> portada de
+        # manana (si el dia dejo algo que contar) -> otro dia
         if cl.pagina_cierre is None:
             return                   # aun no ha salido la primera pagina
         # (la hoja que pasa la pone la pagina nueva al nacer: aqui sonaba
@@ -3545,6 +3580,8 @@ def input(tecla):
             dibujar_red()
         elif cl.pagina_cierre in ("arbol", "red"):
             dibujar_encuesta()
+        elif cl.pagina_cierre == "encuesta" and datos_portada(cl.partida) is not None:
+            dibujar_portada()
         else:
             siguiente_dia()
 
