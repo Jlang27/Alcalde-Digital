@@ -1,4 +1,6 @@
 import os
+import os as _os, sys as _sys  # banco.py esta un nivel arriba
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 from banco import *
 from banco import J
 from ursina import application as ap

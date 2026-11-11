@@ -18,9 +18,13 @@ from ursina import Entity, Vec3, camera, color, curve, destroy, invoke
 import audio
 import estilo as E
 import mundo
-from intro import Intro, NEGRO_CORTE, _suave
+from intro import ALTO_BARRA, Intro, NEGRO_CORTE, _suave
 
 DURA_CONSECUENCIA = 6.5
+# La hoja de la decision se apoya en la barra de cine de abajo: antes
+# colgaba de la mitad de la pantalla y, con dos opciones, entre la hoja y
+# la barra quedaba una franja de escena suelta.
+SUELO_HOJA = -0.5 + ALTO_BARRA
 
 
 class EscenaDecision:
@@ -44,6 +48,7 @@ class EscenaDecision:
         self.inicios = [sum(p[1] for p in self.PLANOS[:i]) for i in range(len(self.PLANOS))]
         self.piezas, self.panel = [], []
         Intro._barras(self)
+        self.barra_arriba = self.piezas[0]   # _barras pone primero la de arriba
         self.rotulo_saltar = self.piezas[-1]
         self.negro = E.velo(color.rgba(0, 0, 0, 1), z=-0.9)
         self.piezas.append(self.negro)
@@ -167,14 +172,17 @@ class EscenaDecision:
         """Las opciones, impresas en la hoja de la decision."""
         self.fase = "decide"
         self.rotulo_saltar.fade_out(duration=0.3)
-        # Con cuatro (la que trae otro capitulo) se aprietan: si no, la
-        # ultima queda debajo de la barra de cine.
+        # La barra de arriba se retira: con la hoja abajo, el cine apretado
+        # cortaba la cara de quien decide justo cuando mas importa.
+        self.barra_arriba.animate_y(0.5 + ALTO_BARRA / 2, duration=0.6,
+                                    curve=curve.in_out_cubic)
+        # Con cuatro (la que trae otro capitulo) se aprietan.
         paso = {1: 0.105, 2: 0.105, 3: 0.098}.get(len(self.opciones), 0.074)
-        primera = -0.128 if len(self.opciones) < 4 else -0.100
-        # La hoja mide justo lo que ocupan las opciones: antes reservaba
-        # un alto fijo y sobraban cien pixeles de papel en blanco.
-        ultima = primera - (len(self.opciones) - 1) * paso
-        c = self._papel(-0.020, ultima - 0.044, self.PREGUNTA.upper())
+        # La hoja mide justo lo que ocupan las opciones y se apoya en la
+        # barra de abajo: titulo (0.108) + opciones + margen (0.044).
+        arriba = SUELO_HOJA + 0.044 + (len(self.opciones) - 1) * paso + 0.108
+        primera = arriba - 0.108
+        c = self._papel(arriba, SUELO_HOJA, self.PREGUNTA.upper())
         a = self.panel.append
         for k, (id_opcion, texto, detalle) in enumerate(self.opciones):
             y = primera - k * paso
@@ -200,15 +208,18 @@ class EscenaDecision:
         self.fase, self.t_consecuencia = "consecuencia", 0.0
         self._borrar_panel()
         tinta = self._en_papel(self.TINTAS.get(self.elegida, E.TINTA))
-        c = self._papel(-0.020, -0.300, "CONSECUENCIA")
+        # misma hoja apoyada abajo; d corre todo lo que antes colgaba de -0.020
+        arriba = SUELO_HOJA + 0.280
+        d = arriba + 0.020
+        c = self._papel(arriba, SUELO_HOJA, "CONSECUENCIA")
         a = self.panel.append
         # El titular en la tinta de lo que elegiste, con su sello al lado.
-        a(E.banda(0.040, 0.040, (-0.815, -0.108), tinta, padre=c))
-        a(E.titular(titulo, (-0.775, -0.088), 1.6, E.TINTA, padre=c))
-        a(E.entradilla(detalle, (-0.835, -0.178), 0.86, E.TINTA_TENUE,
+        a(E.banda(0.040, 0.040, (-0.815, d - 0.108), tinta, padre=c))
+        a(E.titular(titulo, (-0.775, d - 0.088), 1.6, E.TINTA, padre=c))
+        a(E.entradilla(detalle, (-0.835, d - 0.178), 0.86, E.TINTA_TENUE,
                        ancho=58, padre=c))
         if anotado:
-            self.panel += E.sello("La ciudad lo anotó", (0.66, -0.150), tinta,
+            self.panel += E.sello("La ciudad lo anotó", (0.66, d - 0.150), tinta,
                                   padre=c, retraso=0.5)
             invoke(audio.efecto, "sello", delay=0.55)
         self._reaccion()

@@ -38,7 +38,7 @@ from contenido import (
     VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1, NIVEL_INICIAL, RONDAS_POR_NIVEL,
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
-    OPCIONES_QUE_PROTEGEN, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO, DIA_PLAZA, TENSION_PLAZA,
+    OPCIONES_QUE_PROTEGEN, PERSONAJE_DEL_DIA, DUENO_PERSONAJE, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO, DIA_PLAZA, TENSION_PLAZA,
     RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, RELLENO_CHAT_4, PEDIDOS_CHAT_4,
     OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2, OBJETIVOS_CAPITULO_2,
     SALIDA_CAPITULO_2,
@@ -236,6 +236,9 @@ class Partida:
         else:
             random.shuffle(self.publicaciones)
         self.total_dias = min(DIAS_PARTIDA, len(self.publicaciones))
+        # (jugador, rol del personaje) de cada dia: se fija al empezar,
+        # porque depende de quien esta en la partida, no de lo que pase.
+        self.reparto_dias = self._repartir_dias()
         self.dia_actual = 0
         self.dias_completados = 0
 
@@ -302,13 +305,48 @@ class Partida:
     #  PROTAGONISTA  (rotacion tipo Detroit)
     # =============================================================
 
+    def _repartir_dias(self):
+        """Quien juega cada dia y con que personaje (contenido.PERSONAJE_DEL_DIA).
+
+        El dueño del personaje si esta en la partida; si no, el jugador que
+        menos dias lleva (en empate, el primero), para que nadie se quede
+        mirando toda la semana.
+        """
+        por_rol = {j.id_rol: j for j in self.jugadores}
+        cuenta = {j.indice: 0 for j in self.jugadores}
+        dias = []
+        for dia in range(self.total_dias):
+            personaje = PERSONAJE_DEL_DIA.get(dia)
+            dueno = None
+            if personaje is not None:
+                dueno = por_rol.get(DUENO_PERSONAJE.get(personaje, personaje))
+            if dueno is None:
+                dueno = min(self.jugadores, key=lambda j: (cuenta[j.indice], j.indice))
+            cuenta[dueno.indice] += 1
+            dias.append((dueno, personaje or dueno.id_rol))
+        return dias
+
     def protagonista_de(self, dia):
-        """Cada dia le toca a un jugador distinto, rotando en orden."""
-        return self.jugadores[dia % len(self.jugadores)]
+        """El JUGADOR que lleva el dia (sus puntos, su color, su turno)."""
+        return self.reparto_dias[min(dia, len(self.reparto_dias) - 1)][0]
+
+    def personaje_de(self, dia):
+        """El rol del PERSONAJE que se interpreta ese dia (su modelo)."""
+        return self.reparto_dias[min(dia, len(self.reparto_dias) - 1)][1]
 
     @property
     def protagonista(self):
         return self.protagonista_de(self.dia_actual)
+
+    @property
+    def personaje(self):
+        return self.personaje_de(self.dia_actual)
+
+    @property
+    def nombre_protagonista(self):
+        """Como se llama quien protagoniza hoy: el personaje del capitulo,
+        no el del jugador (el Alcalde interpreta a Daniel el dia 3)."""
+        return ROLES[self.personaje].get("personaje", ROLES[self.personaje]["nombre"])
 
     def secundarios_de(self, dia):
         prota = self.protagonista_de(dia)
@@ -427,7 +465,8 @@ class Partida:
         self.flash_tiempo = 0.0
         self.opcion_nueva = None
 
-        self.avisar(f"Día {indice + 1}: protagoniza {prota.nombre}.", "info", prota)
+        self.avisar(f"Día {indice + 1}: protagoniza {self.nombre_protagonista}.",
+                    "info", prota)
         for h in self.herencias:
             self.avisar(h["texto"], "info")
         if propias:
@@ -490,7 +529,8 @@ class Partida:
             self.dias_completados = self.dia_actual + 1
             prota.puntos += 1
             prota.dias_como_protagonista += 1
-            self.avisar(f"{prota.nombre} cierra el día: +1 punto.", "bien", prota)
+            self.avisar(f"{self.nombre_protagonista} cierra el día: +1 punto.",
+                        "bien", prota)
             for j in self.secundarios_de(self.dia_actual):
                 j.puntos += 1
 
@@ -515,7 +555,7 @@ class Partida:
         banderas de hoy ya puestas), y el estado de la plaza si el siguiente
         es el capitulo 5: era la consecuencia mas grande y no se contaba.
         """
-        nombre = self.protagonista.nombre
+        nombre = self.nombre_protagonista
         titular = next((TITULARES[b] for b in self.banderas_del_dia if b in TITULARES),
                        None)
         siguiente = self.dia_actual + 1
@@ -611,7 +651,7 @@ class Partida:
             # El vertice del jugador lleva el nombre del protagonista de
             # hoy: la cabecera, la red y la libreta deben llamarlo igual.
             if v == ORIGEN_JUGADOR:
-                nombre = self.protagonista.nombre
+                nombre = self.nombre_protagonista
             for g in (self.red, self.red_conocida):
                 g.agregar_vertice(v, nombre=nombre, tipo=tipo, voto=voto,
                                   peso=peso)
@@ -969,7 +1009,7 @@ class Partida:
 
         if acepta and self.jugar_carta(carta):
             self.flash = (f"{carta.jugador.nombre} interviene: "
-                          f"nueva opción para {self.protagonista.nombre}",
+                          f"nueva opción para {self.nombre_protagonista}",
                           carta.jugador.color)
             self.opcion_nueva = carta.spec[1]
         else:
@@ -1001,7 +1041,7 @@ class Partida:
         carta.jugador.reputacion = min(100, carta.jugador.reputacion + 2)
         self.avisar(f"{carta.jugador.nombre} intervino: '{carta.etiqueta}'.",
                     "bien", carta.jugador)
-        self.avisar(f"{self.protagonista.nombre} tiene una opción nueva.",
+        self.avisar(f"{self.nombre_protagonista} tiene una opción nueva.",
                     "info", self.protagonista)
         return True
 

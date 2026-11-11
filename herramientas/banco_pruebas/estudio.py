@@ -45,8 +45,8 @@ assert J.cl.capitulo_sel == 3
 tecla("enter", 0.5)
 assert hasta_estado("rotulo", 20), estado()
 p = J.cl.partida
-assert p.dia_actual == 3 and p.protagonista.nombre == "Santiago Lleras", (
-    p.dia_actual, p.protagonista.nombre)
+assert p.dia_actual == 3 and p.nombre_protagonista == "Santiago Lleras", (
+    p.dia_actual, p.nombre_protagonista)
 assert J.mundo._ACTUAL["nombre"] == "estudio" and not p.con_telefono
 foto("estudio_rotulo")
 for _ in range(6):                  # rotulo, contexto y el aviso del directo

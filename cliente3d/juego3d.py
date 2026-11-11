@@ -35,7 +35,7 @@ import mundo
 import pantallas
 import minimapa
 from jugador import Jugador
-from contenido import INDICADORES_META
+from contenido import INDICADORES_META, PERSONAJE_DEL_DIA, DUENO_PERSONAJE
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
                        HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
@@ -74,6 +74,7 @@ class Cliente:
         self.confirmacion_sel = 1
         self.confirmacion_marca = []
         self.jugador = None
+        self.rol_actor = None         # el personaje cargado en cl.actor
         self.rotulo = None
         self.contexto = None
         self.aviso = None
@@ -284,6 +285,7 @@ def confirmar_reparto(indices):
     cl.actor.cleanup()
     cl.actor.removeNode()
     cl.actor = mundo.consagrar(cl.elenco, indices[0])
+    cl.rol_actor = cl.reparto[0]
     cl.elenco = []
     animar("idle")
     abrir_carga()
@@ -317,7 +319,11 @@ CAPITULOS = [(f"{i + 1:02d}",
 # Quien protagoniza un capitulo jugado suelto, segun el guion. El 1 lo
 # juega el rol que ya tengas; el 2 es de Valeria, la periodista; el 3,
 # de Daniel Ospina, el candidato, y el 4, de Santiago, el influencer.
-ROL_CAPITULO = {1: "periodista", 2: "candidato", 3: "influencer", 4: "ciudadano"}
+def rol_capitulo(capitulo):
+    """El rol que se ficha para jugar un capitulo suelto: el dueño de su
+    personaje (contenido.PERSONAJE_DEL_DIA). Daniel lo lleva el Alcalde."""
+    personaje = PERSONAJE_DEL_DIA.get(capitulo) or "ciudadano"
+    return DUENO_PERSONAJE.get(personaje, personaje)
 
 
 def abrir_capitulos(seleccion=0):
@@ -360,15 +366,13 @@ def mover_capitulo(paso):
 def jugar_capitulo():
     """Arranca el capitulo marcado, sin pasar por el reparto."""
     cl.capitulo = cl.capitulo_sel
-    rol = ROL_CAPITULO.get(cl.capitulo)
-    # Siempre se recarga: el actor del menu es el de prueba, diga lo que
-    # diga rol_elegido, y la partida suelta es de uno solo.
-    if rol is not None:
-        cl.rol_elegido, cl.reparto = rol, [rol]
-        cl.actor.cleanup()
-        cl.actor.removeNode()
-        cl.actor = mundo.protagonista(cl.mundo, rol)
-        animar("idle")
+    rol = rol_capitulo(cl.capitulo)
+    # El actor lo trae iniciar_dia (el personaje del capitulo, que no
+    # siempre es el del rol: Daniel lo interpreta el Alcalde); aqui solo
+    # se ficha al jugador. La partida suelta es de uno solo.
+    cl.rol_elegido, cl.reparto = rol, [rol]
+    # ya en la carga se ve a quien protagoniza (antes, el de prueba)
+    poner_personaje(PERSONAJE_DEL_DIA.get(cl.capitulo) or rol)
     cerrar_pantalla(jugar=True)
 
 EQUIPO = ["David Martínez", "José Angulo", "Yuceth Gil",
@@ -898,7 +902,7 @@ def pintar_publicacion():
     pub_pie.text = f"{compartidos} compartidos  ·  {p.evento_dia}"
     pintar_indicadores()
     cabecera.text = (f"CAPÍTULO {p.dia_actual + 1} DE {p.total_dias}"
-                     f"   ·   {p.protagonista.nombre}")
+                     f"   ·   {p.nombre_protagonista}")
     if p.pistas is not None:
         cabecera.text += f"   ·   {p.hora()}"
     construir_zonas()
@@ -1022,6 +1026,24 @@ def capitulo_de(indice):
 ESCENARIO_DIA = {1: "rectoria", 2: "campana", 3: "estudio", 4: "plaza_central"}   # indice de dia -> escenario
 
 
+def poner_personaje(rol):
+    """El modelo del personaje que protagoniza hoy.
+
+    Como en Detroit, un jugador interpreta a varios: con uno solo, Mateo
+    el dia 1, Valeria el 2, Daniel el 3... Si cambia, se descarga el actor
+    anterior (y sus luces) y el control de camara se rehace con el nuevo,
+    porque guarda los huesos que mueve al asomarse y al lanzar.
+    """
+    if cl.rol_actor == rol and cl.actor is not None:
+        return
+    if cl.actor is not None:
+        mundo.retirar_protagonista(cl.actor)
+    cl.actor = mundo.protagonista(cl.mundo, rol)
+    cl.rol_actor = rol
+    cl.jugador = None
+    animar("idle")
+
+
 def iniciar_dia(indice):
     """Arranca la jornada como una escena, no como una pantalla de HUD.
 
@@ -1051,6 +1073,7 @@ def iniciar_dia(indice):
     # Cada dia empieza en la marca: el anterior pudo dejar al protagonista
     # en cualquier sitio (la calle del colegio, tras la decision del cap. 2)
     # y en el escenario nuevo eso cae fuera de las paredes.
+    poner_personaje(cl.partida.personaje)
     cl.actor.setPos(0, 0, 0)
     cl.actor.setH(0)
     # Aqui y no al soltar al personaje: cargar los .glb da un tiron, y
@@ -1113,7 +1136,7 @@ def abrir_cinematica(indice):
     # La ronda empieza cuando sueltas a la protagonista: en la llegada no
     # hay vigilantes (el del pasillo salia en el plano con el rector).
     mostrar_vigilantes(False)
-    cl.cine = clase(cl.actor, cl.partida.protagonista.nombre)
+    cl.cine = clase(cl.actor, cl.partida.nombre_protagonista)
 
 
 def mostrar_vigilantes(visibles):
@@ -1149,7 +1172,7 @@ def abrir_rotulo(indice):
         turno = (f"Turno del jugador {prota.indice + 1} · {prota.nombre_rol}",
                  color.rgb32(*prota.color))
     cl.rotulo = pantallas.Rotulo(indice + 1, titulo,
-                                 f"{prota.nombre} · {lugar}", turno)
+                                 f"{p.nombre_protagonista} · {lugar}", turno)
 
 
 def cerrar_rotulo():
@@ -1516,7 +1539,7 @@ def abrir_expediente():
     cl.estado = "escena"
     cl.escena = cine_campana.ExpedienteCampana(
         cl.actor, cl.asesor, opciones_del_dia(), cl.partida.dialogo_expediente(),
-        cl.partida.protagonista.nombre, cl.mundo)
+        cl.partida.nombre_protagonista, cl.mundo)
 
 
 def abrir_directo():
@@ -1573,7 +1596,7 @@ def abrir_oferta():
     cerrar_directo()
     cl.estado = "escena"
     cl.escena = cine_estudio.OfertaEstudio(
-        cl.actor, opciones_del_dia(), MENSAJE_CIFRADO, cl.partida.protagonista.nombre)
+        cl.actor, opciones_del_dia(), MENSAJE_CIFRADO, cl.partida.nombre_protagonista)
 
 
 # ===================================================================
@@ -2526,14 +2549,14 @@ def pasar_control(jugador, despues, devolver=False):
         cl.estado = "juego"
         despues()
 
-    prota = cl.partida.protagonista
+    nombre = cl.partida.nombre_protagonista
     if devolver:
-        cuerpo = (f"Ya está decidido. El teclado vuelve a {prota.nombre} "
+        cuerpo = (f"Ya está decidido. El teclado vuelve a {nombre} "
                   f"para que siga con su día.")
         rotulo = "DEVUELVE EL CONTROL"
     else:
         cuerpo = (f"{jugador.nombre} puede intervenir en el día de "
-                  f"{prota.nombre}. {prota.nombre.split()[0]}, no mires: "
+                  f"{nombre}. {nombre.split()[0]}, no mires: "
                   f"tiene {TIEMPO_INTERVENCION:.0f} segundos para decidir "
                   f"en secreto.")
         rotulo = "PASA EL CONTROL"
@@ -2644,7 +2667,7 @@ def _cifra(clave, p):
 def _arriba(p):
     titulo, _dias, lugar = capitulo_de(p.dia_actual)
     return (f"ALCALDE DIGITAL   ·   DÍA 0{p.dia_actual + 1}   ·   "
-            f"{p.protagonista.nombre.upper()}")
+            f"{p.nombre_protagonista.upper()}")
 
 
 def datos_flujo(p):
@@ -2880,13 +2903,13 @@ def datos_portada(p):
         return None
     if d["dia"] >= p.total_dias:
         # tras la vispera ya no hay otro dia: la portada es la del voto
-        fecha, pie_foto = "HOY SE VOTA", f"{p.protagonista.nombre}, ayer."
+        fecha, pie_foto = "HOY SE VOTA", f"{p.nombre_protagonista}, ayer."
     else:
         restan = pantallas.dias_que_faltan(d["dia"])
         verbo = "FALTA" if restan.startswith("1 ") else "FALTAN"
         titulo, _dias, lugar = capitulo_de(d["dia"])
         fecha = f"DÍA {d['dia'] + 1:02d}  ·  {verbo} {restan.upper()} PARA LA ELECCIÓN"
-        pie_foto = f"{p.protagonista.nombre}, ayer. Hoy: «{titulo}», {lugar.lower()}."
+        pie_foto = f"{p.nombre_protagonista}, ayer. Hoy: «{titulo}», {lugar.lower()}."
     return dict(d, arriba=_arriba(p), dia=f"{d['dia'] + 1:02d}",
                 acento=color.rgb32(*p.protagonista.color),
                 fecha=fecha, pie_foto=pie_foto)

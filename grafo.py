@@ -122,18 +122,30 @@ class Grafo:
             ruta.append(padre[ruta[-1]])
         return ruta[::-1]
 
-    def dfs(self, origen, visitados=None):
-        """En profundidad, recursivo, preorden."""
-        visitados = [] if visitados is None else visitados
-        if origen not in self.adyacencia or origen in visitados:
-            return visitados
-        visitados.append(origen)
-        for w in sorted(self.adyacencia[origen]):
-            self.dfs(w, visitados)
-        return visitados
+    def dfs(self, origen):
+        """En profundidad, recursivo, preorden. O(V + E).
+
+        El orden va en una lista y la pregunta «¿ya lo visite?» en un
+        conjunto: preguntarlo sobre la lista costaba O(V) cada vez y el
+        recorrido entero se iba a O(V^2).
+        """
+        orden, vistos = [], set()
+
+        def visitar(v):
+            if v not in self.adyacencia or v in vistos:
+                return
+            vistos.add(v)
+            orden.append(v)
+            for w in sorted(self.adyacencia[v]):
+                visitar(w)
+
+        visitar(origen)
+        return orden
 
     def componentes(self):
-        """Componentes conexas ignorando el sentido: las 'burbujas' de la red."""
+        """Componentes DEBILMENTE conexas (se ignora el sentido de las
+        flechas): las 'burbujas' de la red. Las fuertemente conexas pedirian
+        que cada par se alcanzara en los dos sentidos, y aqui no hace falta."""
         no_dirigido = {v: set(vec) for v, vec in self.adyacencia.items()}
         for a, b in self.aristas():
             no_dirigido[b].add(a)

@@ -1,5 +1,7 @@
 """Los modelos comparten esqueleto? Si solo cambia el prefijo, una
 animacion de uno se puede copiar a otro renombrando huesos."""
+import os as _os, sys as _sys  # banco.py esta un nivel arriba
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 from banco import *
 from banco import J
 import mundo as M

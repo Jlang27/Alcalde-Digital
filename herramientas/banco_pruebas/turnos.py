@@ -15,7 +15,7 @@ tecla("enter", 0.5); tecla("enter", 0.5)
 if estado() == "aviso_papel":
     tecla("enter", 0.5)
 p = J.cl.partida
-print("protagonista dia 1:", p.protagonista.nombre,
+print("protagonista dia 1:", p.nombre_protagonista,
       "| jugadores:", [f"{j.nombre} ({j.nombre_rol})" for j in p.jugadores])
 sacar_telefono()
 while p.interrupcion is None:
@@ -44,6 +44,6 @@ for _ in range(3):
     tecla("enter", 0.4)
 hasta_estado("rotulo", 10)
 pasar(1.5); foto("rotulo_dia2")
-print("dia", p.dia_actual + 1, "· protagonista:", p.protagonista.nombre,
+print("dia", p.dia_actual + 1, "· protagonista:", p.nombre_protagonista,
       "· dias en total:", p.total_dias)
 informe()

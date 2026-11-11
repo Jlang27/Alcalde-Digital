@@ -75,8 +75,8 @@ assert hasta_estado("rotulo", 5), estado()
 assert J.cl.actor.getPos().length() < 0.01 and abs(J.cl.actor.getH()) < 0.01, (
     J.cl.actor.getPos(), J.cl.actor.getH())
 p = J.cl.partida
-assert p.dia_actual == 2 and p.protagonista.nombre == "Daniel Ospina", (
-    p.dia_actual, p.protagonista.nombre)
+assert p.dia_actual == 2 and p.nombre_protagonista == "Daniel Ospina", (
+    p.dia_actual, p.nombre_protagonista)
 assert J.mundo._ACTUAL["nombre"] == "campana"
 foto("campana_rotulo")
 for _ in range(6):                  # rotulo, contexto y el aviso de la tarde

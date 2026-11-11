@@ -606,6 +606,24 @@ RONDAS_POR_NIVEL = 2
 # ===================================================================
 #  DIA 2: EL SIGILO EN EL COLEGIO (ver sigilo.py)
 # ===================================================================
+# ===================================================================
+#  QUIEN PROTAGONIZA CADA DIA
+# ===================================================================
+# Como en Detroit: cada capitulo es de un PERSONAJE, no de un turno. El
+# guion esta escrito para el (el asesor le dice «Daniel», el colegio es de
+# Valeria), asi que la rotacion antigua (dia % jugadores) metia a Mateo en
+# el despacho de Daniel. Ahora el dia lo juega quien controla a su
+# personaje; sin dueño en la partida, el jugador que menos dias lleva.
+# Con un solo jugador, ese jugador los interpreta a todos, como en Detroit.
+#   indice de dia -> rol del personaje (None: el que menos dias lleve)
+PERSONAJE_DEL_DIA = {0: "ciudadano", 1: "periodista", 2: "candidato",
+                     3: "influencer", 4: "ciudadano", 5: "alcalde",
+                     6: None}
+# Daniel Ospina no esta en el reparto: lo interpreta el asiento politico,
+# el del Alcalde. Los demas personajes son de su propio rol.
+DUENO_PERSONAJE = {"candidato": "alcalde"}
+
+
 # El capitulo 2, «La propuesta» (pantallas.CAPITULOS), es de noche en el
 # Colegio Tecnico Nova: se entra a los archivos esquivando la ronda.
 DIA_SIGILO = 1

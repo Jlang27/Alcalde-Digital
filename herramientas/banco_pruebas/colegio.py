@@ -62,8 +62,8 @@ tecla("enter", 1.0)                                # se puede saltar
 assert hasta_estado("rotulo", 5), estado()
 assert J.cl.cine is None and J.cl.actor.getPos().length() < 0.01
 p = J.cl.partida
-assert p.dia_actual == 1 and p.protagonista.nombre == "Valeria Samper", (
-    p.dia_actual, p.protagonista.nombre)
+assert p.dia_actual == 1 and p.nombre_protagonista == "Valeria Samper", (
+    p.dia_actual, p.nombre_protagonista)
 for _ in range(6):                         # rotulo, contexto y avisos de papel
     if estado() == "libre":
         break

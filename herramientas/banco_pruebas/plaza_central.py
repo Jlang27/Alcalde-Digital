@@ -52,8 +52,8 @@ assert J.cl.capitulo_sel == 4
 tecla("enter", 0.5)
 assert hasta_estado("rotulo", 30), estado()
 p = J.cl.partida
-assert p.dia_actual == 4 and p.protagonista.nombre == "Mateo Gaitán", (
-    p.dia_actual, p.protagonista.nombre)
+assert p.dia_actual == 4 and p.nombre_protagonista == "Mateo Gaitán", (
+    p.dia_actual, p.nombre_protagonista)
 assert J.mundo.escenario() == "plaza_central" and p.estado_plaza == "pacifica"
 assert plaza.estado() == "pacifica"
 foto("plaza_rotulo")

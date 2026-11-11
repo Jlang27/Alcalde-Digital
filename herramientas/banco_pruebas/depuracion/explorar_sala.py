@@ -1,13 +1,15 @@
 """Reconoce una sala vacia para decidir donde plantar figurantes.
 
-    venv-win\\Scripts\\python.exe herramientas/banco_pruebas/explorar_sala.py campana
-    venv-win\\Scripts\\python.exe herramientas/banco_pruebas/explorar_sala.py estudio
+    venv-win\\Scripts\\python.exe herramientas/banco_pruebas/depuracion/explorar_sala.py campana
+    venv-win\\Scripts\\python.exe herramientas/banco_pruebas/depuracion/explorar_sala.py estudio
 
 Imprime el hueco libre y saca vistas desde las cuatro esquinas, para
 elegir sitios que se vean desde donde pasa el jugador.
 """
 import sys
 
+import os as _os, sys as _sys  # banco.py esta un nivel arriba
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 from banco import *
 from banco import J
 from ursina import application as ap, camera, Vec3

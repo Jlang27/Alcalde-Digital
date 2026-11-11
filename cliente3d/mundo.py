@@ -3205,6 +3205,8 @@ def _luz_de_personaje(mundo, actor):
     contra.node().setColor((1.15, 1.35, 1.95, 1))
     contra.setHpr(168, -14, 0)
     actor.setLight(contra)
+    # guardadas en el actor para poder quitarlas con el (retirar_protagonista)
+    actor.setPythonTag("luces", [clave, contra])
 
     _quitar_mapa_de_brillo(actor)
 
@@ -3567,6 +3569,20 @@ def iluminar_elenco(actores, elegido, tinta):
             # la mirada. Se les baja el color a una penumbra fria para
             # que el elegido sea el unico que esta de verdad en escena.
             actor.setColorScale(0.34, 0.37, 0.47, 1)
+
+
+def retirar_protagonista(actor):
+    """Descarga un protagonista y las dos luces que trajo consigo.
+
+    Sin quitar las luces, cada cambio de personaje dejaba dos nodos de luz
+    colgados del mundo. Las del elenco (consagrar) son compartidas y no
+    van en la etiqueta, asi que esas se quedan.
+    """
+    for luz in actor.getPythonTag("luces") or ():
+        actor.clearLight(luz)
+        luz.removeNode()
+    actor.cleanup()
+    actor.removeNode()
 
 
 def consagrar(actores, elegido):

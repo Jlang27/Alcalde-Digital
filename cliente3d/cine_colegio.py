@@ -13,7 +13,7 @@ protagonista a colarse entre los vigilantes.
 
 import math
 
-from ursina import Vec3, camera, color, destroy
+from ursina import Text, Vec3, camera, color, destroy
 
 import audio
 import estilo as E
@@ -226,7 +226,8 @@ class CineColegio:
             self._pie_de_lugar()
         if cruza(1.2):
             for p in Intro._subtitulo(self, "", "[lluvia · sirenas a lo lejos]", None):
-                p.color = E.TEXTO_TENUE
+                if isinstance(p, Text):       # la plancha de detras, oscura
+                    p.color = E.TEXTO_TENUE
                 p.fade_out(duration=0.5, delay=2.6)
         if cruza(T_RAYO):
             self._relampago(0.25)
@@ -364,8 +365,15 @@ class SalidaColegio(EscenaDecision):
             self._pie_de_lugar()
         if cruza(T_VIBRA):
             audio.efecto("vibracion")
+            # Con Enter el salto cae justo antes de la decision: si el reloj
+            # ya va muy pasado de la vibracion, el rotulo ambiental sobra.
+            if self.t > T_VIBRA + 1.0:
+                return
             for p in Intro._subtitulo(self, "", "[vibra el teléfono]", None):
-                p.color = E.TEXTO_TENUE
+                # Solo el texto en gris: tenir tambien la plancha oscura de
+                # detras la volvia una franja gris opaca sobre la barra.
+                if isinstance(p, Text):
+                    p.color = E.TEXTO_TENUE
                 p.fade_out(duration=0.4, delay=1.6)
         if cruza(T_VIBRA + 0.7):
             self._anima("celular")

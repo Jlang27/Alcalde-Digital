@@ -5,8 +5,10 @@ mientras el personaje recorre una distancia real, y de ahi saca la
 zancada en metros. Una zancada humana normal anda por 0,70-0,80 m al
 andar y 1,20-1,60 m al correr. Muy por encima = los pies resbalan.
 
-    venv-win\\Scripts\\python.exe herramientas/banco_pruebas/medir_patinaje.py
+    venv-win\\Scripts\\python.exe herramientas/banco_pruebas/depuracion/medir_patinaje.py
 """
+import os as _os, sys as _sys  # banco.py esta un nivel arriba
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 from banco import *
 from banco import J
 from ursina import held_keys

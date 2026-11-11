@@ -398,7 +398,8 @@ class Intro:
         if antes < T_CACEROLAS <= t:
             sub = self._subtitulo("", "[cacerolazos a lo lejos]", None)
             for p in sub:
-                p.color = E.TEXTO_TENUE
+                if isinstance(p, Text):       # la plancha de detras, oscura
+                    p.color = E.TEXTO_TENUE
                 p.fade_out(duration=0.5, delay=2.8)
         if T_RADIO <= t < INICIOS[2] + 1.0:
             self._radio()

@@ -1,9 +1,11 @@
 """Comprueba los dos arreglos del capitulo 2: zancada y calva.
 
-    venv-win\\Scripts\\python.exe herramientas/banco_pruebas/verificar_cap2.py
+    venv-win\\Scripts\\python.exe herramientas/banco_pruebas/depuracion/verificar_cap2.py
 """
 import math
 
+import os as _os, sys as _sys  # banco.py esta un nivel arriba
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 from banco import *
 from banco import J
 from ursina import held_keys
