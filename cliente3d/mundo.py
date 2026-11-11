@@ -2267,7 +2267,8 @@ X_DESPACHO, X_CONFERENCIAS = 3.8, 14.6
 X_RECEPCION, X_COCINETA = 7.5, 13.8
 
 MUROS_CAMPANA = (
-    ("z", CZ_FONDO, CX0, CX1, ()),
+    # el hueco: el segundo ascensor de la recepcion sube de verdad (cap. 3)
+    ("z", CZ_FONDO, CX0, CX1, ((-1.9, -0.7),)),
     ("x", CX0, CZ_FONDO, CZ_VENTANAL, ()),
     ("x", CX1, CZ_FONDO, CZ_VENTANAL, ()),
     # salas | voluntarios: despacho, sala de guerra y conferencias
@@ -2299,8 +2300,25 @@ OFICINA_EN_CIUDAD = (2.0, 22.0, -75.0)
 GIRO_CIUDAD = -12.0
 
 # La ronda del asesor, ida y vuelta (la recorre un sigilo.Vigilante): da
-# vueltas en su oficina, la sala de conferencias, donde cito a Daniel.
+# vueltas en su oficina, la sala de conferencias.
 RUTA_ASESOR = [(15.6, 1.6), (20.4, 1.6)]
+
+# --- El piso 12: la sala de juegos donde el asesor reta a Daniel ---
+# En la misma obra, cuatro pisos mas arriba y en la vertical de la
+# recepcion: el ascensor sube de verdad por su hueco y la ciudad de
+# debajo es la misma, vista desde mas alto. Sin colisiones: alli arriba
+# no se pasea, lo mueven la cinematica y la partida.
+PISO_JUEGOS = 12
+YJ = (PISO_JUEGOS - 8) * 3.6
+JX1 = 7.6                                  # la sala va de CX0 a JX1
+ALTO_JUEGOS = 3.2
+ASCENSOR_X = (-1.9, -0.7)                  # el hueco de las puertas
+ASCENSOR_Z = CZ_FONDO                      # el plano del muro
+CABINA = (-2.05, -0.55, -16.15, -14.62)    # x0, x1, z0, z1 por dentro
+MESA_BILLAR = (1.4, -5.6)                  # centro del paño (x, z)
+ALTO_PANO = 0.80
+# El paño de juego (billar.LARGO x billar.ANCHO), en x y en z.
+PANO_X, PANO_Z = 1.12, 0.56
 
 BLANCO = (0.96, 0.95, 0.92)
 CREMA = (0.95, 0.85, 0.55)
@@ -2457,11 +2475,22 @@ def _obra_campana():
     # ================= RECEPCION =================
     zr = CZ_FONDO + 0.1
     for a in (-3.6, -1.9):                  # dos ascensores, piso 8
-        o.pared("marco_metal", "z", zr, 1, a - 0.08, a + 1.28, 0, 2.3, 0, 0.05)
-        o.pared("ascensor", "z", zr, 1, a, a + 0.59, 0, 2.2, 0.05, 0.07)
-        o.pared("ascensor", "z", zr, 1, a + 0.61, a + 1.2, 0, 2.2, 0.05, 0.07)
+        if a == -3.6:
+            o.pared("marco_metal", "z", zr, 1, a - 0.08, a + 1.28, 0, 2.3, 0, 0.05)
+        else:
+            # El que funciona: marco de jambas y dintel. La placa entera de
+            # los otros tapaba el hueco y Daniel entraba atravesandola.
+            for b0, b1 in ((a - 0.08, a), (a + 1.2, a + 1.28)):
+                o.pared("marco_metal", "z", zr, 1, b0, b1, 0, 2.3, 0, 0.05)
+            o.pared("marco_metal", "z", zr, 1, a - 0.08, a + 1.28, 2.2, 2.3, 0, 0.05)
+        if a == -3.6:
+            # El otro funciona: sus puertas se mueven (mundo.abrir_ascensor).
+            o.pared("ascensor", "z", zr, 1, a, a + 0.59, 0, 2.2, 0.05, 0.07)
+            o.pared("ascensor", "z", zr, 1, a + 0.61, a + 1.2, 0, 2.2, 0.05, 0.07)
         o.pared("luz_ascensor", "z", zr, 1, a + 0.45, a + 0.75, 2.38, 2.55, 0, 0.03)
         o.letrero("8", "z", zr + 0.01, 1, a + 0.6, 2.465, 0.12, BLANCO)
+    # Al hueco no se entra andando: lo cierran sus puertas.
+    o.solido((ASCENSOR_X[0], ASCENSOR_X[1], CZ_FONDO - 0.12, CZ_FONDO + 0.12), ALTO_CAMPANA)
     o.caja("madera_clara", 3.0, 6.6, 0, 1.05, -13.3, -12.6, bloquea=True)
     o.caja("madera_oscura", 2.9, 6.7, 1.05, 1.1, -13.35, -12.55)
     o.pared("afiche_ospina", "z", zr, 1, 3.0, 6.8, 1.3, 2.6, 0, 0.03)
@@ -2486,7 +2515,117 @@ def _obra_campana():
     o.pared("metal_estante", "z", zr, 1, 17.4, 19.2, 0, 1.9, 0, 0.45, bloquea=True)
     for y in (0.3, 0.9, 1.5):
         o.pared("papel", "z", zr, 1, 17.5, 19.1, y, y + 0.3, 0.05, 0.42)
+    _sala_de_juegos(o)
     return o
+
+
+def _sala_de_juegos(o):
+    """El piso 12: billar bajo una lampara, barra, sofas frente al ventanal,
+    diana y una maquina de arcade. Ambar de la lampara y la barra contra el
+    azul de la ciudad, como en el resto del juego."""
+    def c(mat, x0, x1, y0, y1, z0, z1):
+        o.caja(mat, x0, x1, YJ + y0, YJ + y1, z0, z1)
+
+    x0, x1, z0, z1 = CX0, JX1, CZ_FONDO, CZ_VENTANAL
+    g = GROSOR_MURO / 2
+    c("parquet", x0, x1, -0.2, 0.0, z0, z1)
+    # muros: el del fondo con el hueco del ascensor y dintel
+    c("muro_juegos", x0 - g, x0 + g, 0, ALTO_JUEGOS, z0, z1)
+    c("muro_juegos", x1 - g, x1 + g, 0, ALTO_JUEGOS, z0, z1)
+    a0, a1 = ASCENSOR_X
+    c("muro_juegos", x0, a0, 0, ALTO_JUEGOS, z0 - g, z0 + g)
+    c("muro_juegos", a1, x1, 0, ALTO_JUEGOS, z0 - g, z0 + g)
+    c("muro_juegos", a0, a1, 2.25, ALTO_JUEGOS, z0 - g, z0 + g)
+    c("marco_metal", a0 - 0.08, a1 + 0.08, 2.2, 2.3, z0 + g, z0 + g + 0.04)
+    for b in (a0 - 0.08, a1):
+        c("marco_metal", b, b + 0.08, 0, 2.25, z0 + g, z0 + g + 0.04)
+    c("luz_ascensor", -1.45, -1.15, 2.38, 2.55, z0 + g, z0 + g + 0.03)
+    o.letrero(str(PISO_JUEGOS), "z", z0 + g, 1, -1.3, YJ + 2.465, 0.12, BLANCO)
+    # friso de madera a media altura
+    for xa, xb, za, zb in ((x0 + g, x1 - g, z0 + g, z0 + g + 0.03),
+                           (x0 + g, x0 + g + 0.03, z0 + g, z1 - 0.2),
+                           (x1 - g - 0.03, x1 - g, z0 + g, z1 - 0.2)):
+        if za == z0 + g and zb == z0 + g + 0.03:
+            for ta, tb in ((xa, a0 - 0.08), (a1 + 0.08, xb)):
+                c("madera_billar", ta, tb, 0, 1.0, za, zb)
+        else:
+            c("madera_billar", xa, xb, 0, 1.0, za, zb)
+    # el ventanal, igual que el de abajo: montantes sin vidrio
+    c("marco_metal", x0, x1, 0, 0.35, z1 - 0.12, z1 + 0.06)
+    c("marco_metal", x0, x1, ALTO_JUEGOS - 0.25, ALTO_JUEGOS, z1 - 0.12, z1 + 0.06)
+    x = x0
+    while x <= x1 + 0.01:
+        c("marco_metal", x - 0.04, x + 0.04, 0.35, ALTO_JUEGOS - 0.25, z1 - 0.06, z1 + 0.02)
+        x += 1.5
+
+    # --- la mesa de billar ---
+    tx, tz = MESA_BILLAR
+    px, pz, y = PANO_X, PANO_Z, ALTO_PANO
+    c("alfombra_azul", tx - 2.3, tx + 2.3, 0.0, 0.008, tz - 1.7, tz + 1.7)
+    c("pano_billar", tx - px, tx + px, y - 0.04, y, tz - pz, tz + pz)
+    boca_e, boca_l, alto_b = 0.085, 0.055, 0.037
+    for s in (-1, 1):
+        # bandas largas, cortadas por las troneras
+        for a, b in ((tx - px + boca_e, tx - boca_l), (tx + boca_l, tx + px - boca_e)):
+            za, zb = sorted((tz + s * pz, tz + s * (pz + 0.05)))
+            c("banda_billar", a, b, y, y + alto_b, za, zb)
+        xa, xb = sorted((tx + s * px, tx + s * (px + 0.05)))
+        c("banda_billar", xa, xb, y, y + alto_b, tz - pz + boca_e, tz + pz - boca_e)
+        # madera de los rieles
+        za, zb = sorted((tz + s * (pz + 0.05), tz + s * (pz + 0.17)))
+        c("madera_billar", tx - px - 0.17, tx + px + 0.17, y - 0.08, y + 0.045, za, zb)
+        xa, xb = sorted((tx + s * (px + 0.05), tx + s * (px + 0.17)))
+        c("madera_billar", xa, xb, y - 0.08, y + 0.045, tz - pz - 0.05, tz + pz + 0.05)
+        # los diamantes: tres por tramo en las largas, tres en las cortas
+        zd = tz + s * (pz + 0.11)
+        for k in (-3, -2, -1, 1, 2, 3):
+            xd = tx + k * px / 4
+            c("nacar", xd - 0.012, xd + 0.012, y + 0.045, y + 0.048, zd - 0.012, zd + 0.012)
+        xd = tx + s * (px + 0.11)
+        for k in (-1, 0, 1):
+            zk = tz + k * pz / 2
+            c("nacar", xd - 0.012, xd + 0.012, y + 0.045, y + 0.048, zk - 0.012, zk + 0.012)
+    c("madera_billar", tx - px - 0.1, tx + px + 0.1, 0.55, y - 0.04, tz - pz - 0.1, tz + pz + 0.1)
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            lx, lz = tx + sx * (px - 0.05), tz + sz * (pz - 0.05)
+            c("madera_billar", lx - 0.08, lx + 0.08, 0, 0.55, lz - 0.08, lz + 0.08)
+
+    # --- el taquero en el muro oeste y la diana ---
+    c("madera_billar", x0 + g, x0 + g + 0.08, 0.2, 0.3, -9.4, -7.6)
+    c("madera_billar", x0 + g, x0 + g + 0.08, 1.35, 1.45, -9.4, -7.6)
+    for k in range(5):
+        zk = -9.2 + k * 0.36
+        c("madera_taco", x0 + g + 0.03, x0 + g + 0.06, 0.25, 1.65, zk - 0.012, zk + 0.012)
+    c("cuero", x0 + g, x0 + g + 0.04, 1.35, 2.05, -4.35, -3.65)
+
+    # --- la barra, en el muro este ---
+    c("madera_billar", 6.2, 6.8, 0, 1.02, -12.6, -7.4)
+    c("piedra", 6.15, 6.85, 1.02, 1.07, -12.65, -7.35)
+    c("luz_barra", 7.38, x1 - g, 1.1, 2.4, -12.4, -7.6)
+    for nivel in (1.3, 1.85):
+        c("metal_estante", 7.1, x1 - g, nivel - 0.02, nivel, -12.4, -7.6)
+        for k in range(10):
+            zb = -12.2 + k * 0.45
+            mat = ("botella_ambar", "botella_verde", "botella_clara")[k % 3]
+            c(mat, 7.2, 7.32, nivel, nivel + 0.3 + 0.04 * (k % 2), zb - 0.04, zb + 0.04)
+    for zt in (-11.8, -10.4, -9.0):
+        c("metal", 5.75, 5.85, 0, 0.72, zt - 0.05, zt + 0.05)
+        c("cuero", 5.6, 6.0, 0.72, 0.8, zt - 0.2, zt + 0.2)
+
+    # --- los sofas frente al ventanal ---
+    for sx in (-2.6, 1.2):
+        c("cuero", sx, sx + 2.6, 0, 0.42, 1.6, 2.5)
+        c("cuero", sx, sx + 2.6, 0.42, 0.95, 1.45, 1.65)
+        c("cuero", sx - 0.15, sx, 0, 0.62, 1.45, 2.5)
+        c("cuero", sx + 2.6, sx + 2.75, 0, 0.62, 1.45, 2.5)
+    c("madera_billar", -1.0, 2.6, 0, 0.42, 3.0, 3.6)
+    c("piedra", -1.05, 2.65, 0.42, 0.45, 2.95, 3.65)
+
+    # --- la maquina de arcade junto a la barra ---
+    c("arcade", 5.9, 6.6, 0, 1.75, -4.2, -3.5)
+    c("pantalla_azul", 5.88, 5.9, 1.05, 1.55, -4.1, -3.6)
+    c("barra_roja", 5.86, 5.9, 1.62, 1.72, -4.15, -3.55)
 
 
 OBRA_CAMPANA = _obra_campana()
@@ -2523,6 +2662,20 @@ MATERIALES_CAMPANA = {
     "nevera": ((0.55, 0.56, 0.58), 0.3, 0.6, None),
     "impresora": ((0.20, 0.21, 0.23), 0.5, 0.2, None),
     "panel_calido": ((0.6, 0.6, 0.6), 0.5, 0, (1.5, 1.35, 1.1)),
+    # la sala de juegos del piso 12: paño azul tinta Ospina bajo la luz ambar
+    "parquet": ((0.15, 0.075, 0.035), 0.5, 0, None),
+    "muro_juegos": ((0.10, 0.085, 0.08), 0.85, 0, None),
+    "madera_billar": ((0.11, 0.045, 0.02), 0.4, 0, None),
+    "madera_taco": ((0.55, 0.38, 0.20), 0.45, 0, None),
+    "pano_billar": ((0.015, 0.075, 0.24), 0.95, 0, None),
+    "banda_billar": ((0.01, 0.05, 0.17), 0.9, 0, None),
+    "nacar": ((0.85, 0.82, 0.74), 0.25, 0, (0.15, 0.14, 0.12)),
+    "cuero": ((0.09, 0.035, 0.025), 0.5, 0, None),
+    "luz_barra": ((0.2, 0.1, 0.02), 0.5, 0, (1.6, 0.85, 0.25)),
+    "botella_ambar": ((0.3, 0.12, 0.02), 0.15, 0, (0.5, 0.2, 0.03)),
+    "botella_verde": ((0.03, 0.2, 0.06), 0.15, 0, (0.04, 0.3, 0.08)),
+    "botella_clara": ((0.5, 0.5, 0.5), 0.1, 0, (0.35, 0.35, 0.33)),
+    "arcade": ((0.03, 0.03, 0.05), 0.4, 0, None),
 }
 
 
@@ -2539,8 +2692,17 @@ def _campana(mundo):
     for x in range(-3, 22, 3):
         for z in (-8.0, 0.5):
             poner("panel_calido", x, x + 1.2, y - 0.03, y - 0.005, z - 0.3, z + 0.3)
+    # El techo del piso 12, mas bajo de luz: la sala la alumbran la lampara
+    # del billar y la barra, no los paneles.
+    yj = YJ + ALTO_JUEGOS
+    caras["techo"].append((((CX0, yj, CZ_VENTANAL), (JX1, yj, CZ_VENTANAL),
+                            (JX1, yj, CZ_FONDO), (CX0, yj, CZ_FONDO)), (0, -1, 0)))
+    for z in (-12.0, 1.5):
+        poner("panel_calido", -2.0, 1.0, yj - 0.03, yj - 0.005, z - 0.25, z + 0.25)
     _volcar_obra(mundo, OBRA_CAMPANA, MATERIALES_CAMPANA, caras)
     _ciudad_abajo(mundo)
+    _ascensor(mundo)
+    _billar(mundo)
 
 
 def _ciudad_abajo(mundo):
@@ -2658,13 +2820,137 @@ def _luces_campana(mundo):
     for nombre, pos, col, att in (
             ("lampara_daniel", (1.0, 1.25, 2.25), (1.8, 1.2, 0.6), (1, 0.18, 0.30)),
             ("pantallas", (8.3, 1.7, -3.3), (0.45, 0.65, 1.4), (1, 0.12, 0.12)),
-            ("lampara_conferencias", (18.7, 2.6, -0.3), (1.6, 1.1, 0.6),
-             (1, 0.10, 0.10))):
+            # La sala de conferencias ya no se usa: su luz es la del billar,
+            # arriba, y no se puede añadir otra (6 por escenario).
+            ("lampara_billar", (MESA_BILLAR[0], YJ + 1.55, MESA_BILLAR[1]),
+             (2.4, 1.65, 0.85), (1, 0.18, 0.28))):
         luz = mundo.attachNewNode(PointLight(nombre))
         luz.node().setColor((*col, 1))
         luz.node().setAttenuation(att)
         luz.setPos(*pos)
         _encender(mundo, luz)
+
+
+def _pintar_piso(n):
+    """El indicador de la cabina: el numero en ambar y la flecha de subir."""
+    def pintar(img):
+        d, (w, h) = ImageDraw.Draw(img), img.size
+        d.rectangle((0, 0, w, h), fill=(6, 5, 4, 255))
+        d.text((w * 0.62, h / 2), str(n), font=_letra(int(h * 0.62)),
+               fill=(255, 170, 40, 255), anchor="mm")
+        d.polygon(((w * 0.16, h * 0.62), (w * 0.26, h * 0.36), (w * 0.36, h * 0.62)),
+                  fill=(255, 170, 40, 255))
+    return pintar
+
+
+def _pintar_neon_juegos(img):
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(10, 6, 4, 255))
+    for dx, dy, col in ((4, 3, (40, 120, 255, 255)), (0, 0, (255, 176, 60, 255))):
+        d.text((w / 2 + dx, h * 0.42 + dy), "SALA DE JUEGOS", font=_letra(int(h * 0.34)),
+               fill=col, anchor="mm")
+    d.text((w / 2, h * 0.82), f"PISO {PISO_JUEGOS}  ·  SOLO EQUIPO OSPINA",
+           font=_letra(int(h * 0.13), False), fill=(240, 236, 228, 255), anchor="mm")
+
+
+def _ascensor(mundo):
+    """La cabina y las puertas de los pisos 8 y 12. La cabina sube de verdad
+    por su hueco (subir_cabina) y las puertas se abren de lado
+    (abrir_ascensor), metiendose en el grosor del muro."""
+    acero = _material((0.42, 0.42, 0.44, 1), rugosidad=0.22, metalico=1.0)
+    espejo = _material((0.55, 0.56, 0.58, 1), rugosidad=0.08, metalico=1.0)
+    suelo = _material((0.05, 0.05, 0.055, 1), rugosidad=0.6)
+    luz = _material((0.6, 0.6, 0.6, 1), emision=(2.4, 1.9, 1.3, 1))
+    # Madera abajo y acero arriba: en gris liso la cabina se leia como una
+    # caja vacia (y sin luz propia, el PBR la dejaba plana).
+    madera = _material((0.30, 0.15, 0.07, 1), rugosidad=0.45)
+    x0, x1, z0, z1 = CABINA
+    cabina = mundo.attachNewNode("cabina")
+    xm, zm = (x0 + x1) / 2, (z0 + z1) / 2
+    ancho, fondo = x1 - x0, z1 - z0
+    _pieza(cabina, "cube", suelo, (ancho, 0.06, fondo), (xm, -0.03, zm))
+    _pieza(cabina, "cube", espejo, (ancho, 2.45, 0.04), (xm, 1.22, z0 - 0.02))
+    for x in (x0 - 0.02, x1 + 0.02):
+        _pieza(cabina, "cube", madera, (0.04, 1.6, fondo), (x, 0.8, zm))
+        _pieza(cabina, "cube", acero, (0.04, 0.85, fondo), (x, 2.02, zm))
+        _pieza(cabina, "cube", acero, (0.05, 0.03, fondo), (x, 1.6, zm))
+    _pieza(cabina, "cube", madera, (ancho, 0.9, 0.03), (xm, 0.45, z0 + 0.005))
+    _pieza(cabina, "cube", acero, (ancho, 0.05, fondo), (xm, 2.45, zm))
+    _pieza(cabina, "cube", luz, (ancho - 0.3, 0.02, fondo - 0.3), (xm, 2.42, zm))
+    _pieza(cabina, "cube", acero, (ancho - 0.1, 0.04, 0.04), (xm, 0.95, z0 + 0.05))
+    # la botonera, en la pared de la derecha junto a la puerta
+    _pieza(cabina, "cube", acero, (0.02, 0.5, 0.2), (x1 - 0.01, 1.35, z1 - 0.25))
+    pantalla = Entity(parent=scene, model="quad", scale=(0.16, 0.08))
+    pantalla.reparentTo(cabina)
+    pantalla.setPos(x1 - 0.025, 1.68, z1 - 0.25)
+    pantalla.rotation_y = 90            # mira hacia dentro, a -x (como _pantalla_plana)
+    pantalla.setTexture(_textura("piso_8", _pintar_piso(8), 128, 64, srgb=False), 1)
+    _ENTIDADES.append(pantalla)
+    puertas = {}
+    for piso, y in ((8, 0.0), (PISO_JUEGOS, YJ)):
+        a0, a1 = ASCENSOR_X
+        mitad = (a1 - a0) / 2
+        hojas = []
+        for k in (0, 1):
+            xc = a0 + mitad * (k + 0.5)
+            hoja = _pieza(mundo, "cube", acero, (mitad + 0.01, 2.2, 0.03),
+                          (xc, y + 1.1, ASCENSOR_Z + 0.01))
+            hojas.append((hoja, xc, -1 if k == 0 else 1))
+        puertas[piso] = hojas
+    _ACTUAL["ascensor"] = {"cabina": cabina, "puertas": puertas, "pantalla": pantalla,
+                           "piso": 8}
+
+
+def abrir_ascensor(piso, f):
+    """f = 0 cerrado, 1 abierto: cada hoja se mete media puerta en el muro."""
+    a0, a1 = ASCENSOR_X
+    mitad = (a1 - a0) / 2
+    f = max(0.0, min(1.0, f))
+    for hoja, xc, lado in _ACTUAL["ascensor"]["puertas"][piso]:
+        hoja.x = xc + lado * mitad * 0.98 * f
+
+
+def subir_cabina(y):
+    """Pone la cabina a la altura y; el indicador cuenta los pisos."""
+    asc = _ACTUAL["ascensor"]
+    asc["cabina"].setY(y)
+    piso = 8 + int(round(y / 3.6))
+    if piso != asc["piso"]:
+        asc["piso"] = piso
+        asc["pantalla"].setTexture(
+            _textura(f"piso_{piso}", _pintar_piso(piso), 128, 64, srgb=False), 1)
+        return True
+    return False
+
+
+def _billar(mundo):
+    """Lo de la mesa que no se funde: las troneras (redondas), la lampara
+    (se esconde para jugar: tapa la vista cenital) y el neon de la barra."""
+    tx, tz = MESA_BILLAR
+    y = YJ + ALTO_PANO
+    negro = _material((0.008, 0.008, 0.008, 1), rugosidad=0.95)
+    borde = _material((0.06, 0.03, 0.015, 1), rugosidad=0.5)
+    import billar as B
+    for px, pz, rad in B.TRONERAS:
+        _pieza(mundo, "sphere", borde, (rad * 2.3, 0.02, rad * 2.3), (tx + px, y + 0.044, tz + pz))
+        _pieza(mundo, "sphere", negro, (rad * 1.9, 0.024, rad * 1.9), (tx + px, y + 0.046, tz + pz))
+    lampara = mundo.attachNewNode("lampara_billar")
+    pantalla = _material((0.03, 0.06, 0.04, 1), rugosidad=0.4, metalico=0.6)
+    brillo = _material((0.5, 0.4, 0.2, 1), emision=(3.2, 2.1, 0.9, 1))
+    _pieza(lampara, "cube", pantalla, (1.9, 0.16, 0.42), (tx, YJ + 1.78, tz))
+    _pieza(lampara, "cube", brillo, (1.8, 0.02, 0.34), (tx, YJ + 1.695, tz))
+    for dx in (-0.7, 0.7):
+        _pieza(lampara, "cube", pantalla, (0.015, ALTO_JUEGOS - 1.86, 0.015),
+               (tx + dx, YJ + (ALTO_JUEGOS + 1.86) / 2, tz))
+    _ACTUAL["lampara_billar"] = lampara
+    neon = _textura("neon_juegos", _pintar_neon_juegos, 1024, 256)
+    _pantalla_plana(neon, (JX1 - 0.13, YJ + 2.72, -10.0), 2.4, 0.6, (0.0, YJ + 2.72, -10.0))
+
+
+def lampara_billar(visible):
+    lampara = _ACTUAL.get("lampara_billar")
+    if lampara is not None:
+        lampara.show() if visible else lampara.hide()
 
 
 # Planos medidos desde la marca, dentro del despacho (x -4.2..3.7, z
@@ -3157,6 +3443,9 @@ def fondo_vivo(dt):
     elif _ACTUAL["nombre"] == "plaza_central":
         import plaza
         plaza.vivir(dt)
+    elif _ACTUAL["nombre"] == "azotea":
+        import azotea
+        azotea.vivir(dt)
     elif _ACTUAL["nombre"] == "estudio":
         t = _ACTUAL["reloj"] = _ACTUAL.get("reloj", 0.0) + dt
         for e in _ACTUAL.get("pantallas_chat", ()):
@@ -3297,6 +3586,11 @@ def _montar(mundo, escenario):
         import plaza
         PLANOS = plaza.PLANOS_PLAZA_CENTRAL
         plaza.construir(cont)
+    elif escenario == "azotea":
+        # Capitulo 4: la pelea en directo sobre la ciudad (azotea.py).
+        import azotea
+        PLANOS = azotea.PLANOS_AZOTEA
+        azotea.construir(cont)
     elif escenario == "estudio":
         PLANOS = PLANOS_ESTUDIO
         _estudio(cont)
@@ -3328,6 +3622,7 @@ LIMITES = {
     "rectoria": (XA_OESTE + 0.3, XA_ESTE - 0.3, Z_SUR + 0.3, Z_NORTE - 0.3),
     "campana": (CX0 + 0.3, CX1 - 0.3, CZ_FONDO + 0.3, CZ_VENTANAL - 0.3),
     "estudio": (SX0 + 0.3, SX1 - 0.3, SZ_FONDO + 0.3, SZ_DECORADO - 0.3),
+    "azotea": (-6.8, 6.8, -4.0, 3.3),
 }
 BLOQUEOS = {
     "cafeteria": (
@@ -3450,7 +3745,8 @@ def cambiar_escenario(mundo, escenario):
     for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo", "lluvia",
                   "sirenas", "fase_sirena", "luz_sirena", "reloj",
                   "luz_ambiente", "objetos", "usados", "arco", "en_mano",
-                  "expediente", "pantallas_chat", "monitor_privado"):
+                  "expediente", "pantallas_chat", "monitor_privado",
+                  "ascensor", "lampara_billar"):
         _ACTUAL.pop(clave, None)
     if _ACTUAL["nombre"] == "plaza_central":
         import plaza
@@ -3583,6 +3879,22 @@ def retirar_protagonista(actor):
         luz.removeNode()
     actor.cleanup()
     actor.removeNode()
+
+
+def luchador(mundo, rol):
+    """El rival de Nova Kombat (dia 4): un protagonista mas, con sus dos
+    luces solo para el (asi no pasa de 6 + 2 en ningun nodo), pero a
+    oscuras y con el contraluz rojo de la red fantasma. Oscuro con
+    prioridad: los materiales del glTF pisan un setColorScale sin ella."""
+    actor = protagonista(mundo, rol)
+    actor.setColorScale(0.09, 0.09, 0.12, 1, 100)
+    _clave, contra = actor.getPythonTag("luces")
+    contra.node().setColor((2.6, 0.45, 0.40, 1))
+    return actor
+
+
+def retirar_luchador(actor):
+    retirar_protagonista(actor)
 
 
 def consagrar(actores, elegido):

@@ -449,3 +449,202 @@ class ArbolDecision:
 
         asignar(self.raiz, 0)
         return max(contador[0], 1)
+
+
+# ===================================================================
+#  ARBOL DE COMBOS (TRIE) -- dia 4, «Nova Kombat»
+# ===================================================================
+
+class NodoCombo:
+    """Un paso de una secuencia de teclas. Si cierra un combo, lo nombra."""
+
+    def __init__(self, tecla):
+        self.tecla = tecla
+        self.hijos = {}              # tecla -> NodoCombo
+        self.combo = None            # nombre del movimiento si aqui acaba uno
+
+    def es_hoja(self):
+        return not self.hijos
+
+
+class ArbolCombos:
+    """Trie (arbol de prefijos) de los movimientos especiales.
+
+    PROBLEMA: en un juego de pelea, «abajo, adelante, puño» es un especial y
+    «puño» solo es un golpe. Hay que reconocer, tecla a tecla, si lo que se
+    va pulsando es el comienzo de un combo, uno completo o nada.
+
+    POR QUE UN TRIE: cada nivel es una tecla; los combos que empiezan igual
+    comparten camino. Comprobar si una secuencia es un combo cuesta O(k), con
+    k su largo, sin importar cuantos combos haya, y saber si es un PREFIJO
+    (seguir esperando teclas) sale gratis: es llegar a un nodo interno.
+
+    VARIANTE: n-ario, con los hijos en un diccionario (una tecla por arista).
+    INSERCION: insertar(secuencia, nombre). ELIMINACION: eliminar(secuencia),
+    que poda las ramas que se quedan sin combo. RECORRIDOS: combos() en
+    profundidad (preorden) y por_niveles() en anchura.
+    """
+
+    def __init__(self):
+        self.raiz = NodoCombo(None)
+
+    def insertar(self, secuencia, nombre):
+        nodo = self.raiz
+        for tecla in secuencia:
+            nodo = nodo.hijos.setdefault(tecla, NodoCombo(tecla))
+        nodo.combo = nombre
+
+    def _bajar(self, secuencia):
+        nodo = self.raiz
+        for tecla in secuencia:
+            nodo = nodo.hijos.get(tecla)
+            if nodo is None:
+                return None
+        return nodo
+
+    def buscar(self, secuencia):
+        """El combo que forma exactamente esa secuencia, o None."""
+        nodo = self._bajar(secuencia)
+        return nodo.combo if nodo is not None else None
+
+    def es_prefijo(self, secuencia):
+        """True si la secuencia puede seguir hasta algun combo."""
+        nodo = self._bajar(secuencia)
+        return nodo is not None and not nodo.es_hoja()
+
+    def reconocer(self, teclas):
+        """El combo mas largo que TERMINA en la ultima tecla pulsada.
+
+        Se prueban los sufijos del buffer, del mas largo al mas corto: asi
+        «adelante, abajo, adelante, puño» reconoce «abajo, adelante, puño»
+        aunque antes hubiera otra tecla suelta. Devuelve (nombre, largo) o
+        (None, 0).
+        """
+        teclas = list(teclas)
+        for i in range(len(teclas)):
+            nombre = self.buscar(teclas[i:])
+            if nombre is not None:
+                return nombre, len(teclas) - i
+        return None, 0
+
+    def eliminar(self, secuencia):
+        """Quita un combo y poda los nodos que se quedan sin uso."""
+        camino = [self.raiz]
+        for tecla in secuencia:
+            siguiente = camino[-1].hijos.get(tecla)
+            if siguiente is None:
+                return False
+            camino.append(siguiente)
+        if camino[-1].combo is None:
+            return False
+        camino[-1].combo = None
+        for padre, hijo in zip(reversed(camino[:-1]), reversed(camino[1:])):
+            if hijo.combo is None and not hijo.hijos:
+                del padre.hijos[hijo.tecla]
+            else:
+                break
+        return True
+
+    def combos(self, nodo=None, prefijo=()):
+        """DFS en preorden: [(secuencia, nombre)]."""
+        nodo = nodo or self.raiz
+        lista = []
+        if nodo.combo is not None:
+            lista.append((prefijo, nodo.combo))
+        for tecla in sorted(nodo.hijos):
+            lista += self.combos(nodo.hijos[tecla], prefijo + (tecla,))
+        return lista
+
+    def por_niveles(self):
+        """BFS: las teclas de cada nivel, para dibujar el arbol."""
+        niveles, cola = [], deque([(self.raiz, 0)])
+        while cola:
+            nodo, prof = cola.popleft()
+            if prof:
+                while len(niveles) < prof:
+                    niveles.append([])
+                niveles[prof - 1].append(nodo.tecla)
+            for tecla in sorted(nodo.hijos):
+                cola.append((nodo.hijos[tecla], prof + 1))
+        return niveles
+
+
+# =====================================================================
+#  ARBOL DE JUGADAS (dia 3, el billar del asesor)
+# =====================================================================
+
+class NodoJugada:
+    """Un tiro posible y lo que vale: su probabilidad de entrar y como deja
+    la mesa. dato es lo que el juego necesite para repetirlo (bola, tronera,
+    angulo, potencia)."""
+
+    def __init__(self, dato, valor=0.0):
+        self.dato = dato
+        self.valor = valor
+        self.hijos = []
+
+    def es_hoja(self):
+        return not self.hijos
+
+
+class ArbolJugadas:
+    """Arbol de busqueda de la IA del billar.
+
+    PROBLEMA: el asesor tiene que elegir un tiro. El que mas facil entra no
+    siempre es el mejor: si la blanca queda tapada, el siguiente es imposible.
+    Hay que mirar un tiro y lo que deja detras.
+
+    POR QUE UN ARBOL: la raiz es la mesa de ahora; cada hijo, un tiro
+    candidato (bola y tronera); cada nieto, el mejor tiro desde donde
+    quedaria la blanca. El valor de un tiro es el suyo mas lo que valen sus
+    continuaciones, descontado: se calcula de las hojas a la raiz.
+
+    VARIANTE: n-ario, con profundidad limitada (2) y hijos en lista.
+    INSERCION: insertar(padre, dato, valor). ELIMINACION: podar(nodo, k), que
+    deja solo los k hijos con mas valor (lo que no merece simularse).
+    RECORRIDOS: valor_total() en postorden (DFS), mejor() elige el hijo de la
+    raiz con mas valor y por_niveles() en anchura (BFS) para dibujarlo.
+    Complejidad: con b candidatos por nivel y profundidad d, O(b^d) nodos;
+    la poda deja b en k.
+    """
+
+    def __init__(self, dato=None):
+        self.raiz = NodoJugada(dato)
+
+    def insertar(self, padre, dato, valor):
+        hijo = NodoJugada(dato, valor)
+        (padre or self.raiz).hijos.append(hijo)
+        return hijo
+
+    def podar(self, nodo, k):
+        """Se queda con los k hijos de mas valor propio. Devuelve los quitados."""
+        nodo.hijos.sort(key=lambda h: h.valor, reverse=True)
+        quitados, nodo.hijos = nodo.hijos[k:], nodo.hijos[:k]
+        return quitados
+
+    def valor_total(self, nodo=None, descuento=0.5):
+        """DFS en postorden: lo que vale el tiro mas lo mejor que deja."""
+        nodo = nodo or self.raiz
+        if nodo.es_hoja():
+            return nodo.valor
+        return nodo.valor + descuento * max(self.valor_total(h, descuento)
+                                            for h in nodo.hijos)
+
+    def mejor(self, descuento=0.5):
+        """El hijo de la raiz con mas valor total, o None si no hay tiros."""
+        if self.raiz.es_hoja():
+            return None
+        return max(self.raiz.hijos, key=lambda h: self.valor_total(h, descuento))
+
+    def por_niveles(self):
+        """BFS: los datos de cada nivel, para dibujar el arbol."""
+        niveles, cola = [], deque([(self.raiz, 0)])
+        while cola:
+            nodo, prof = cola.popleft()
+            if prof:
+                while len(niveles) < prof:
+                    niveles.append([])
+                niveles[prof - 1].append(nodo.dato)
+            for h in nodo.hijos:
+                cola.append((h, prof + 1))
+        return niveles

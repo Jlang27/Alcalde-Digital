@@ -26,7 +26,8 @@ import ajustes as A
 import audio
 import cierre
 import cine_campana
-import cine_estudio
+import kombat_cliente
+import billar_cliente
 import plaza
 import cine_colegio
 import estilo as E
@@ -41,12 +42,10 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
                        MENSAJE_ANONIMO, DIA_CAMPANA, PUNTOS_CAPITULO_3,
                        TEXTO_MAPA_DISTRITOS,
-                       DIALOGO_ASESOR_PREOCUPADO, DIA_ESTUDIO, DIA_PLAZA, PUNTOS_CAPITULO_4,
-                       TEXTO_PATROCINADORES, MENSAJE_CIFRADO, ZONA_DUELO_PLAZA,
+                       DIALOGO_ASESOR_PREOCUPADO, DIA_PLAZA, ZONA_DUELO_PLAZA,
                        LETRAS_RITMO, TEXTO_DUELO, FINAL_DUELO, TEXTO_SOSPECHOSO,
                        FINAL_PERSECUCION, OBJETIVOS_PERSECUCION)
 import ritmo
-from transmision import BORRAR, RESPONDER
 from persecucion import ANCHO_PASILLO, distancia_a_ruta
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
@@ -112,9 +111,11 @@ class Cliente:
         self.escena = None            # la salida del colegio, con su decision
         self.asesor = None            # el asesor de Daniel (dia 3)
         self.ronda_asesor = None      # su ida y vuelta (sigilo.Vigilante)
-        self.directo = None           # la interfaz del directo de Santiago (dia 4)
         self.ritmo = None             # la del duelo musical (dia 5, pacifica)
         self.rival = None             # el musico que canta el rumor
+        self.kombat = None            # kombat_cliente.Combate del dia 4
+        self.billar = None            # billar_cliente.Billar del dia 3
+        self.nodo = None              # su rival: el Actor de Nodo
         self.duelo_t = 0.0            # reloj del duelo (negativo: cartel de ronda)
         self.duelo_ronda = 0
         self.duelo_musica = False
@@ -419,7 +420,7 @@ def abrir_carga():
 
 
 def abrir_intro():
-    """La cinematica «7 días», entre la carga y el primer dia.
+    """La cinematica «5 días», entre la carga y el primer dia.
 
     La ciudad se monta justo al llenarse la barra: el tiron de construir
     el decorado cae donde el jugador ya espera una carga, y no a mitad
@@ -1023,7 +1024,7 @@ def capitulo_de(indice):
     return titulo, pantallas.dias_que_faltan(indice), lugar
 
 
-ESCENARIO_DIA = {1: "rectoria", 2: "campana", 3: "estudio", 4: "plaza_central"}   # indice de dia -> escenario
+ESCENARIO_DIA = {1: "rectoria", 2: "campana", 3: "azotea", 4: "plaza_central"}   # indice de dia -> escenario
 
 
 def poner_personaje(rol):
@@ -1100,6 +1101,9 @@ SONIDO_LUGAR = {
     # calle apenas se cuela por el vidrio, que es lo que hay dentro de un
     # cuarto con espuma acustica.
     "estudio": (audio.MUSICA_CAFETERIA, 0.5, audio.AMBIENTE_ESTUDIO),
+    # La azotea de Nova Kombat: el viento y la ciudad de abajo; la musica
+    # la pone la pelea al empezar.
+    "azotea": (audio.MUSICA_TENSION, 0.25, audio.AMBIENTE_CIUDAD_ALTO),
 }
 
 
@@ -1151,6 +1155,10 @@ def terminar_cinematica():
     cl.cine.cerrar()
     cl.cine = None
     mostrar_vigilantes(True)
+    if cl.asesor is not None:
+        # se fue a esperarlo arriba, junto a la mesa de billar
+        x, z = cine_campana.ASESOR_EN_MESA
+        cl.asesor.setPos(x, mundo.YJ, z)
     abrir_rotulo(cl.partida.dia_actual)
     fundido.desvanecer(0.9, retraso=0.25)
 
@@ -1180,6 +1188,11 @@ def cerrar_rotulo():
         return
     cl.rotulo.cerrar()
     cl.rotulo = None
+    # El dia 4 no tiene telefono ni paseo: del rotulo, al reto y a pelear.
+    if cl.partida.kombat is not None:
+        abrir_aviso_papel("NOVA KOMBAT", "«Si pierdes, transmites mi audio»",
+                          TEXTO_KOMBAT, empezar_kombat)
+        return
     abrir_contexto()
 
 
@@ -1231,11 +1244,6 @@ def abrir_libre():
     if p is not None and p.dia_actual == DIA_CAMPANA and cl.dia_avisado != p.dia_actual:
         cl.dia_avisado = p.dia_actual
         abrir_aviso_papel("TU TARDE", "Las encuestas se hunden", TEXTO_CAMPANA,
-                          abrir_libre)
-        return
-    if p is not None and p.dia_actual == DIA_ESTUDIO and cl.dia_avisado != p.dia_actual:
-        cl.dia_avisado = p.dia_actual
-        abrir_aviso_papel("TU DIRECTO", "Cien mil personas te esperan", TEXTO_ESTUDIO,
                           abrir_libre)
         return
     if p is not None and p.dia_actual == DIA_PLAZA and cl.dia_avisado != p.dia_actual:
@@ -1404,8 +1412,8 @@ TEXTO_NOCHE = (
     "hay teléfono que valga: si te ven tres veces, te sacan del colegio.")
 TEXTO_CAMPANA = (
     "Mira las pantallas de encuestas y el mapa de distritos de la sala de "
-    "guerra. Cuando estés listo, ve a la oficina de tu asesor, la sala de "
-    "conferencias: te espera en la mesa con algo.")
+    "guerra. Cuando estés listo, sube a la sala de juegos del piso 12: el "
+    "ascensor está en la recepción. Tu asesor te espera arriba con algo.")
 TEXTO_PLAZA_PACIFICA = (
     "La Plaza Central se llenó para el cierre de campaña: músicos, puestos "
     "de comida y la tarima encendida. Pasea, mira las pantallas y acércate "
@@ -1413,11 +1421,6 @@ TEXTO_PLAZA_PACIFICA = (
 TEXTO_PLAZA_CAOTICA = (
     "Los rumores de estos días llegaron a la calle: humo, barricadas y "
     "pantallas con noticias falsas.")
-TEXTO_ESTUDIO = (
-    "Tus seguidores ya están conectados. Ve a la consola y empieza el "
-    "directo: responde (1) las preguntas de buena fe y borra (2) los "
-    "bulos, el odio y las estafas. Ojo: responder un bulo lo hace más "
-    "visible, y lo que dejas pasar se queda en tu chat.")
 TEXTO_SIN_PROPUESTA = (
     "Todavía no puedes irte: tienes que encontrar el archivo «Propuesta de "
     "Ospina». Te falta la {partes}: hay una carpeta en cada archivo.")
@@ -1446,17 +1449,14 @@ def preparar_vigilantes():
 
 
 def preparar_asesor():
-    """El capitulo 3 tiene al asesor de Daniel yendo y viniendo.
-
-    Es ambiente, no regla: se mueve con la misma ronda de ida y vuelta que
-    los vigilantes (se para, mira a un lado y a otro, sigue), que en un
-    asesor nervioso se lee justo como tiene que leerse.
-    """
+    """El asesor de Daniel en el capitulo 3: entra en la llegada, lo cita
+    arriba y alli espera, junto a la mesa de billar (sin ronda: ya no da
+    vueltas por la oficina, se fue a la sala de juegos)."""
     quitar_asesor()
     if ESCENARIO_DIA.get(cl.partida.dia_actual) != "campana":
         return
     cl.asesor = mundo.asesor(cl.mundo)
-    cl.ronda_asesor = Vigilante("asesor", mundo.RUTA_ASESOR, velocidad=0.9)
+    cl.ronda_asesor = None
 
 
 def quitar_figurantes():
@@ -1532,71 +1532,135 @@ def abrir_salida():
     cl.escena = cine_colegio.SalidaColegio(cl.actor, opciones_del_dia(), MENSAJE_ANONIMO)
 
 
-def abrir_expediente():
-    """La mesa de conferencias del capitulo 3: el asesor trae el
-    expediente y Daniel decide. Mientras, el asesor deja su ronda."""
+def abrir_subida():
+    """E en el ascensor de la recepcion: sube a la sala de juegos y el
+    asesor pone las condiciones. Al acabar, la partida (terminar_escena)."""
     cerrar_libre()
     cl.estado = "escena"
-    cl.escena = cine_campana.ExpedienteCampana(
-        cl.actor, cl.asesor, opciones_del_dia(), cl.partida.dialogo_expediente(),
-        cl.partida.nombre_protagonista, cl.mundo)
+    cl.escena = cine_campana.SubidaJuegos(
+        cl.actor, cl.asesor, cl.partida.nombre_protagonista,
+        cl.partida.dialogo_expediente(), cl.mundo)
 
 
-def abrir_directo():
-    """La consola del capitulo 4: Santiago vuelve a su marca y la camara
-    se pone donde la del tripode. Lo que pasa en el chat lo decide la
-    Transmision de la Partida."""
-    cerrar_libre()
-    cl.estado = "directo"
+TEXTO_BILLAR = (
+    "Ocho bolas con nueve en la mesa: el que mete primero elige lisas o "
+    "rayadas, y gana quien meta después la 8 en la tronera que marca la "
+    "guía. Mueve el ratón para apuntar (la rueda o A y D afinan), haz clic "
+    "y arrastra hacia abajo para dar potencia y suelta para tirar; o "
+    "mantén ESPACIO. Las flechas dan efecto. Meter la blanca o tocar "
+    "primero una bola ajena es falta y le da bola en mano al otro. Tres "
+    "minutos de partida: si se acaban, gana quien tenga menos bolas suyas.")
+FIN_BILLAR = {
+    "mesa_limpia": ("MESA LIMPIA", "El expediente, a la trituradora",
+                    "Le ganaste sin una sola falta. Rompes el expediente delante "
+                    "de él y mañana das la rueda de prensa sin nada que esconder."),
+    "gano": ("GANASTE", "El rumor sobre Bravo no sale",
+             "El asesor guarda el expediente de mala gana. Mañana das la cara "
+             "en una rueda de prensa."),
+    "perdio": ("PERDISTE", "El rumor sale esta noche",
+               "El asesor cobra la apuesta: publica lo de Bravo sin verificar. "
+               "Las encuestas suben… y la calle se calienta."),
+}
+
+
+def empezar_billar():
+    cl.estado = "billar"
+    for e in cl.hud:
+        e.enabled = False
     fundido = pantallas.Fundido()
-    cl.actor.setPos(0, 0, 0)
-    cl.actor.setH(0)
-    animar("hablar")
-    mundo.plano_directo()
+    cl.billar = billar_cliente.Billar(cl.partida.billar, cl.actor, cl.asesor)
+    fundido.desvanecer(0.4, retraso=0.05)
+
+
+def terminar_billar():
+    res = cl.partida.billar.resultado or "perdio"
+    cerrar_billar()
+    rotulo, titulo, cuerpo = FIN_BILLAR[res]
+    abrir_aviso_papel(rotulo, titulo, cuerpo, cerrar_partida_billar)
+
+
+def cerrar_partida_billar():
+    """La foto del cierre: el plano de la sala de la subida (la mesa, los
+    dos y la ciudad por el ventanal); de cerca salia un muro a oscuras."""
+    cl.partida.terminar_minijuego()
+    x, z = cine_campana.DANIEL_EN_MESA
+    ax, az = cine_campana.ASESOR_EN_MESA
+    cl.actor.setPos(x, mundo.YJ, z)
+    cl.actor.setH(180.0 - math.degrees(math.atan2(ax - x, az - z)))
+    if cl.asesor is not None:
+        cl.asesor.setPos(ax, mundo.YJ, az)
+        cl.asesor.setH(180.0 - math.degrees(math.atan2(x - ax, z - az)))
+    tx, tz = mundo.MESA_BILLAR
+    camera.fov = 56
+    camera.position = (-3.0, mundo.YJ + 2.05, -12.4)
+    mundo.mirar((tx, mundo.YJ + 0.95, tz))
+    cl.estado = "juego"
+    cerrar_dia(plano=None)
+
+
+def cerrar_billar():
+    if cl.billar is not None:
+        cl.billar.cerrar()
+        cl.billar = None
+
+
+# ===================================================================
+#  CAPITULO 4: NOVA KOMBAT, EN LA AZOTEA Y EN DIRECTO
+# ===================================================================
+
+TEXTO_KOMBAT = (
+    "Nodo, la cara de la red fantasma, te reta en tu propio directo: si "
+    "pierdes, emites su audio falso contra la Alcaldía. Un asalto, sesenta "
+    "segundos. A y D para moverte, J puño, K patada, L para bloquear (sin "
+    "bloqueo, su bulo te quita vida). S, D y J lanza un dato verificado, que "
+    "deshace su bulo en el aire; A, D y K es el desmentido. Con la barra de "
+    "verificación llena, I es la réplica. Si lo tumbas, acércate y "
+    "desenmascáralo.")
+# Lo que cuenta el aviso tras la pelea: (rotulo, titulo, cuerpo).
+FIN_KOMBAT = {
+    "desenmascarado": ("DESENMASCARADO", "La red fantasma ya tiene cara",
+                       "Le arrancaste la máscara en directo: el chat ve quién "
+                       "movía los bots. El audio no sale y tu comunidad confía "
+                       "más en lo que verificas."),
+    "gano": ("VICTORIA", "Nodo cae, pero se escapa",
+             "Lo tumbaste y el audio no salió, pero se levantó antes de que "
+             "le quitaras la máscara. Sigue suelto, y sigue sin cara."),
+    "perdio": ("DERROTA", "El audio sale en tu directo",
+               "Cien mil personas escuchan el audio falso contra la Alcaldía. "
+               "Mañana nadie sabrá en quién confiar."),
+}
+
+
+def empezar_kombat():
+    """Santiago y Nodo a la azotea; la camara, de lado (2.5D)."""
+    cl.estado = "kombat"
+    fundido = pantallas.Fundido()
+    for e in cl.hud:
+        e.enabled = False
+    animar("idle")
+    # Nodo: el traje del alcalde a oscuras, con la mascara de la red. Es
+    # provisional hasta que lleguen los modelos de luchador.
+    cl.nodo = mundo.luchador(cl.mundo, "alcalde")
+    cl.kombat = kombat_cliente.Combate(
+        cl.partida.kombat, cl.actor, cl.nodo,
+        aviso_sofia="sofia_en_el_chat" in cl.partida.heredado())
     fundido.desvanecer(0.45, retraso=0.1)
-    cl.directo = pantallas.Directo()
 
 
-def directo_paso(dt):
-    t = cl.partida.transmision
-    for evento, m in t.actualizar(dt):
-        if evento == "chat":
-            cl.directo.chat(m)
-        elif evento == "pedido":
-            cl.directo.chat(m)
-            audio.efecto("toque")
-        elif evento == "escapado":
-            cl.directo.explicar(m["por_que"], False)
-            audio.efecto("tiempo_agotado")
-        elif evento == "privado":
-            abrir_oferta()
-            return
-    cl.directo.poner(t.espectadores, t.confianza, t.atendiendo, t.plazo(), len(t.cola))
+def terminar_kombat():
+    res = cl.partida.kombat.resultado or "perdio"
+    cerrar_kombat()
+    rotulo, titulo, cuerpo = FIN_KOMBAT[res]
+    abrir_aviso_papel(rotulo, titulo, cuerpo, cerrar_minijuego)
 
 
-def atender_chat(accion):
-    """1 responde y 2 borra el mensaje que pide atencion."""
-    p = cl.partida.transmision.atender(accion)
-    if p is None:
-        return
-    cl.directo.explicar(p["por_que"], p["acierto"])
-    audio.efecto("hecho" if p["acierto"] else "volver")
-    if p["acierto"] and accion == RESPONDER:
-        mundo.reaccionar(cl.actor, "asentir")
-
-
-def cerrar_directo():
-    if cl.directo is not None:
-        cl.directo.cerrar()
-        cl.directo = None
-
-
-def abrir_oferta():
-    """Entra el privado cifrado: se acaba el directo y empieza la escena."""
-    cerrar_directo()
-    cl.estado = "escena"
-    cl.escena = cine_estudio.OfertaEstudio(
-        cl.actor, opciones_del_dia(), MENSAJE_CIFRADO, cl.partida.nombre_protagonista)
+def cerrar_kombat():
+    if cl.kombat is not None:
+        cl.kombat.cerrar()
+        cl.kombat = None
+    if cl.nodo is not None:
+        mundo.retirar_luchador(cl.nodo)
+        cl.nodo = None
 
 
 # ===================================================================
@@ -1975,7 +2039,9 @@ def cerrar_minijuego():
     """El resultado del minijuego cierra el capitulo: la Partida toma su
     rama del arbol (efectos y bandera) y se pasa al cierre del dia."""
     cl.partida.terminar_minijuego()
-    plaza.terminar_minijuego()
+    # La pelea de la azotea tambien acaba aqui, y alli no hay plaza que recoger.
+    if mundo.escenario() == "plaza_central":
+        plaza.terminar_minijuego()
     cl.actor.setPos(0, 0, 0)
     cl.actor.setH(0)
     cl.estado = "juego"
@@ -1995,6 +2061,13 @@ def elegir_en_escena(i):
 
 
 def terminar_escena():
+    if isinstance(cl.escena, cine_campana.SubidaJuegos):
+        # no acaba el dia: empieza la partida (antes, las reglas en papel)
+        cl.escena.cerrar()
+        cl.escena = None
+        abrir_aviso_papel("LA PARTIDA DEL ASESOR", "Si gana él, sale el rumor",
+                          TEXTO_BILLAR, empezar_billar)
+        return
     cl.escena.cerrar()
     cl.escena = None
     cl.estado = "juego"
@@ -2002,7 +2075,7 @@ def terminar_escena():
 
 
 # Lo que se mira con E en cada capitulo con puntos (oficina y estudio).
-PUNTOS_DEL_DIA = {DIA_CAMPANA: PUNTOS_CAPITULO_3, DIA_ESTUDIO: PUNTOS_CAPITULO_4}
+PUNTOS_DEL_DIA = {DIA_CAMPANA: PUNTOS_CAPITULO_3}
 # Y en la plaza, segun el estado: la pista del duelo, o el de la mochila.
 PUNTOS_PLAZA = {
     "pacifica": {"duelo": {"verbo": "aceptar el duelo musical",
@@ -2024,8 +2097,7 @@ def puntos_del_dia():
 
 
 def senalar_punto():
-    """«E mirar las encuestas», el mapa o ir a la mesa (capitulo 3); «E
-    empezar el directo» o los patrocinadores (capitulo 4)."""
+    """«E mirar las encuestas», el mapa o ir a la mesa (capitulo 3)."""
     x, z = cl.actor.getX(), cl.actor.getZ()
     puntos = puntos_del_dia() or {}
     cerca = next((i for i, punto in puntos.items()
@@ -2043,11 +2115,8 @@ def mirar_punto(punto):
     """E junto a algo de la oficina: las encuestas o el mapa en una
     tarjeta; la mesa, la escena del expediente."""
     audio.efecto("confirmar")
-    if punto == "mesa":
-        abrir_expediente()
-        return
-    if punto == "consola":
-        abrir_directo()
+    if punto == "ascensor":
+        abrir_subida()
         return
     if punto == "duelo":
         abrir_aviso_papel("EL RITMO DE LA VERDAD", "Un duelo contra el rumor", TEXTO_DUELO,
@@ -2055,10 +2124,6 @@ def mirar_punto(punto):
         return
     if punto == "sospechoso":
         empezar_persecucion()
-        return
-    if punto == "patrocinadores":
-        abrir_aviso_papel("PATROCINADORES", "Tres marcas pagan el estudio",
-                          TEXTO_PATROCINADORES, abrir_libre)
         return
     p = cl.partida
     if punto == "encuestas":
@@ -3087,7 +3152,8 @@ def update():
     # ventanales y el asesor no se congelan al sacar el telefono.
     mundo.fondo_vivo(time.dt)
     # En las escenas y en la llegada lo mueven ellas.
-    if cl.asesor is not None and cl.escena is None and cl.cine is None:
+    if (cl.asesor is not None and cl.ronda_asesor is not None and cl.escena is None
+            and cl.cine is None):
         v = cl.ronda_asesor
         v.avanzar(time.dt)
         mundo.mover_actor(cl.asesor, v.x, v.z, v.rumbo, v.andando)
@@ -3102,12 +3168,18 @@ def update():
             terminar_escena()
         return
 
-    if cl.estado == "directo" and cl.directo is not None:
-        directo_paso(time.dt)
-        return
-
     if cl.estado == "duelo" and cl.ritmo is not None:
         duelo_paso(time.dt)
+        return
+
+    if cl.estado == "kombat" and cl.kombat is not None:
+        if cl.kombat.actualizar(time.dt):
+            terminar_kombat()
+        return
+
+    if cl.estado == "billar" and cl.billar is not None:
+        if cl.billar.actualizar(time.dt):
+            terminar_billar()
         return
 
     if cl.estado == "intro" and cl.intro is not None:
@@ -3272,8 +3344,9 @@ def volver_al_menu():
     quitar_vigilantes()
     quitar_asesor()
     quitar_figurantes()
-    cerrar_directo()
     cerrar_minijuegos()
+    cerrar_kombat()
+    cerrar_billar()
     if cl.cine is not None:
         cl.cine.cerrar()
         cl.cine = None
@@ -3346,10 +3419,17 @@ def input(tecla):
             pulsar_duelo(carril)
         return
 
-    elif cl.estado == "directo":
-        # En directo no se pausa: 1 responde y 2 borra lo que pide atencion.
-        if tecla in ("1", "2"):
-            atender_chat(RESPONDER if tecla == "1" else BORRAR)
+    elif cl.estado == "billar":
+        # Sin pausa, como la pelea: Esc solo suelta la potencia cargada.
+        if cl.billar is not None:
+            cl.billar.tecla(tecla)
+        return
+
+    elif cl.estado == "kombat":
+        # Como el duelo, es un directo: Esc no pausa. Las teclas sostenidas
+        # (andar, bloquear) llegan tambien al soltarse («a up»).
+        if cl.kombat is not None:
+            cl.kombat.tecla(tecla)
         return
 
     elif cl.estado == "escena" and cl.escena is not None:

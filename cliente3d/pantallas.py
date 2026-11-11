@@ -14,9 +14,10 @@ import ajustes as A
 import estilo as E
 from juego import COLORES_JUGADOR
 
-# El guion arranca a siete dias de la eleccion y cada capitulo descuenta
-# uno: el dia 1 «faltan 7», el dia 7 (la vispera) «falta 1».
-DIAS_ELECCION = 7
+# Cinco dias hasta la eleccion y cada capitulo descuenta uno: el dia 1
+# «faltan 5», el 5 (la plaza) «falta 1». Eran siete; se quitaron los dos
+# provisionales para que la partida sea mas corta y toda jugable.
+DIAS_ELECCION = 5
 
 # (titulo, lugar) de cada dia. El PROTAGONISTA no va aqui: es el
 # personaje que juega ese dia (el que se eligio en el reparto, o el de
@@ -25,15 +26,13 @@ CAPITULOS = (
     ("El primer rumor", "Cafetería de barrio"),
     ("La propuesta", "Colegio Técnico Nova"),
     ("La primera jugada sucia", "Despacho de campaña"),
-    ("La oferta", "Estudio de streaming"),
+    ("Nova Kombat", "Azotea · en directo"),
     ("La plaza", "Plaza Central"),
-    ("El debate", "Auditorio municipal"),
-    ("La víspera", "Ciudad Nova, la noche antes"),
 )
 
 
 def dias_que_faltan(dia):
-    """«7 días», «1 día» o «0 días» para el dia (desde 0) que empieza."""
+    """«5 días», «1 día» o «0 días» para el dia (desde 0) que empieza."""
     n = max(0, DIAS_ELECCION - dia)
     return f"{n} día" if n == 1 else f"{n} días"
 
@@ -63,8 +62,8 @@ _OPCION_SALTO = 0.078
 PIES_DE_MENU = (
     "Entra a Ciudad Nova y elige con qué voz vas a hablar esta semana.",
     "Tres pasos y los controles. Lo justo para sentarse a jugar.",
-    "Siete jornadas, siete protagonistas. De momento está abierta la "
-    "primera.",
+    "Cinco jornadas, cinco protagonistas. Juega cualquiera por "
+    "separado.",
     "Volumen, contraste, tamaño de letra y ritmo de la jornada.",
     "Quién hay detrás de esto y con qué está hecho.",
     "Cerrar el periódico. Ciudad Nova vota igual.",
@@ -160,7 +159,7 @@ class Carga:
     escena del juego, sin nada encima.
     """
 
-    def __init__(self, capitulo, pista, dias="7 días", tinta=None,
+    def __init__(self, capitulo, pista, dias="5 días", tinta=None,
                  numero="01"):
         self.piezas = []
         a = self.piezas.append

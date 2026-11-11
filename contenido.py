@@ -493,15 +493,16 @@ VOTOS_POR_NODO = {
     # capitulo 2: la propuesta desmiente el rumor de los colegios... si sale
     "p_result": {"Daniel Ospina": 5, "Hugo Bravo": -2},
     "g_result": {"Daniel Ospina": -4, "Hugo Bravo": 2},
-    # capitulo 3: el expediente sobre Bravo
+    # capitulo 3: la partida de billar con el asesor (el expediente sobre Bravo)
     "r3_rumor": {"Daniel Ospina": 6, "Hugo Bravo": -6},
     "r3_prensa": {"Daniel Ospina": 1},
-    "r3_espiar": {},
-    "r3_defensa": {"Daniel Ospina": 4, "Hugo Bravo": -2},
+    "r3_mesa_limpia": {"Daniel Ospina": 3, "Hugo Bravo": -1},
     # capitulo 4: el montaje contra Bravo que le ofrecen a Santiago
-    "a4_dinero": {"Hugo Bravo": -5, "Daniel Ospina": 2, "Juan Medina": 2, "Elena Ruiz": 1},
-    "a4_rechazo": {},
-    "a4_rastreo": {"Hugo Bravo": 1},
+    # Un audio de fraude contra la Alcaldia le sirve al que vive del
+    # escandalo y le resta a los demas: «si todo esta comprado, para que».
+    "a4_perdio": {"Hugo Bravo": 4, "Daniel Ospina": -2, "Juan Medina": -1, "Elena Ruiz": -1},
+    "a4_desenmascarado": {"Hugo Bravo": -2, "Elena Ruiz": 1},
+    "a4_gano": {},
 }
 
 # Las hojas que frenan el rumor: protegen a los vecinos a los que aun no
@@ -526,9 +527,9 @@ TEXTO_BANDERA = {
     "ospina_dio_la_cara": "Que Ospina rechazó la guerra sucia y dio la cara en vivo.",
     "asesor_a_tus_espaldas": "Que el asesor de Ospina empezó a actuar a sus espaldas.",
     "ospina_se_defendio_con_datos": "Que Ospina se defendió con su propuesta publicada.",
-    "vendiste_tu_directo": "Que transmitiste por dinero un montaje contra Bravo.",
-    "rechazaste_el_soborno": "Que rechazaste el soborno aunque perdiste patrocinadores.",
-    "expusiste_la_red_fantasma": "Que expusiste en vivo a la red que pagaba montajes.",
+    "la_alcaldia_en_duda": "Que perdiste el reto y transmitiste el audio falso contra la Alcaldía.",
+    "le_ganaste_a_nodo": "Que le ganaste a Nodo en directo y el audio no salió.",
+    "expusiste_la_red_fantasma": "Que le quitaste la máscara a Nodo en directo.",
     "cuidaste_tu_chat": "Que cuidaste tu chat: respondiste dudas y borraste bulos.",
     "tu_chat_se_desbordo": "Que en tu directo los bulos corrieron sin control.",
     "cantaste_la_verdad": "Que la plaza entera coreó tu mensaje contra el bulo.",
@@ -617,8 +618,7 @@ RONDAS_POR_NIVEL = 2
 # Con un solo jugador, ese jugador los interpreta a todos, como en Detroit.
 #   indice de dia -> rol del personaje (None: el que menos dias lleve)
 PERSONAJE_DEL_DIA = {0: "ciudadano", 1: "periodista", 2: "candidato",
-                     3: "influencer", 4: "ciudadano", 5: "alcalde",
-                     6: None}
+                     3: "influencer", 4: "ciudadano"}
 # Daniel Ospina no esta en el reparto: lo interpreta el asiento politico,
 # el del Alcalde. Los demas personajes son de su propio rol.
 DUENO_PERSONAJE = {"candidato": "alcalde"}
@@ -837,29 +837,6 @@ PUBLICACIONES = [
                     "El video omite esa parte a propósito.",
         "compartidos": 2050,
     },
-    # Dias 6 y 7: la recta final. Siete dias hasta la eleccion es la
-    # espina del guion («faltan 7 dias» en la intro); con cinco
-    # publicaciones la partida se acababa dos dias antes de votar.
-    {
-        "id": "encuesta",
-        "escenario": "plaza",
-        "autor": "@DatosYaNova",
-        "texto": "Encuesta filtrada: Bravo gana con el 60 % de los votos.",
-        "veracidad": "falsa",
-        "contexto": "No tiene ficha técnica ni encuestadora registrada,\n"
-                    "y los porcentajes de los cuatro candidatos suman 130 %.",
-        "compartidos": 1530,
-    },
-    {
-        "id": "audio",
-        "escenario": "barrio",
-        "autor": "@FiltracionesNova",
-        "texto": "Audio: Juan Medina se burla de los profesores del barrio.",
-        "veracidad": "falsa",
-        "contexto": "La voz es sintética: Medina estaba a esa hora en un\n"
-                    "foro público transmitido en vivo.",
-        "compartidos": 2760,
-    },
 ]
 
 # Eventos aleatorios del dia (seccion 8 del enunciado)
@@ -887,30 +864,39 @@ MENSAJE_ANONIMO = "Si publicas eso, perderás tu trabajo."
 PUNTOS_CAPITULO_3 = {
     "encuestas": {"verbo": "mirar las encuestas", "zona": (4.4, 12.2, -4.4, -2.6)},
     "mapa": {"verbo": "mirar el mapa de distritos", "zona": (6.0, 11.4, -2.4, 1.4)},
-    "mesa": {"verbo": "ir a la mesa", "zona": (15.6, 21.8, -2.3, 1.7)},
+    # el ascensor de la recepcion sube a la sala de juegos (piso 12)
+    "ascensor": {"verbo": "subir a la sala de juegos", "zona": (-2.4, -0.2, -14.4, -12.4)},
 }
 TEXTO_MAPA_DISTRITOS = (
     "Desde el rumor del colegio, Bravo te gana los distritos del sur, los "
     "del Colegio Técnico Nova. Si no reaccionas, el mapa se tiñe de rojo "
     "antes del debate.")
 # (quien, lo que dice, segundos) al empezar el capitulo 3: el asesor entra
-# en el despacho de Daniel, preocupado, y lo cita en su oficina (la sala de
-# conferencias, donde luego le enseña el expediente).
+# en el despacho de Daniel, preocupado, y lo cita arriba, en la sala de
+# juegos del piso 12 (se sube en ascensor; alli le enseña el expediente).
 DIALOGO_ASESOR_PREOCUPADO = (
     ("asesor", "Daniel... ¿ya viste cómo vamos?", 2.6),
     ("daniel", "Algo vi en el teléfono.", 2.0),
     ("asesor", "Es peor. Lo del colegio nos está hundiendo, y rápido.", 3.2),
-    ("asesor", "Tenemos que hablar, pero aquí no. En mi oficina, en conferencias.", 3.6),
+    ("asesor", "Tenemos que hablar, pero aquí no. Sube a la sala de juegos, piso 12.", 3.6),
     ("daniel", "¿Qué tan grave es?", 1.8),
-    ("asesor", "Te espero allá. No tardes.", 2.4),
+    ("asesor", "Te espero arriba. No tardes.", 2.4),
 )
-# (quien, lo que dice, segundos) en la mesa de conferencias.
+# (quien, lo que dice, segundos) junto a la mesa de billar: el asesor pone
+# las condiciones. Las dos primeras las ajusta dialogo_expediente().
 DIALOGO_EXPEDIENTE = (
     ("asesor", "Daniel, las encuestas por la mentira del colegio cayeron 10 puntos.", 3.2),
-    ("asesor", "Tenemos que reaccionar. Podemos publicar esto sobre Bravo.", 3.0),
-    ("daniel", "¿Es verdad?", 2.0),
-    ("asesor", "No completamente... Nadie lo va a comprobar.", 3.0),
+    ("asesor", "Esto sobre Bravo nos devuelve la elección. Nadie lo va a comprobar.", 3.4),
+    ("daniel", "No voy a publicar una mentira.", 2.2),
+    ("asesor", "Entonces juguémonoslo. Una partida: si gano yo, sale esta noche.", 3.4),
+    ("asesor", "Si ganas tú, rueda de prensa y esto a la trituradora.", 3.0),
+    ("daniel", "Pon las bolas.", 1.8),
 )
+# El taco de Daniel y el pulso del asesor salen de lo que paso el dia 2
+# (HERENCIAS): con la propuesta ya publica, Daniel juega tranquilo; sin
+# ella, el asesor llega desesperado y juega a ganar. Ver billar.Partida8.
+TACO_DANIEL = {"propuesta_publica": {"guia": 1.5, "tiempo": 5.0, "en_mano": 1}}
+DIFICULTAD_ASESOR = {"sin_propuesta": 1.25}
 
 
 # --- Capitulo 4: el directo de Santiago (reglas en transmision.py) ---
@@ -974,49 +960,53 @@ MENSAJE_CIFRADO = (
 )
 
 
+# --- Capitulo 4: «Nova Kombat» (kombat.py) ---
+# Lo que la herencia le hace a Nodo (kombat.IANodo, dificultad).
+DIFICULTAD_NODO = {"nodo_agresivo": 1.08, "nodo_tranquilo": 0.85}
+# Nodo reta a Santiago en su directo: si pierde, transmite el audio falso
+# contra la Alcaldia («preparan fraude en el conteo»); si gana, Nodo dice
+# quien esta detras. La pelea decide la rama, como el minijuego del 5.
+#   (resultado, texto, detalle, corto, (hoja, texto, efectos, bandera, detalle, corto))
+HOJAS_CAPITULO_4 = (
+    ("desenmascarado", "Desenmascarar a Nodo", "Lo rematas antes de que se levante.",
+     "DESENMASCARADO",
+     ("a4_desenmascarado", "La red fantasma, expuesta",
+      {"desinformacion": -12, "confianza": 10, "info_verificada": 6},
+      "expusiste_la_red_fantasma",
+      "Le quitas la máscara en directo: la red que pagaba montajes tiene cara.",
+      "EXPUESTA")),
+    ("gano", "Ganar la pelea", "Nodo cae, pero se escapa sin revelar quién es.",
+     "GANASTE",
+     ("a4_gano", "El audio no sale",
+      {"desinformacion": -5, "confianza": 4},
+      "le_ganaste_a_nodo",
+      "No transmites el montaje, pero la red sigue anónima.",
+      "SIN AUDIO")),
+    ("perdio", "Perder la pelea", "Nodo gana la apuesta.", "PERDISTE",
+     ("a4_perdio", "Fraude en la Alcaldía, en vivo",
+      {"desinformacion": 14, "confianza": -12, "conflictos": 8},
+      "la_alcaldia_en_duda",
+      "Transmites el audio falso a cientos de miles: la ciudad deja de creer en "
+      "quien cuenta los votos.",
+      "DESCONFIANZA")),
+)
+
+
 def construir_arbol_capitulo_4():
-    """La oferta del privado cifrado:
+    """El capitulo 4 lo decide la pelea, no un menu (Partida.terminar_minijuego):
 
-        raiz (el montaje contra Bravo)
-        |- Aceptar el dinero           -> el montaje, en vivo (hoja)
-        |- Rechazar                    -> sin patrocinadores (hoja)
-        |- Aceptar y rastrear la red   -> un enemigo cibernetico (hoja)
-
-    Como los de los capitulos 2 y 3, sin ramas de habilidades ni de
-    banderas: es la decision de Santiago frente a una oferta, no una
-    publicacion de Civitas.
+        raiz (el reto de Nodo)
+        |- Desenmascarar a Nodo -> la red, expuesta (hoja)
+        |- Ganar la pelea       -> el audio no sale (hoja)
+        |- Perder la pelea      -> fraude en la Alcaldia, en vivo (hoja)
     """
-    raiz = NodoDecision("raiz", "«Tenemos información que puede destruir a Bravo.»",
-                        corto="LA OFERTA")
+    raiz = NodoDecision("raiz", "«Si pierdes, transmites mi audio.»", corto="EL RETO")
     arbol = ArbolDecision(raiz)
-    aceptar = raiz.agregar_hijo(NodoDecision(
-        "aceptar", "Aceptar el dinero", rasgo="impulso",
-        detalle="Transmites el montaje a tus cientos de miles de seguidores.",
-        corto="ACEPTAR"))
-    aceptar.agregar_hijo(NodoDecision(
-        "a4_dinero", "El montaje, en vivo",
-        efectos={"desinformacion": 15, "confianza": -8, "conflictos": 6},
-        rasgo="impulso", bandera="vendiste_tu_directo",
-        detalle="Ganas recursos, pero perjudicas la campaña.", corto="EN VIVO"))
-    rechazar = raiz.agregar_hijo(NodoDecision(
-        "rechazar", "Rechazar", rasgo="rigor", puntos=3,
-        detalle="Bloqueas el pago y la oferta.", corto="RECHAZAR"))
-    rechazar.agregar_hijo(NodoDecision(
-        "a4_rechazo", "Sin patrocinadores",
-        efectos={"confianza": 8, "desinformacion": -4},
-        rasgo="rigor", bandera="rechazaste_el_soborno",
-        detalle="Mantienes la integridad, pero pierdes patrocinadores.",
-        corto="ÍNTEGRO"))
-    rastrear = raiz.agregar_hijo(NodoDecision(
-        "rastrear", "Aceptar y descubrir quién está detrás",
-        detalle="Aceptas la transferencia y rastreas en vivo a la red fantasma.",
-        corto="RASTREAR"))
-    rastrear.agregar_hijo(NodoDecision(
-        "a4_rastreo", "La red fantasma, expuesta",
-        efectos={"desinformacion": -8, "info_verificada": 6, "conflictos": 4},
-        bandera="expusiste_la_red_fantasma",
-        detalle="Expones a la red en directo, pero te ganas un poderoso enemigo cibernético.",
-        corto="UN ENEMIGO"))
+    for id_op, texto, detalle, corto, hoja in HOJAS_CAPITULO_4:
+        op = raiz.agregar_hijo(NodoDecision(id_op, texto, detalle=detalle, corto=corto))
+        hid, htexto, efectos, bandera, hdet, hcorto = hoja
+        op.agregar_hijo(NodoDecision(hid, htexto, efectos=efectos, bandera=bandera,
+                                     detalle=hdet, corto=hcorto))
     return arbol
 
 
@@ -1130,64 +1120,49 @@ def construir_arbol_capitulo_5(estado="pacifica"):
     return arbol
 
 
+HOJAS_CAPITULO_3 = (
+    ("mesa_limpia", "Mesa limpia", "Le ganas sin una sola falta.", "MESA LIMPIA",
+     ("r3_mesa_limpia", "El expediente, a la trituradora",
+      {"confianza": 14, "info_verificada": 8, "desinformacion": -8},
+      "ospina_dio_la_cara",
+      "Le ganas limpio y rompes el expediente delante de él: das la rueda "
+      "de prensa sin nada que esconder.",
+      "TRITURADORA")),
+    ("gano", "Ganar la partida", "El rumor sobre Bravo no sale.", "GANASTE",
+     ("r3_prensa", "Frente a los micrófonos",
+      {"confianza": 10, "info_verificada": 6, "desinformacion": -4},
+      "ospina_dio_la_cara",
+      "Das la cara en vivo: la confianza sube, aunque pierdes la ventaja rápida.",
+      "DA LA CARA")),
+    ("perdio", "Perder la partida", "El asesor gana la apuesta.", "PERDISTE",
+     ("r3_rumor", "Indignación en la calle",
+      {"desinformacion": 14, "conflictos": 10, "convivencia": -8, "confianza": -6},
+      "ospina_jugo_sucio",
+      "El asesor publica el rumor sobre Bravo: ganas apoyo rápido, pero "
+      "desatas violencia e indignación.",
+      "INDIGNACIÓN")),
+)
+
+
 def construir_arbol_capitulo_3(herencias=()):
-    """El dilema de Daniel con el expediente sobre Bravo:
+    """El capitulo 3 lo decide la partida de billar, no un menu
+    (Partida.terminar_minijuego): el asesor pone las condiciones.
 
-        raiz (el expediente)
-        |- Publicar el rumor            -> violencia en las calles (hoja)
-        |- No publicarlo: rueda prensa  -> frente a los microfonos (hoja)
-        |- Investigar a Bravo           -> el asesor se adelanta (hoja)
-        |- [si se publico la propuesta el dia 2]
-           Defenderte con la propuesta  -> la propuesta habla por ti (hoja)
+        raiz (el reto del asesor)
+        |- Mesa limpia       -> el expediente, a la trituradora (hoja)
+        |- Ganar la partida  -> frente a los microfonos (hoja)
+        |- Perder la partida -> indignacion en la calle (hoja)
 
-    Sin ramas de habilidades ni de RAMAS_POR_BANDERA: lo que hereda del
-    capitulo 2 llega por HERENCIAS.
+    Lo que hereda del capitulo 2 no abre ramas: cambia la partida (el
+    taco de Daniel y el pulso del asesor, TACO_DANIEL y DIFICULTAD_ASESOR).
     """
-    raiz = NodoDecision("raiz", "«Podemos publicar esto sobre Bravo.»", corto="EL EXPEDIENTE")
+    raiz = NodoDecision("raiz", "«Si gano yo, sale esta noche.»", corto="EL RETO")
     arbol = ArbolDecision(raiz)
-    rumor = raiz.agregar_hijo(NodoDecision(
-        "rumor", "Publicar el rumor", rasgo="impulso",
-        detalle="Das luz verde a la campaña sucia en Civitas.", corto="PUBLICAR"))
-    rumor.agregar_hijo(NodoDecision(
-        "r3_rumor", "Indignación en la calle",
-        efectos={"desinformacion": 14, "conflictos": 10, "convivencia": -8, "confianza": -6},
-        rasgo="impulso", bandera="ospina_jugo_sucio",
-        detalle="Ganas apoyo electoral inmediato, pero desatas violencia e indignación.",
-        corto="INDIGNACIÓN"))
-    prensa = raiz.agregar_hijo(NodoDecision(
-        "prensa", "No publicarlo y dar rueda de prensa", rasgo="rigor", puntos=3,
-        detalle="Rechazas la guerra sucia y explicas tu propuesta en vivo.",
-        corto="RUEDA DE PRENSA"))
-    prensa.agregar_hijo(NodoDecision(
-        "r3_prensa", "Frente a los micrófonos",
-        efectos={"confianza": 12, "info_verificada": 8, "desinformacion": -6},
-        rasgo="rigor", bandera="ospina_dio_la_cara",
-        detalle="Tu liderazgo y la confianza suben con fuerza, aunque pierdes "
-                "la ventaja rápida.",
-        corto="DA LA CARA"))
-    espiar = raiz.agregar_hijo(NodoDecision(
-        "espiar", "Investigar a Bravo",
-        detalle="Mandas a espiar sin lanzar el ataque aún.", corto="INVESTIGAR"))
-    espiar.agregar_hijo(NodoDecision(
-        "r3_espiar", "El asesor se adelanta",
-        efectos={"conflictos": 3, "confianza": -2},
-        bandera="asesor_a_tus_espaldas",
-        detalle="Ganas tiempo, pero tu asesor empieza a actuar a tus espaldas.",
-        corto="A TUS ESPALDAS"))
-    # Lo que Valeria publico el dia 2 abre aqui una salida que sin ella no
-    # existe: la misma insercion que hacen las banderas en los dias genericos.
-    if "propuesta_publica" in herencias:
-        defender = NodoDecision(
-            "defender", "Defenderte con la propuesta publicada", rasgo="rigor", puntos=3,
-            detalle="Nova Noticias ya publicó tu propuesta: la muestras tal cual.",
-            corto="LA PROPUESTA")
-        arbol.insertar_opcion("raiz", defender)
-        defender.agregar_hijo(NodoDecision(
-            "r3_defensa", "La propuesta habla por ti",
-            efectos={"confianza": 10, "info_verificada": 10, "desinformacion": -8},
-            rasgo="rigor", bandera="ospina_se_defendio_con_datos",
-            detalle="Sin atacar a nadie, el rumor del colegio se queda sin piso.",
-            corto="CON DATOS"))
+    for id_op, texto, detalle, corto, hoja in HOJAS_CAPITULO_3:
+        op = raiz.agregar_hijo(NodoDecision(id_op, texto, detalle=detalle, corto=corto))
+        hid, htexto, efectos, bandera, hdet, hcorto = hoja
+        op.agregar_hijo(NodoDecision(hid, htexto, efectos=efectos, bandera=bandera,
+                                     detalle=hdet, corto=hcorto))
     return arbol
 
 
@@ -1479,19 +1454,22 @@ HERENCIAS = (
             "rastreaste_el_origen"),
      "texto": "El portero del colegio vio el desmentido: te perdona un aviso más."},
     {"id": "propuesta_publica", "dia": DIA_CAMPANA, "si": ("publicaste_la_propuesta",),
-     "texto": "La propuesta de Ospina ya es pública: Daniel tiene con qué defenderse."},
+     "texto": "La propuesta de Ospina ya es pública: Daniel juega tranquilo "
+              "(guía más larga, más tiempo y una bola en mano)."},
     {"id": "sin_propuesta", "dia": DIA_CAMPANA,
      "si": ("guardaste_la_propuesta", "te_sacaron_del_colegio"),
-     "texto": "Nadie vio la propuesta de Ospina: el asesor llega desesperado."},
-    {"id": "chat_contra_bravo", "dia": DIA_ESTUDIO, "si": ("ospina_jugo_sucio",),
-     "texto": "El rumor de Ospina contra Bravo llega a tu chat: más bulos que borrar."},
-    {"id": "chat_sereno", "dia": DIA_ESTUDIO, "si": ("ospina_dio_la_cara",),
-     "texto": "La rueda de prensa de Ospina calmó la red: tu chat llega más tranquilo."},
+     "texto": "Nadie vio la propuesta de Ospina: el asesor llega desesperado y juega a ganar."},
+    {"id": "nodo_agresivo", "dia": DIA_ESTUDIO, "si": ("ospina_jugo_sucio",),
+     "texto": "El rumor de Ospina contra Bravo calentó la red: Nodo llega con más bulos."},
+    {"id": "nodo_tranquilo", "dia": DIA_ESTUDIO, "si": ("ospina_dio_la_cara",),
+     "texto": "La rueda de prensa de Ospina calmó la red: Nodo llega con menos munición."},
     {"id": "sofia_en_el_chat", "dia": DIA_ESTUDIO,
      "si": ("desmentiste_una_falsa", "publicaste_la_propuesta"),
-     "texto": "Sofía, la del colegio, entra al directo a preguntar por el video."},
+     "texto": "Sofía, la del colegio, está en tu chat: avisa cuando Nodo va a lanzar un bulo."},
     {"id": "logo_de_la_red", "dia": DIA_PLAZA, "si": ("expusiste_la_red_fantasma",),
-     "texto": "Santiago expuso a la red fantasma: su logo ya es conocido en la plaza."},
+     "texto": "Santiago le quitó la máscara a Nodo: su cara ya es conocida en la plaza."},
+    {"id": "alcaldia_en_duda", "dia": DIA_PLAZA, "si": ("la_alcaldia_en_duda",),
+     "texto": "El audio del «fraude en el conteo» corre por la plaza: nadie cree en la Alcaldía."},
 )
 
 # Lo que dice la portada del dia anterior del estado de la plaza: la
@@ -1531,12 +1509,12 @@ TITULARES = {
                               "Su asesor investiga a Bravo por su cuenta."),
     "ospina_se_defendio_con_datos": ("Ospina se defiende con su propuesta",
                                      "Muestra el documento publicado y deja sin piso al rumor."),
-    "vendiste_tu_directo": ("Montaje en vivo contra Bravo",
-                            "{nombre} lo transmitió por dinero a cientos de miles de seguidores."),
-    "rechazaste_el_soborno": ("{nombre} rechaza 40 millones",
-                              "No transmite el montaje contra Bravo y pierde a sus patrocinadores."),
-    "expusiste_la_red_fantasma": ("La red fantasma, expuesta en directo",
-                                  "{nombre} rastrea en vivo a quien pagaba montajes."),
+    "la_alcaldia_en_duda": ("«Fraude en el conteo»: el audio que pagó la red",
+                            "{nombre} perdió el reto de Nodo y lo transmitió a cientos de miles."),
+    "le_ganaste_a_nodo": ("{nombre} tumba a Nodo en directo",
+                          "El audio contra la Alcaldía no sale, pero Nodo sigue anónimo."),
+    "expusiste_la_red_fantasma": ("La red fantasma, desenmascarada en directo",
+                                  "{nombre} le quita la máscara a Nodo frente a sus seguidores."),
     "cantaste_la_verdad": ("La plaza corea contra el bulo",
                            "{nombre} gana el duelo y el rumor del colegio se queda sin eco."),
     "el_rumor_gano_el_duelo": ("El rumor suena más fuerte en la plaza",
@@ -1574,7 +1552,7 @@ def dialogo_expediente(caida, herencias):
         else:
             lineas[0][1] = "Daniel, aguantamos lo del colegio, pero Bravo nos pisa los talones."
     if "sin_propuesta" in herencias:
-        lineas[1][1] = "Nadie vio tu propuesta. Hay que reaccionar: publiquemos esto sobre Bravo."
+        lineas[1][1] = "Nadie vio tu propuesta. Esto sobre Bravo es lo único que nos queda."
     elif "propuesta_publica" in herencias:
         lineas[1][1] = "Tu propuesta ya salió, sí... pero con esto sobre Bravo lo rematamos."
     return tuple(tuple(l) for l in lineas)

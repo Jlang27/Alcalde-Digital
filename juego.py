@@ -39,7 +39,7 @@ from contenido import (
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
     OPCIONES_QUE_PROTEGEN, PERSONAJE_DEL_DIA, DUENO_PERSONAJE, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO, DIA_PLAZA, TENSION_PLAZA,
-    RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, RELLENO_CHAT_4, PEDIDOS_CHAT_4,
+    RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, DIFICULTAD_NODO, TACO_DANIEL, DIFICULTAD_ASESOR,
     OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2, OBJETIVOS_CAPITULO_2,
     SALIDA_CAPITULO_2,
     construir_arbol_habilidades, construir_arbol_decision, construir_arbol_capitulo_2,
@@ -47,10 +47,11 @@ from contenido import (
     RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION, EVENTOS_PERSECUCION,
     aplicar_habilidades, aplicar_banderas,
     HERENCIAS, TITULARES, TEXTO_ESTADO_PLAZA,
-    dialogo_expediente, dialogo_captura, pedidos_chat_4,
+    dialogo_expediente, dialogo_captura,
 )
 from sigilo import Sigilo, VELOCIDAD as VELOCIDAD_RONDA, AVISOS_MAXIMOS
-from transmision import Transmision
+from kombat import Pelea
+from billar import Partida8
 from ritmo import Duelo
 from persecucion import Persecucion
 
@@ -62,10 +63,6 @@ ARBOL_DEL_CAPITULO = {DIA_SIGILO: construir_arbol_capitulo_2,
                       DIA_PLAZA: construir_arbol_capitulo_5}
 # Lo que la herencia del dia 1 le hace a la ronda del colegio.
 RONDA_REFORZADA = 1.25         # los vigilantes andan un 25 % mas rapido
-# Lo que mueve en los indicadores llevar bien (o mal) el chat del directo.
-EFECTOS_CHAT = {True: {"desinformacion": -4, "confianza": 4},
-                False: {"desinformacion": 6, "confianza": -3}}
-
 RASGOS = ["rigor", "empatia", "alcance", "impulso"]
 
 # Segundos que tiene el protagonista para decidir, y los que tiene quien
@@ -91,8 +88,8 @@ FACTOR_MINIMO = 0.4
 # Cuanto pesa en la encuesta el cambio de los indicadores durante el dia.
 PESO_INDICADORES = 0.05
 
-# Siete dias hasta la eleccion: la espina del guion («faltan 7 dias»).
-DIAS_PARTIDA = 7
+# Cinco dias hasta la eleccion: un capitulo por dia, todos jugables.
+DIAS_PARTIDA = 5
 
 # El orden es el de las tintas (estilo.CANDIDATOS): Ospina azul, Bravo rojo,
 # Medina amarillo, Ruiz verde. Cada uno conserva su color en toda pantalla.
@@ -280,7 +277,8 @@ class Partida:
 
         # --- sigilo del dia 2: la ronda de vigilantes del colegio ---
         self.sigilo = None
-        self.transmision = None       # el directo del dia 4
+        self.kombat = None            # la pelea en directo del dia 4 (kombat.py)
+        self.billar = None            # la partida con el asesor del dia 3 (billar.py)
         self.estado_plaza = None      # "pacifica" o "caotica", el dia 5
         self.duelo = None             # el minijuego de la pacifica (ritmo.py)
         self.persecucion = None       # el de la caotica (persecucion.py)
@@ -427,8 +425,13 @@ class Partida:
                               avisos_maximos=AVISOS_MAXIMOS + (
                                   1 if "portero_amigo" in heredado else 0))
                        if indice == DIA_SIGILO else None)
-        self.transmision = (Transmision(RELLENO_CHAT_4, pedidos_chat_4(heredado))
-                            if indice == DIA_ESTUDIO else None)
+        # Nodo llega como lo dejaron los dias anteriores (contenido.HERENCIAS).
+        dificultad = next((DIFICULTAD_NODO[h] for h in heredado if h in DIFICULTAD_NODO), 1.0)
+        self.kombat = Pelea(dificultad) if indice == DIA_ESTUDIO else None
+        # Y el billar del asesor, segun lo que paso con la propuesta el dia 2.
+        taco = next((TACO_DANIEL[h] for h in heredado if h in TACO_DANIEL), None)
+        pulso = next((DIFICULTAD_ASESOR[h] for h in heredado if h in DIFICULTAD_ASESOR), 1.0)
+        self.billar = Partida8(dificultad=pulso, taco=taco) if indice == DIA_CAMPANA else None
         caotica = self.estado_plaza == "caotica"
         self.duelo = Duelo() if indice == DIA_PLAZA and not caotica else None
         self.persecucion = (Persecucion(RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION,
@@ -499,13 +502,6 @@ class Partida:
         if self.sigilo is not None and self.sigilo.escapo:
             self.banderas_del_dia.append("sacaste_la_propuesta")
             self.banderas.add("sacaste_la_propuesta")
-        # El directo deja memoria de como se llevo el chat, aparte de la oferta.
-        if self.transmision is not None and self.transmision.terminada:
-            bien = self.transmision.bien_llevado()
-            bandera = "cuidaste_tu_chat" if bien else "tu_chat_se_desbordo"
-            self.banderas_del_dia.append(bandera)
-            self.banderas.add(bandera)
-            self._aplicar_efectos(EFECTOS_CHAT[bien])
 
         self._cerrar_red()
         self._mover_encuesta()
@@ -589,9 +585,14 @@ class Partida:
         return "caotica" if tension > TENSION_PLAZA else "pacifica"
 
     def terminar_minijuego(self):
-        """El capitulo 5 se cierra con lo que salio del minijuego: se toma
-        su opcion del arbol (y su unica hoja), que aplica efectos y bandera."""
-        if self.duelo is not None:
+        """Los capitulos 3, 4 y 5 se cierran con lo que salio de su minijuego:
+        se toma su opcion del arbol (y su unica hoja), que aplica efectos y
+        bandera."""
+        if self.billar is not None:
+            elegida = self.billar.resultado or "perdio"
+        elif self.kombat is not None:
+            elegida = self.kombat.resultado or "perdio"
+        elif self.duelo is not None:
             elegida = self.duelo.resultado()
         elif self.persecucion is not None:
             elegida = self.persecucion.resultado or "escapo"

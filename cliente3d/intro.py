@@ -1,4 +1,4 @@
-"""Intro «7 días»: la cinemática que abre la partida.
+"""Intro «5 días»: la cinemática que abre la partida.
 
 Cinco planos sobre Ciudad Nova al atardecer, segun el guion: la ciudad
 desde el aire, la avenida con los buses y la pantalla gigante, los
@@ -170,7 +170,7 @@ class Intro:
             arriba = self._letrero("ELECCIONES PARA ALCALDE",
                                    (centro.x, centro.y + alto * 0.22, z),
                                    30 * k)
-            abajo = self._letrero("FALTAN 7 DÍAS",
+            abajo = self._letrero("FALTAN 5 DÍAS",
                                   (centro.x, centro.y - alto * 0.12, z),
                                   62 * k, col=color.Color(1.0, 0.78, 0.30, 1))
             # Vacio hasta la alerta: entonces lleva los compartidos. El
@@ -199,7 +199,7 @@ class Intro:
                       col=color.Color(0.75, 0.74, 0.70, 1))
         self._letrero("ELECCIONES\nPARA ALCALDE", (bx, y1 - 5.2, bz), 46,
                       giro=90)
-        self._letrero("FALTAN\n7 DÍAS", (bx, y0 + 5.0, bz), 74, giro=90,
+        self._letrero("FALTAN\n5 DÍAS", (bx, y0 + 5.0, bz), 74, giro=90,
                       col=color.Color(0.95, 0.20, 0.15, 1))
 
         for nombre, _tinta, mx, z0, z1, y0, y1, lado in mundo.MURALES:
@@ -247,7 +247,7 @@ class Intro:
 
     def _pie_de_ciudad(self):
         t = E.titular("Ciudad Nova", (-0.84, -0.27), 2.2, E.TEXTO)
-        s = E.pequena("FALTAN 7 DÍAS PARA LA ELECCIÓN", (-0.84, -0.225),
+        s = E.pequena("FALTAN 5 DÍAS PARA LA ELECCIÓN", (-0.84, -0.225),
                       E.TEXTO_TENUE, escala=0.52)
         for p in (t, s):
             p.alpha = 0
@@ -282,7 +282,7 @@ class Intro:
         velo.scale_y = 0.42
         velo.animate_color(color.rgba(0, 0, 0, 150), duration=0.7)
         self.piezas.append(velo)
-        t = E.titular("7 días", (0, 0.07), 6.0, E.TEXTO, origen=(0, 0))
+        t = E.titular("5 días", (0, 0.07), 6.0, E.TEXTO, origen=(0, 0))
         s = E.pequena("ELECCIONES PARA ALCALDE  ·  CIUDAD NOVA",
                       (0, -0.035), E.TEXTO_TENUE, escala=0.56, origen=(0, 0))
         c = E.pequena(f"{_miles(CONTADOR[-1][1])} compartidos y subiendo",

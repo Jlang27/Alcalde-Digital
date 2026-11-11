@@ -1,173 +1,26 @@
 """Escenas del capitulo 3, «La primera jugada sucia».
 
 LlegadaCampana (antes del rotulo): el asesor entra en el despacho,
-preocupado, y cita a Daniel en su oficina, la sala de conferencias.
+preocupado, y cita a Daniel arriba, en la sala de juegos del piso 12.
 
-ExpedienteCampana: en la mesa de conferencias, el asesor deja un
-expediente sobre Bravo, cuenta la caida de las encuestas y propone
-publicarlo. Daniel decide con 1, 2 o 3.
-
-Plano y contraplano entre los dos, con la ciudad tras los ventanales en
-el primero. Las opciones y lo que contestan son el arbol del capitulo 3
-de la Partida; los textos, contenido.DIALOGO_EXPEDIENTE.
+SubidaJuegos: Daniel sube en el ascensor, como en las subidas de los
+juegos de mundo abierto (llamar, entrar, puertas que se cierran sobre el,
+la cabina subiendo con el indicador contando pisos, la campanita y las
+puertas que se abren en otra planta). Arriba, junto a la mesa de billar,
+el asesor tira el expediente sobre el paño y pone las condiciones
+(contenido.DIALOGO_EXPEDIENTE). La camara acaba subiendo hasta la vista
+cenital de la partida (billar_cliente.py): de la escena al juego sin corte.
 """
 
 import math
 
-from ursina import Vec3, color
+from ursina import Vec3, camera, color
 
 import audio
 import estilo as E
 import mundo
 import pantallas
 from escena import EscenaDecision
-
-DANIEL_EN_MESA = (15.75, -0.3)     # en la cabecera, mirando a lo largo de la mesa
-ASESOR_ENTRA = (14.9, 1.75)        # por la puerta de la sala de guerra
-ASESOR_EN_MESA = (18.6, 1.45)      # al otro lado de las sillas
-DONDE_EXPEDIENTE = (18.4, 0.15)    # en el borde de la mesa, entre los dos
-ALTO_MESA = 0.76
-PLANOS_EXPEDIENTE = (
-    # Desde la esquina: la mesa, Daniel en la cabecera y el asesor que
-    # entra con la carpeta; la ciudad, detras, por los ventanales.
-    ("entra", 4.0, Vec3(15.3, 2.05, -3.7), Vec3(15.6, 2.0, -3.4),
-     Vec3(18.2, 1.0, 1.2), Vec3(18.0, 1.0, 1.0), 52),
-    # La carpeta cae sobre la mesa.
-    ("deja", 2.4, Vec3(17.85, 1.4, -0.75), Vec3(17.95, 1.35, -0.6),
-     Vec3(18.4, 0.85, 0.15), Vec3(18.4, 0.8, 0.15), 40),
-    # Por encima del hombro de Daniel: habla el asesor. Desde un lado:
-    # justo detras, la nuca de Daniel tapaba el plano entero.
-    ("asesor", 6.6, Vec3(14.85, 1.72, -1.35), Vec3(14.95, 1.7, -1.25),
-     Vec3(18.6, 1.55, 1.45), Vec3(18.6, 1.55, 1.45), 38),
-    # Contraplano: Daniel pregunta.
-    ("daniel", 2.6, Vec3(18.2, 1.7, 1.15), Vec3(18.1, 1.68, 1.05),
-     Vec3(15.75, 1.55, -0.3), Vec3(15.75, 1.55, -0.3), 36),
-    # Primer plano del asesor, que sonrie.
-    ("sonrie", 3.6, Vec3(17.25, 1.62, 0.55), Vec3(17.35, 1.62, 0.62),
-     Vec3(18.6, 1.62, 1.45), Vec3(18.6, 1.62, 1.45), 34),
-    # Daniel y la carpeta: aqui se decide.
-    ("decide", 14.0, Vec3(17.3, 1.55, -1.0), Vec3(17.1, 1.52, -0.9),
-     Vec3(15.75, 1.35, -0.3), Vec3(15.75, 1.35, -0.3), 42),
-)
-INICIOS = [sum(p[1] for p in PLANOS_EXPEDIENTE[:i]) for i in range(len(PLANOS_EXPEDIENTE))]
-T_DEJA = INICIOS[1] + 0.5          # la carpeta empieza a caer
-# Cuando entra cada linea de contenido.DIALOGO_EXPEDIENTE.
-T_LINEAS = (INICIOS[2] + 0.2, INICIOS[2] + 3.5, INICIOS[3] + 0.3, INICIOS[4] + 0.3)
-# El ritmo del clip al andar NO se pone a ojo: sale de la velocidad del
-# tramo, con mundo.ritmo_para. «caminar» anda a 0,70 m/s —medido con
-# mundo.velocidad_natural, no los 2,7 que suponian estos numeros—, asi
-# que el 0,35 de antes movia los pies a 0,25 m/s mientras el asesor
-# cruzaba la sala a 0,93: parecia que lo arrastraran.
-V_DANIEL_SALE = 0.95               # lo que anda Daniel al salir (ver _despues)
-
-
-class ExpedienteCampana(EscenaDecision):
-    PLANOS = PLANOS_EXPEDIENTE
-    T_DECIDE = INICIOS[5] + 0.8
-    PREGUNTA = "¿QUÉ HACES CON EL EXPEDIENTE?"
-    # Las tres tintas del guion: rojo, verde y amarillo.
-    TINTAS = {"rumor": E.GAITAN, "prensa": E.RESTREPO, "espiar": E.LLERAS,
-              # la que trae el capitulo 2 si Valeria publico: la tinta de Ospina
-              "defender": E.OSPINA}
-
-    def __init__(self, actor, asesor, opciones, dialogo, protagonista, nodo_mundo):
-        self.asesor = asesor
-        self.dialogo = dialogo
-        self.nombre = protagonista
-        self.carpeta = mundo.expediente(nodo_mundo)
-        self.carpeta.hide()
-        super().__init__(actor, opciones)
-        audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.3)
-        x, z = DANIEL_EN_MESA
-        actor.setPos(x, 0, z)
-        self._mirar_a(1, 0)
-        self._anima("idle")
-
-    def _poner_asesor(self, x, z):
-        self.asesor.setPos(x, 0, z)
-
-    def _asesor_mira_a_daniel(self):
-        ax, az = ASESOR_EN_MESA
-        self._mirar_a(DANIEL_EN_MESA[0] - ax, DANIEL_EN_MESA[1] - az, self.asesor)
-
-    def _carpeta_en_mesa(self, alto=ALTO_MESA):
-        self.carpeta.show()
-        self.carpeta.setPos(DONDE_EXPEDIENTE[0], alto, DONDE_EXPEDIENTE[1])
-
-    def _entra(self, nombre):
-        if nombre == "entra":
-            (x0, z0), (x1, z1) = ASESOR_ENTRA, ASESOR_EN_MESA
-            self._mirar_a(x1 - x0, z1 - z0, self.asesor)
-            v = math.hypot(x1 - x0, z1 - z0) / PLANOS_EXPEDIENTE[0][1]
-            self._anima("caminar", mundo.ritmo_para(self.asesor, "caminar", v),
-                        self.asesor)
-        elif nombre == "deja":
-            self._poner_asesor(*ASESOR_EN_MESA)
-            self._mirar_a(0, -1, self.asesor)          # hacia la mesa
-            self._anima("idle", actor=self.asesor)
-        elif nombre == "asesor":
-            self._asesor_mira_a_daniel()
-
-    def _durante(self, nombre, f):
-        if nombre == "entra":
-            (x0, z0), (x1, z1) = ASESOR_ENTRA, ASESOR_EN_MESA
-            self._poner_asesor(x0 + (x1 - x0) * f, z0 + (z1 - z0) * f)
-
-    def _eventos(self, cruza):
-        if cruza(T_DEJA):
-            self._carpeta_en_mesa(ALTO_MESA + 0.35)
-        if T_DEJA <= self.t < T_DEJA + 0.4:
-            # Cae la carpeta: un golpe seco, sin rebote.
-            f = (self.t - T_DEJA) / 0.4
-            self._carpeta_en_mesa(ALTO_MESA + 0.35 * (1 - f * f))
-        elif cruza(T_DEJA + 0.4):
-            self._carpeta_en_mesa()
-            audio.efecto("pagina")
-        for (quien, texto, dura), cuando in zip(self.dialogo, T_LINEAS):
-            if cruza(cuando):
-                habla = self.actor if quien == "daniel" else self.asesor
-                etiqueta = self.nombre.upper() if quien == "daniel" else "EL ASESOR"
-                tinta = E.OSPINA if quien == "daniel" else E.TEXTO_TENUE
-                self._decir(etiqueta, texto, dura, tinta)
-                self._anima("hablar", actor=habla)
-            if cruza(cuando + dura):
-                habla = self.actor if quien == "daniel" else self.asesor
-                self._anima("idle", actor=habla)
-
-    def _adelantar(self):
-        self._poner_asesor(*ASESOR_EN_MESA)
-        self._asesor_mira_a_daniel()
-        self._anima("idle", actor=self.asesor)
-        self._carpeta_en_mesa()
-        x, z = DANIEL_EN_MESA
-        self.actor.setPos(x, 0, z)
-        self._mirar_a(1, 0)
-        self._anima("idle")
-
-    def _reaccion(self):
-        if self.elegida == "rumor":
-            self._anima("asentir", actor=self.asesor)    # justo lo que queria
-        elif self.elegida == "prensa":
-            # Deja la carpeta en la mesa y sale hacia la sala de guerra.
-            self._mirar_a(ASESOR_ENTRA[0] - DANIEL_EN_MESA[0],
-                          ASESOR_ENTRA[1] - DANIEL_EN_MESA[1])
-            self._anima("caminar",
-                        mundo.ritmo_para(self.actor, "caminar", V_DANIEL_SALE))
-            self._anima("pensar", actor=self.asesor)
-        elif self.elegida == "defender":
-            self._anima("celular")                        # enseña la propuesta publicada
-            self._anima("pensar", actor=self.asesor)      # no era lo que queria
-        else:
-            self._anima("celular")                        # llama a quien va a espiar
-            self._anima("asentir", actor=self.asesor)
-
-    def _despues(self, t):
-        if self.elegida == "prensa":
-            (x0, z0), (x1, z1) = DANIEL_EN_MESA, ASESOR_ENTRA
-            largo = math.hypot(x1 - x0, z1 - z0)
-            f = min(1.0, t * V_DANIEL_SALE / largo)
-            self.actor.setPos(x0 + (x1 - x0) * f, 0, z0 + (z1 - z0) * f)
-
 
 # ===================================================================
 #  LLEGADA: el asesor entra en el despacho, preocupado (antes del rotulo)
@@ -340,3 +193,206 @@ class LlegadaCampana(EscenaDecision):
             self.asesor.setPlayRate(
                 mundo.ritmo_para(self.asesor, "caminar", mundo.VELOCIDAD_RONDA),
                 "caminar")
+
+
+# ===================================================================
+#  SUBIDA: el ascensor hasta la sala de juegos y el reto del asesor
+# ===================================================================
+
+YJ = mundo.YJ
+TX, TZ = mundo.MESA_BILLAR
+DANIEL_LLAMA = (-1.3, -12.9)          # delante del ascensor del piso 8
+EN_CABINA = (-1.3, -15.45)
+DANIEL_SALE = (-1.0, -12.6)           # recien salido, arriba
+DANIEL_EN_MESA = (TX - 1.0, TZ - 1.25)
+ASESOR_EN_MESA = (TX + 1.55, TZ + 0.35)
+DONDE_EXPEDIENTE = (TX + 0.55, TZ + 0.05)
+ALTO_PANO = YJ + mundo.ALTO_PANO
+
+
+def _v(x, y, z):
+    return Vec3(x, y, z)
+
+
+PLANOS_SUBIDA = (
+    # Por detras de Daniel, algo a su derecha: las puertas delante de el.
+    ("llama", 2.4, _v(-0.55, 1.75, -11.45), _v(-0.65, 1.72, -11.7),
+     _v(-1.3, 1.25, -14.6), _v(-1.3, 1.25, -14.6), 52),
+    # Entra en la cabina y se da la vuelta.
+    ("entra", 2.6, _v(-1.3, 1.7, -11.6), _v(-1.3, 1.66, -11.9),
+     _v(-1.3, 1.25, -15.4), _v(-1.3, 1.25, -15.4), 50),
+    # De frente: las puertas se cierran sobre el.
+    ("cierra", 1.8, _v(-1.3, 1.55, -12.2), _v(-1.3, 1.55, -12.5),
+     _v(-1.3, 1.45, -15.4), _v(-1.3, 1.45, -15.4), 44),
+    # Dentro: la cabina sube y el indicador cuenta los pisos (la camara
+    # va con la cabina: _durante le suma su altura).
+    ("sube", 4.2, _v(-1.92, 1.85, -14.72), _v(-1.88, 1.82, -14.76),
+     _v(-1.15, 1.5, -15.55), _v(-1.15, 1.5, -15.55), 58),
+    # Arriba, desde la sala: campanita, puertas y Daniel que sale.
+    ("llega", 2.8, _v(0.8, YJ + 1.6, -11.6), _v(0.6, YJ + 1.6, -11.9),
+     _v(-1.3, YJ + 1.25, -14.8), _v(-1.3, YJ + 1.25, -14.8), 52),
+    # La sala de juegos: la mesa bajo la lampara y el asesor esperando.
+    ("sala", 3.6, _v(-3.4, YJ + 2.3, -13.4), _v(-3.0, YJ + 2.05, -12.4),
+     _v(TX, YJ + 0.9, TZ), _v(TX, YJ + 0.95, TZ), 56),
+    # El asesor por encima del hombro de Daniel, con la mesa en medio.
+    # (camara medio metro al lado de Daniel: justo detras su cabeza tapaba al asesor)
+    ("asesor", 7.2, _v(TX - 1.52, YJ + 1.75, TZ - 2.11), _v(TX - 1.45, YJ + 1.73, TZ - 2.0),
+     _v(TX + 1.55, YJ + 1.55, TZ + 0.35), _v(TX + 1.55, YJ + 1.55, TZ + 0.35), 40),
+    # Contraplano: Daniel.
+    ("daniel", 2.6, _v(TX + 2.2, YJ + 1.7, TZ + 1.0), _v(TX + 2.1, YJ + 1.69, TZ + 0.9),
+     _v(TX - 1.0, YJ + 1.55, TZ - 1.25), _v(TX - 1.0, YJ + 1.55, TZ - 1.25), 36),
+    # El expediente cae sobre el paño y el asesor pone las condiciones.
+    ("condiciones", 7.4, _v(TX - 0.2, YJ + 1.5, TZ - 1.2), _v(TX - 0.1, YJ + 1.48, TZ - 1.05),
+     _v(TX + 1.4, YJ + 1.3, TZ + 0.3), _v(TX + 1.4, YJ + 1.35, TZ + 0.3), 42),
+    ("acepta", 2.4, _v(TX + 1.0, YJ + 1.65, TZ + 0.2), _v(TX + 0.9, YJ + 1.64, TZ + 0.1),
+     _v(TX - 1.0, YJ + 1.55, TZ - 1.25), _v(TX - 1.0, YJ + 1.55, TZ - 1.25), 34),
+    # La grua: de la altura de los ojos a la vista cenital de la partida.
+    ("grua", 2.6, _v(TX - 0.2, YJ + 1.7, TZ - 2.2), _v(TX, YJ + mundo.ALTO_PANO + 2.25, TZ),
+     _v(TX, YJ + 0.8, TZ), _v(TX, YJ, TZ + 0.001), 76),
+)
+_IS = [sum(p[1] for p in PLANOS_SUBIDA[:i]) for i in range(len(PLANOS_SUBIDA))]
+DURACION_SUBIDA = sum(p[1] for p in PLANOS_SUBIDA)
+_P = {p[0]: i for i, p in enumerate(PLANOS_SUBIDA)}
+# Cuando entra cada linea de contenido.DIALOGO_EXPEDIENTE (por posicion).
+T_LINEAS_SUBIDA = (_IS[_P["asesor"]] + 0.3, _IS[_P["asesor"]] + 3.7,
+                   _IS[_P["daniel"]] + 0.2, _IS[_P["condiciones"]] + 0.4,
+                   _IS[_P["condiciones"]] + 4.2, _IS[_P["acepta"]] + 0.3)
+T_EXPEDIENTE = _IS[_P["condiciones"]] + 0.1
+V_ANDAR = 0.95
+
+
+class SubidaJuegos(EscenaDecision):
+    """No se decide nada: la decide la partida. Enter funde y empieza a jugar."""
+    PLANOS = PLANOS_SUBIDA
+    T_DECIDE = math.inf
+
+    def __init__(self, actor, asesor, protagonista, dialogo, nodo_mundo):
+        self.asesor = asesor
+        self.dialogo = dialogo
+        self.nombre = protagonista
+        self.carpeta = mundo.expediente(nodo_mundo)
+        self.carpeta.hide()
+        super().__init__(actor, [])
+        self.fin = DURACION_SUBIDA
+        mundo.subir_cabina(0.0)
+        mundo.abrir_ascensor(8, 0.0)
+        mundo.abrir_ascensor(mundo.PISO_JUEGOS, 0.0)
+        mundo.lampara_billar(True)
+        audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.25)
+        self._poner(actor, *DANIEL_LLAMA, 0)
+        self._mirar_a(0, -1)
+        self._anima("idle")
+        self._poner(asesor, *ASESOR_EN_MESA, YJ)
+        self._mirar_a(DANIEL_EN_MESA[0] - ASESOR_EN_MESA[0],
+                      DANIEL_EN_MESA[1] - ASESOR_EN_MESA[1], asesor)
+        self._anima("idle", actor=asesor)
+
+    def _poner(self, actor, x, z, y):
+        actor.setPos(x, y, z)
+
+    def _andar(self, desde, hasta, f, y):
+        (x0, z0), (x1, z1) = desde, hasta
+        self._poner(self.actor, x0 + (x1 - x0) * f, z0 + (z1 - z0) * f, y)
+
+    def _entra(self, nombre):
+        a = self.actor
+        if nombre == "llama":
+            audio.efecto("ding")
+        elif nombre == "entra":
+            self._mirar_a(0, -1)
+            self._anima("caminar", mundo.ritmo_para(a, "caminar", V_ANDAR))
+        elif nombre == "cierra":
+            self._poner(a, *EN_CABINA, 0)
+            self._mirar_a(0, 1)
+            self._anima("idle")
+            audio.efecto("puertas_ascensor")
+        elif nombre == "sube":
+            mundo.abrir_ascensor(8, 0.0)
+            audio.efecto("ascensor")
+            self._anima("celular")                 # mira el telefono mientras sube
+        elif nombre == "llega":
+            mundo.subir_cabina(YJ)
+            self._poner(a, *EN_CABINA, YJ)
+            self._anima("idle")
+            audio.efecto("ding")
+        elif nombre == "sala":
+            self._mirar_a(DANIEL_EN_MESA[0] - DANIEL_SALE[0], DANIEL_EN_MESA[1] - DANIEL_SALE[1])
+            self._anima("caminar", mundo.ritmo_para(a, "caminar", V_ANDAR))
+        elif nombre == "asesor":
+            self._poner(a, *DANIEL_EN_MESA, YJ)
+            self._mirar_a(ASESOR_EN_MESA[0] - DANIEL_EN_MESA[0],
+                          ASESOR_EN_MESA[1] - DANIEL_EN_MESA[1])
+            self._anima("idle")
+        elif nombre == "grua":
+            self.carpeta.hide()                 # se lo guarda: la mesa, limpia para jugar
+            mundo.lampara_billar(False)
+
+    def _durante(self, nombre, f):
+        t = f * PLANOS_SUBIDA[_P[nombre]][1]
+        if nombre == "llama":
+            mundo.abrir_ascensor(8, (t - 0.5) / 1.0)
+        elif nombre == "entra":
+            self._andar(DANIEL_LLAMA, EN_CABINA, min(1.0, t / 2.0), 0)
+            if t >= 2.0:
+                self._mirar_a(0, 1)
+                self._anima("idle")
+        elif nombre == "cierra":
+            mundo.abrir_ascensor(8, 1.0 - (t - 0.2) / 1.0)
+        elif nombre == "sube":
+            # arranca y frena suave, y la camara va dentro (y tiembla un poco)
+            g = f * f * (3 - 2 * f)
+            y = YJ * g
+            mundo.subir_cabina(y)
+            self._poner(self.actor, *EN_CABINA, y)
+            temblor = 0.004 * math.sin(t * 37) * math.sin(math.pi * f)
+            camera.y += y + temblor
+            mundo.mirar(Vec3(-1.15, 1.5 + y, -15.55))
+        elif nombre == "llega":
+            mundo.abrir_ascensor(mundo.PISO_JUEGOS, (t - 0.4) / 1.0)
+            if t >= 1.4:
+                if t - 1.4 < 0.05:
+                    self._mirar_a(DANIEL_SALE[0] - EN_CABINA[0], DANIEL_SALE[1] - EN_CABINA[1])
+                    self._anima("caminar", mundo.ritmo_para(self.actor, "caminar", V_ANDAR))
+                self._andar(EN_CABINA, DANIEL_SALE, min(1.0, (t - 1.4) / 1.3), YJ)
+        elif nombre == "sala":
+            self._andar(DANIEL_SALE, DANIEL_EN_MESA, min(1.0, t / 3.4), YJ)
+            mundo.abrir_ascensor(mundo.PISO_JUEGOS, 1.0 - (t - 1.5) / 1.0)
+
+    def _eventos(self, cruza):
+        if cruza(T_EXPEDIENTE):
+            # el asesor lo tira sobre el paño
+            x, z = DONDE_EXPEDIENTE
+            self.carpeta.show()
+            self.carpeta.setPos(x, ALTO_PANO + 0.35, z)
+            self.carpeta.setH(25)
+        if T_EXPEDIENTE <= self.t < T_EXPEDIENTE + 0.35:
+            k = (self.t - T_EXPEDIENTE) / 0.35
+            x, z = DONDE_EXPEDIENTE
+            self.carpeta.setPos(x, ALTO_PANO + 0.35 * (1 - k * k), z)
+        elif cruza(T_EXPEDIENTE + 0.35):
+            x, z = DONDE_EXPEDIENTE
+            self.carpeta.setPos(x, ALTO_PANO, z)
+            audio.efecto("pagina")
+        for (quien, texto, dura), cuando in zip(self.dialogo, T_LINEAS_SUBIDA):
+            habla = self.actor if quien == "daniel" else self.asesor
+            if cruza(cuando):
+                etiqueta = self.nombre.upper() if quien == "daniel" else "EL ASESOR"
+                tinta = E.OSPINA if quien == "daniel" else E.TEXTO_TENUE
+                self._decir(etiqueta, texto, dura, tinta)
+                self._anima("hablar", actor=habla)
+            if cruza(cuando + dura):
+                self._anima("idle", actor=habla)
+
+    def saltar(self):
+        """Enter: funde a negro y empieza a jugar."""
+        if self.fin < DURACION_SUBIDA:
+            return
+        self.fin = self.t + 0.35
+        self.negro.animate_color(color.rgba(0, 0, 0, 1), duration=0.3)
+
+    def cerrar(self):
+        super().cerrar()
+        self.carpeta.hide()
+        mundo.subir_cabina(YJ)
+        mundo.abrir_ascensor(8, 0.0)
+        mundo.abrir_ascensor(mundo.PISO_JUEGOS, 0.0)

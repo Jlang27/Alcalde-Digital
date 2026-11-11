@@ -104,6 +104,14 @@ EFECTOS = {
     "cristal": ("fx_cristal.wav", 0.9, 0.06),
     "alarma": ("fx_alarma.wav", 0.5, 0.0),
     "respiracion": ("fx_respiracion.wav", 0.6, 0.05),
+    # el billar y el ascensor del capitulo 3 (herramientas/componer_billar.py)
+    "bola": ("fx_bola.wav", 1.0, 0.08),
+    "banda": ("fx_banda.wav", 0.8, 0.06),
+    "tronera": ("fx_tronera.wav", 1.0, 0.05),
+    "taco": ("fx_taco.wav", 0.9, 0.04),
+    "ding": ("fx_ascensor_ding.wav", 0.8, 0.0),
+    "ascensor": ("fx_ascensor_motor.wav", 0.8, 0.0),
+    "puertas_ascensor": ("fx_puertas_ascensor.wav", 0.7, 0.0),
 }
 
 # Los efectos de interfaz suenan MUCHAS veces seguidas. A volumen de

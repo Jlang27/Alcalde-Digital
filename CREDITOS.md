@@ -22,6 +22,13 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 | `assets/audio/fx_despertador.wav` | Campanas del despertador, 8 s (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
 | `assets/audio/fx_mecha.wav` | Mecha del petardo (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
 | `assets/audio/fx_petardo.wav` | Estallido del petardo con eco (capítulo 2) | Generado por el proyecto (`herramientas/componer_objetos.py`) | Propia | No | A · 2026-11-02 |
+| `assets/audio/fx_bola.wav` | Choque de bolas de billar (capítulo 3) | Generado por el proyecto (`herramientas/componer_billar.py`) | Propia | No | A · 2026-11-11 |
+| `assets/audio/fx_banda.wav` | Bola contra la banda (capítulo 3) | Generado por el proyecto (`herramientas/componer_billar.py`) | Propia | No | A · 2026-11-11 |
+| `assets/audio/fx_tronera.wav` | Bola que cae por la tronera (capítulo 3) | Generado por el proyecto (`herramientas/componer_billar.py`) | Propia | No | A · 2026-11-11 |
+| `assets/audio/fx_taco.wav` | Taco contra la blanca (capítulo 3) | Generado por el proyecto (`herramientas/componer_billar.py`) | Propia | No | A · 2026-11-11 |
+| `assets/audio/fx_ascensor_ding.wav` | Campanita del ascensor (capítulo 3) | Generado por el proyecto (`herramientas/componer_billar.py`) | Propia | No | A · 2026-11-11 |
+| `assets/audio/fx_ascensor_motor.wav` | Motor de la cabina del ascensor (capítulo 3) | Generado por el proyecto (`herramientas/componer_billar.py`) | Propia | No | A · 2026-11-11 |
+| `assets/audio/fx_puertas_ascensor.wav` | Puertas del ascensor (capítulo 3) | Generado por el proyecto (`herramientas/componer_billar.py`) | Propia | No | A · 2026-11-11 |
 | `assets/audio/ritmo_1.wav` | Música de la ronda 1 del duelo «El ritmo de la verdad» (capítulo 5), compuesta sobre la partitura de `ritmo.py` | Generado por el proyecto (`herramientas/componer_ritmo.py`) | Propia | No | A · 2026-11-08 |
 | `assets/audio/ritmo_2.wav` | Música de la ronda 2 del duelo «El ritmo de la verdad» (capítulo 5), compuesta sobre la partitura de `ritmo.py` | Generado por el proyecto (`herramientas/componer_ritmo.py`) | Propia | No | A · 2026-11-08 |
 | `assets/audio/ritmo_3.wav` | Música de la ronda 3 del duelo «El ritmo de la verdad» (capítulo 5), compuesta sobre la partitura de `ritmo.py` | Generado por el proyecto (`herramientas/componer_ritmo.py`) | Propia | No | A · 2026-11-08 |

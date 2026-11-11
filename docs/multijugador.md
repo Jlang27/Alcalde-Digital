@@ -66,10 +66,8 @@ Ya implementado en `Partida._repartir_dias()`:
 | 1 | Mateo Gaitán | Ciudadano |
 | 2 | Valeria Samper | Periodista |
 | 3 | Daniel Ospina | Alcalde (el asiento político) |
-| 4 | Santiago Lleras | Influencer |
+| 4 | Santiago Lleras (Nova Kombat) | Influencer |
 | 5 | Mateo Gaitán | Ciudadano |
-| 6 | Ernesto Villamizar | Alcalde |
-| 7 | — | el que menos días lleve |
 
 Si el dueño no está en la partida, el día va al jugador con menos días. Con un
 solo jugador, este interpreta a todos (como en Detroit).
@@ -282,7 +280,7 @@ Hay que llevar un router o compartir datos desde un celular.
 
 ## 8. Pruebas
 
-- `red/bots.py`: 4 bots juegan una partida de 7 días contra el servidor. Es la
+- `red/bots.py`: 4 bots juegan una partida de 5 días contra el servidor. Es la
   prueba que se corre antes de cada commit de red.
 - `banco_pruebas/red_dia1.py`: un cliente Ursina sin ventana contra el servidor
   y 3 bots. Comprueba que el cierre llega igual a todos.

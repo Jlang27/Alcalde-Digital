@@ -3,11 +3,14 @@
 Entra por el menu de Capitulos, comprueba que juega Daniel Ospina en la
 oficina del piso 8, que el asesor y el trafico de la ciudad se mueven, y
 saca capturas de cada sala y de la vista por los ventanales. Luego mira
-con E las encuestas y el mapa, va a la mesa de conferencias y decide en
-la escena del expediente: 1 publicar el rumor, 2 rueda de prensa,
-3 investigar a Bravo.
+con E las encuestas y el mapa, sube en el ascensor a la sala de juegos
+(una captura por plano de la subida y del reto del asesor) y juega la
+partida de billar con un bot: el que usan las pruebas de billar.py, con
+capturas del saque, la guia, las bolas rodando, la primera falta, el
+turno del asesor y el resultado. Con «pierde», Daniel solo comete faltas
+y se comprueba que el asesor publica el rumor.
 
-    .venv/bin/python herramientas/banco_pruebas/campana.py [1|2|3]
+    .venv/bin/python herramientas/banco_pruebas/campana.py [pierde]
 """
 import os
 import sys
@@ -85,12 +88,10 @@ for _ in range(6):                  # rotulo, contexto y el aviso de la tarde
     tecla("enter", 0.6)
 assert estado() == "libre", estado()
 
-# El asesor va y viene; los carros de la avenida tambien.
-v = J.cl.ronda_asesor
-x0 = v.x
+# El asesor ya no da vueltas: espera arriba. Los carros si se mueven.
+assert abs(J.cl.asesor.getY() - J.mundo.YJ) < 0.01, J.cl.asesor.getPos()
 coches = [n.getZ() for n, _vel in J.mundo._ACTUAL["vehiculos"]]
 pasar(3.0)
-assert abs(v.x - x0) > 1.0, "el asesor no anda"
 assert coches != [n.getZ() for n, _vel in J.mundo._ACTUAL["vehiculos"]]
 
 # Por el ventanal no se sale: el jugador se queda dentro.
@@ -135,29 +136,88 @@ for punto, (x, z) in (("encuestas", (8.3, -3.3)), ("mapa", (8.7, 1.25))):
     tecla("enter", 0.4)
     assert estado() == "libre", estado()
 
-# La mesa: el asesor trae el expediente y Daniel decide.
-TECLA = sys.argv[1] if len(sys.argv) > 1 else "2"
-J.cl.actor.setPos(15.8, 0, -0.3)
+# El ascensor de la recepcion: la subida y el reto del asesor.
+import random
+import billar as B
+from cine_campana import PLANOS_SUBIDA
+PIERDE = "pierde" in sys.argv[1:]
+J.cl.actor.setPos(-1.3, 0, -13.0)
 pasar(0.3)
-assert J.cl.punto_cerca == "mesa", J.cl.punto_cerca
+assert J.cl.punto_cerca == "ascensor", J.cl.punto_cerca
 tecla("e", 0.3)
 assert estado() == "escena", estado()
-for espera, nombre in ((2.0, "entra"), (3.0, "deja"), (3.0, "asesor"), (5.3, "daniel"),
-                       (3.2, "sonrie")):
-    pasar(espera)
-    foto(f"campana_esc_{nombre}")
-while J.cl.escena.fase != "decide":
-    pasar(0.2)
-pasar(0.5)
-foto("campana_esc_decide")
-tecla(TECLA, 1.5)
-assert J.cl.escena.fase == "consecuencia" and J.cl.partida.arbol_decision.termino()
-foto("campana_esc_consecuencia")
-bandera = {"1": "ospina_jugo_sucio", "2": "ospina_dio_la_cara", "3": "asesor_a_tus_espaldas"}[TECLA]
+inicio = 0.0
+for nombre, dura, *_ in PLANOS_SUBIDA:
+    while J.cl.escena is not None and J.cl.escena.t < inicio + dura * 0.6:
+        pasar(frames=1)
+    foto(f"campana_subida_{nombre}")
+    inicio += dura
+assert hasta_estado("aviso_papel", 10), estado()
+foto("campana_billar_reglas")
+tecla("enter", 0.5)
+assert estado() == "billar", estado()
+pasar(0.6)
+foto("campana_billar_saque")
+
+# La partida, con el bot de las pruebas de billar.py.
+bil = J.cl.billar
+p = J.cl.partida.billar
+if PIERDE:
+    p.ia.dificultad = 50.0          # sin fallos de pulso: la derrota tiene que ser segura
+azar = random.Random(7)
+fotos = set()
+
+
+def foto_una(nombre):
+    if nombre not in fotos:
+        fotos.add(nombre)
+        foto(nombre)
+
+
+t = 0.0
+while J.cl.estado == "billar" and t < B.DURACION + 40:
+    if p.fase == "apunta" and p.turno == "daniel" and bil.disparo is None and bil.t_fin is None:
+        pasar(0.5)
+        if p.fase != "apunta" or p.turno != "daniel":
+            continue
+        if PIERDE:
+            b = p.mesa.bolas[0]
+            bil.tirar_ya(math.atan2(-b.y, -b.x) + math.pi, 0.04)     # flojo y a la nada
+        else:
+            ang, pot, ef, _tr = B.jugador_simulado(p, 0.8, azar)
+            bil._colocada = True                 # el bot ya coloco la blanca
+            bil.angulo = ang
+            pasar(frames=2)
+            foto_una("campana_billar_guia")
+            if p.va_por_la_ocho():
+                foto_una("campana_billar_por_la_8")
+            bil.tirar_ya(ang, pot, ef)
+    pasar(frames=1)
+    t += 1 / 30
+    if p.fase == "rueda" and p.registro and len(p.registro.metidas) == 0 and t > 2:
+        foto_una("campana_billar_rueda")
+    if p.faltas["daniel"] + p.faltas["asesor"] == 1:
+        foto_una("campana_billar_falta")
+    if p.grupo["daniel"]:
+        foto_una("campana_billar_grupo")
+    if p.turno == "asesor" and bil.ia and bil.ia.get("plan"):
+        foto_una("campana_billar_asesor")
+    if bil.t_fin is not None:
+        pasar(0.8)
+        foto_una("campana_billar_fin")
+print("billar:", p.resultado, "·", p.motivo, f"· {B.DURACION - p.reloj:.0f} s de partida",
+      "· faltas", p.faltas)
+assert p.resultado in ("mesa_limpia", "gano", "perdio")
+if PIERDE:
+    assert p.resultado == "perdio", p.resultado
+assert hasta_estado("aviso_papel", 10), estado()
+foto("campana_billar_resultado")
+tecla("enter", 1.0)
+bandera = "ospina_jugo_sucio" if p.resultado == "perdio" else "ospina_dio_la_cara"
 assert bandera in J.cl.partida.banderas, J.cl.partida.banderas
-assert hasta_estado("juego", 12) and J.cl.dia_cerrado, estado()
+assert J.cl.billar is None and J.cl.dia_cerrado, (J.cl.billar, J.cl.dia_cerrado)
 pasar(3.0)
-foto("campana_esc_cierre")
+foto("campana_billar_cierre")
 
 J.volver_al_menu()
 pasar(0.5)
