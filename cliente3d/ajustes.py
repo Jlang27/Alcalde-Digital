@@ -38,6 +38,7 @@ VALORES = {
     "pantalla_completa": True,
     "ritmo": 1,                    # 0 pausado, 1 normal, 2 rapido
     "sombras": 2,                  # 0 no, 1 bajas, 2 altas (luces.py)
+    "texturas": 2,                 # 0 no, 1 bajas, 2 altas (texturas.py)
 }
 
 RITMOS = ("Pausado", "Normal", "Rápido")
@@ -46,7 +47,10 @@ RITMOS = ("Pausado", "Normal", "Rápido")
 # o quitarlas; el juego se ve mas plano, pero va igual de bien.
 SOMBRAS = ("No", "Bajas", "Altas")
 # Las filas de tipo «opcion» y sus rotulos.
-OPCIONES = {"ritmo": RITMOS, "sombras": SOMBRAS}
+# Las texturas casi no cuestan tiempo, cuestan memoria de video: en
+# «Altas» son de 1024 px con relieve y brillo; en «Bajas», de 512.
+TEXTURAS = ("No", "Bajas", "Altas")
+OPCIONES = {"ritmo": RITMOS, "sombras": SOMBRAS, "texturas": TEXTURAS}
 FACTOR_RITMO = (1.45, 1.0, 0.72)
 
 
@@ -123,6 +127,11 @@ def aplicar_brillo():
 def aplicar_sombras():
     import mundo
     mundo.sombras(mundo.nivel_de_sombras())
+
+
+def aplicar_texturas():
+    import mundo
+    mundo.texturas_calidad(mundo.nivel_de_texturas())
 
 
 def _monitor():

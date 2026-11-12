@@ -841,7 +841,8 @@ def _munecos(nodo, estado):
             base, rug, met, emi = MATERIALES[nombre]
             e = M._pieza_malla(nodo, lista, M._material(
                 (*base, 1), rugosidad=rug, metalico=met,
-                emision=(*emi, 1) if emi else None))
+                emision=(*emi, 1) if emi else None,
+                textura=M.texturas.tipo_de(nombre)))
             e.y = -0.15                    # _muneco pisa la acera de la intro
             piezas.append(e)
     _PLAZA.setdefault("publico", {})[estado] = piezas
@@ -1338,7 +1339,8 @@ def _pasillo():
         if lista:
             base, rug, met, emi = MATERIALES[nombre]
             e = M._pieza_malla(nodo, lista, M._material(
-                (*base, 1), rugosidad=rug, metalico=met, emision=(*emi, 1) if emi else None))
+                (*base, 1), rugosidad=rug, metalico=met, emision=(*emi, 1) if emi else None,
+                textura=M.texturas.tipo_de(nombre)))
             e.y = -0.15
     nodo.hide()
     return nodo
@@ -1381,7 +1383,8 @@ def preparar_persecucion(eventos):
                     base, rug, met, emi = MATERIALES[nombre]
                     M._pieza_malla(pieza, lista, M._material(
                         (*base, 1), rugosidad=rug, metalico=met,
-                        emision=(*emi, 1) if emi else None))
+                        emision=(*emi, 1) if emi else None,
+                textura=M.texturas.tipo_de(nombre)))
             pieza.setH(math.degrees(math.atan2(bx - ax, bz - az)))
             pieza.hide()
             vivos[ev["id"]] = {"tipo": "cruza", "nodo": pieza}

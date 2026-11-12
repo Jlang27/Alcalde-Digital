@@ -14,6 +14,7 @@ from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
 from PIL import Image, ImageDraw, ImageFont
 
 import luces
+import texturas
 from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec2, Vec3
 
 from contenido import ZONAS_SEGURAS_CAPITULO_2
@@ -120,8 +121,12 @@ def _encender(esc, luz):
 _ENTIDADES = []   # primitivas de Ursina del escenario actual (hay que destruirlas)
 
 
-def _material(base, rugosidad=0.85, metalico=0.0, emision=None):
+def _material(base, rugosidad=0.85, metalico=0.0, emision=None, textura=None):
+    """textura: una clave de texturas.TIPOS (o None, liso). Viaja en el
+    nombre del material y _pieza la aplica al colgar la pieza."""
     m = Material()
+    if textura and emision is None:
+        m.setName("tex:" + textura)
     m.setBaseColor(LColor(*base))
     m.setRoughness(rugosidad)
     m.setMetallic(metalico)
@@ -155,6 +160,8 @@ def _pieza(mundo, modelo, mat, escala, posicion, giro=0):
     e.scale = escala
     e.position = posicion
     e.rotation_y = giro
+    if mat.getName().startswith("tex:"):
+        texturas.vestir(e, mat.getName()[4:], mundo)
     return e
 
 
@@ -172,6 +179,7 @@ def _cafeteria(mundo):
         extra = EMISION_EXTRA.get(mat.getName())
         if extra is not None:
             mat.setEmission(LColor(*extra))
+    texturas.vestir_modelo(modelo, mundo)
     return modelo
 
 
@@ -716,7 +724,8 @@ def _volcar(mundo, mallas):
         if caras:
             base, rug, met, emi = MATERIALES_CIUDAD[nombre]
             mat = _material((*base, 1), rugosidad=rug, metalico=met,
-                            emision=(*emi, 1) if emi else None)
+                            emision=(*emi, 1) if emi else None,
+                            textura=texturas.tipo_de(nombre))
             _pieza_malla(mundo, caras, mat)
 
 
@@ -761,14 +770,14 @@ def _edificios_ciudad(mundo, azar):
 
 
 def _calles(mundo):
-    asfalto = _material((0.020, 0.021, 0.026, 1), rugosidad=0.35)
+    asfalto = _material((0.020, 0.021, 0.026, 1), rugosidad=0.35, textura="asfalto")
     _pieza(mundo, "plane", asfalto, 2400, (0, 0, 0))
 
     andenes = []
     for x0, x1 in ((-9.6, -6.6), (6.6, 9.6)):
         andenes.extend(_caras_caja(x0, x1, 0, 0.15, -120, 230))
     _pieza_malla(mundo, andenes, _material((0.060, 0.058, 0.055, 1),
-                                           rugosidad=0.8))
+                                           rugosidad=0.8, textura="losa"))
 
     # Raya central amarilla y carriles en blanco, como en la referencia;
     # pasos de cebra delante de la pantalla y en los cruces.
@@ -2069,8 +2078,10 @@ def _volcar_obra(mundo, obra, materiales, caras):
         caras.setdefault(mat, []).extend(_caras_caja(*caja))
     for clave, lista in caras.items():
         base, rug, met, emi = materiales[clave]
+        # Lo que emite (pantallas, neones, plafones) se queda liso.
         _pieza_malla(mundo, lista, _material((*base, 1), rug, met,
-                                             None if emi is None else (*emi, 1)))
+                                             None if emi is None else (*emi, 1),
+                                             textura=texturas.tipo_de(clave)))
     for mat, x, y, z, d in obra.esferas:
         base, rug, met, _ = materiales[mat]
         _pieza(mundo, "sphere", _material((*base, 1), rug, met), d, (x, y, z))
@@ -3829,6 +3840,7 @@ def cambiar_escenario(mundo, escenario):
     if _ACTUAL["contenedor"] is not None:
         _ACTUAL["contenedor"].removeNode()
     luces.olvidar()
+    texturas.olvidar()
     _montar(mundo, escenario)
 
 
@@ -3899,6 +3911,20 @@ def nivel_de_sombras():
     return ajustes.VALORES.get("sombras", 2)
 
 
+def nivel_de_texturas():
+    """0, 1 o 2, como las sombras: Ajustes, o ALCALDE_TEXTURAS si se fuerza."""
+    forzado = os.environ.get("ALCALDE_TEXTURAS")
+    if forzado in ("0", "1", "2"):
+        return int(forzado)
+    import ajustes
+    return ajustes.VALORES.get("texturas", 2)
+
+
+def texturas_calidad(n):
+    """La fila «Texturas» de Ajustes: cambia la calidad en caliente."""
+    texturas.calidad(n)
+
+
 def sombras(n):
     """La fila «Sombras» de Ajustes: cambia la calidad en caliente."""
     luces.calidad(n)
@@ -3915,6 +3941,7 @@ def crear(escenario="cafeteria", rol=None):
     # escenario nacen ya proyectando (o no).
     luces.preparar_shaders()
     luces.calidad(nivel_de_sombras())
+    texturas.calidad(nivel_de_texturas())
     _montar(mundo, escenario)
     actor = protagonista(mundo, rol)
 
@@ -3925,9 +3952,11 @@ def crear(escenario="cafeteria", rol=None):
     # 100 matrices del shader.
     _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=4,
                                         max_lights=8,
+                                        use_normal_maps=True,
                                         enable_shadows=bool(luces.nivel()),
                                         use_hardware_skinning=True)
     luces.iniciar(_RENDER["tuberia"], mundo, luces.nivel())
+    texturas.iniciar(mundo)
     brillo(0.0)
     return mundo, actor
 

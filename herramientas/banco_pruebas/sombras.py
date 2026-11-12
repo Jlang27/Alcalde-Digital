@@ -10,6 +10,7 @@ su lámpara al acercarse la cámara.
 import os
 
 os.environ.pop("ALCALDE_SOMBRAS", None)      # aqui manda Ajustes
+os.environ.pop("ALCALDE_TEXTURAS", None)
 
 from banco import *
 from banco import J
@@ -18,8 +19,9 @@ import luces
 import pantallas
 
 arrancar()
-A.VALORES["sombras"] = 2
+A.VALORES["sombras"] = A.VALORES["texturas"] = 2
 J.mundo.sombras(2)
+J.mundo.texturas_calidad(2)
 tecla("down arrow", 0.2); tecla("down arrow", 0.2); tecla("enter", 0.5)
 tecla("down arrow", 0.3); tecla("down arrow", 0.3); tecla("enter", 0.5)
 for _ in range(30):
@@ -67,6 +69,39 @@ foto("sombras_no")
 tecla("right arrow", 0.4)
 tecla("right arrow", 0.4)                     # de vuelta a Altas
 assert luces.nivel() == 2 and tuberia.enable_shadows and sol.node().isShadowCaster()
+
+# --- la fila de abajo: Texturas ---------------------------------------
+import texturas
+from panda3d.core import TextureAttrib, TextureStage
+
+
+def lados():
+    """El lado (px) de cada textura de color nuestra que hay en la escena."""
+    vistos = set()
+    for nodo in J.cl.mundo.findAllMatches("**"):
+        estados = [nodo.node().getState()]
+        if nodo.node().isGeomNode():
+            estados += [nodo.node().getGeomState(k) for k in range(nodo.node().getNumGeoms())]
+        for e in estados:
+            a = e.getAttrib(TextureAttrib)
+            t = a.getOnTexture(TextureStage.getDefault()) if a is not None else None
+            if t is not None and t.getName().endswith("_color"):
+                vistos.add(t.getXSize())
+    return vistos
+
+
+tecla("down arrow", 0.2)
+assert pantallas.FILAS[J.cl.ajustes.seleccion][0] == "texturas"
+assert texturas.nivel() == 2 and lados() == {1024}, (texturas.nivel(), lados())
+foto("texturas_altas")
+tecla("left arrow", 0.5)                      # Altas -> Bajas
+assert A.VALORES["texturas"] == 1 and lados() == {512}, lados()
+tecla("left arrow", 0.5)                      # Bajas -> No: lisas, de 2 px
+assert A.VALORES["texturas"] == 0 and lados() == {2}, lados()
+foto("texturas_no")
+tecla("right arrow", 0.4)
+tecla("right arrow", 0.5)
+assert texturas.nivel() == 2 and lados() == {1024}, lados()
 
 tecla("escape", 0.4)
 tecla("escape", 0.5)

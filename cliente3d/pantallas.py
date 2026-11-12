@@ -2076,6 +2076,8 @@ FILAS = (
      "Ajústalo mirando la escena del fondo, no a ciegas."),
     ("sombras", "Sombras", "opcion",
      "Lo que más pesa. Bájalas o quítalas si el juego va a tirones."),
+    ("texturas", "Texturas", "opcion",
+     "Madera, piedra, tela. Apenas pesan; bájalas si falta memoria de video."),
     ("volumen", "Volumen general", "barra",
      "Manda sobre la música y los efectos."),
     ("musica", "Música", "barra",
@@ -2093,7 +2095,7 @@ FILAS = (
 )
 
 # Antes de que indice empiece una seccion nueva.
-SECCIONES = {0: "Imagen", 3: "Sonido", 6: "Juego", 8: "Accesibilidad"}
+SECCIONES = {0: "Imagen", 4: "Sonido", 7: "Juego", 9: "Accesibilidad"}
 
 # Al cambiar estas dos hay que volver a dibujar la pantalla entera: la
 # paleta y el cuerpo de texto se leen cuando nace cada pieza, no despues.
@@ -2282,7 +2284,7 @@ class Ajustes:
         if self.velo is None:
             return
         # Brillo y sombras se ajustan viendo la escena, no el panel.
-        brillo = FILAS[self.seleccion][0] in ("brillo", "sombras")
+        brillo = FILAS[self.seleccion][0] in ("brillo", "sombras", "texturas")
         self.velo.color = E.tinta(VELO_BRILLO if brillo else VELO_NORMAL)
 
     def mover(self, paso):
@@ -2318,6 +2320,8 @@ class Ajustes:
             A.aplicar_brillo()
         if clave == "sombras":
             A.aplicar_sombras()
+        if clave == "texturas":
+            A.aplicar_texturas()
         if clave in REHACER:
             A.aplicar_estilo()
             if self.al_cambiar is not None:

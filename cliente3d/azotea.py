@@ -100,10 +100,10 @@ def construir(cont):
     """Monta la azotea y la ciudad de abajo dentro del contenedor."""
     M._ciudad_abajo(cont)
 
-    hormigon = M._material((0.10, 0.10, 0.11, 1), rugosidad=0.92)
+    hormigon = M._material((0.10, 0.10, 0.11, 1), rugosidad=0.92, textura="hormigon")
     losa_oscura = M._material((0.06, 0.06, 0.07, 1), rugosidad=0.95)
-    pretil = M._material((0.16, 0.15, 0.15, 1), rugosidad=0.9)
-    metal = M._material((0.20, 0.21, 0.23, 1), rugosidad=0.5, metalico=0.8)
+    pretil = M._material((0.16, 0.15, 0.15, 1), rugosidad=0.9, textura="hormigon")
+    metal = M._material((0.20, 0.21, 0.23, 1), rugosidad=0.5, metalico=0.8, textura="metal")
     goma = M._material((0.015, 0.015, 0.018, 1), rugosidad=0.7)
     neon_mag = M._material((0.02, 0.0, 0.02, 1), emision=(2.4, 0.25, 1.8, 1))
     neon_cian = M._material((0.0, 0.02, 0.02, 1), emision=(0.2, 1.8, 2.2, 1))
