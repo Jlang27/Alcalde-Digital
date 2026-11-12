@@ -191,22 +191,31 @@ def _luces(cont):
     sol = cont.attachNewNode(DirectionalLight("sol"))
     sol.node().setColor((1.15, 0.62, 0.36, 1))
     sol.setHpr(200 + M.GIRO_CIUDAD, -12, 0)
-    if M.SOMBRAS:
-        M._sombra_de_sol(sol, centro=(0.0, 1.0, 0.0), ancho=30.0)
+    M.luces.sol(sol, centro=(0.0, 1.0, 0.0), ancho=30.0, fondo=30.0, refuerzo=3.4)
     M._encender(cont, sol)
     cielo = cont.attachNewNode(DirectionalLight("cielo"))
     cielo.node().setColor((0.26, 0.32, 0.55, 1))
     cielo.setHpr(20 + M.GIRO_CIUDAD, -35, 0)
+    M.luces.relleno(cielo, 0.62)
+    M.luces.relleno(ambiente, 0.75)
     M._encender(cont, cielo)
     for nombre, pos, col, att in (
             ("neon", (0.0, 2.6, 4.6), (1.6, 0.25, 1.3), (1, 0.10, 0.06)),
-            ("aro_de_luz", (-4.6, 1.8, -2.6), (1.7, 1.45, 1.1), (1, 0.08, 0.05)),
             ("pantalla_vecina", (-8.0, 5.0, 18.0), (0.35, 0.55, 1.4), (1, 0.02, 0.004))):
         luz = cont.attachNewNode(PointLight(nombre))
         luz.node().setColor((*col, 1))
         luz.node().setAttenuation(att)
         luz.setPos(*pos)
         M._encender(cont, luz)
+    _aro(cont)
+
+
+def _aro(cont):
+    """El aro de luz es un foco que apunta a donde se planta Santiago:
+    le da de lleno y tira su sombra larga sobre la losa, hacia el pretil."""
+    M.luces.foco(cont, "aro_de_luz", (-4.9, 1.75, -2.9),
+                 (MARCA_DIRECTO[0] + 3.0, 0.9, MARCA_DIRECTO[1] + 0.6),
+                 (5.2, 4.4, 3.3), apertura=96, alcance=14.0, caida=0.05)
 
 
 def vivir(dt):

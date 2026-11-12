@@ -1024,13 +1024,13 @@ def _luces(nodo, estado):
     luces = []
     ambiente = nodo.attachNewNode(AmbientLight("ambiente"))
     ambiente.node().setColor((*datos["ambiente"], 1))
+    M.luces.relleno(ambiente, 0.6)
     luces.append(ambiente)
     col, hpr = datos["sol"]
     sol = nodo.attachNewNode(DirectionalLight("sol"))
     sol.node().setColor((*col, 1))
     sol.setHpr(*hpr)
-    if M.SOMBRAS:
-        M._sombra_de_sol(sol, centro=(0.0, 2.0, 0.0), ancho=120.0)
+    M.luces.sol(sol, centro=(0.0, 2.0, 0.0), ancho=120.0, fondo=80.0, refuerzo=1.9)
     luces.append(sol)
     for nombre, pos, col, att in datos["puntos"]:
         luz = nodo.attachNewNode(PointLight(nombre))

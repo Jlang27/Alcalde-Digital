@@ -37,9 +37,16 @@ VALORES = {
     "camara_viva": True,
     "pantalla_completa": True,
     "ritmo": 1,                    # 0 pausado, 1 normal, 2 rapido
+    "sombras": 2,                  # 0 no, 1 bajas, 2 altas (luces.py)
 }
 
 RITMOS = ("Pausado", "Normal", "Rápido")
+# Las sombras son lo que mas pesa del render: cada luz que proyecta
+# dibuja la escena otra vez. En una grafica integrada conviene bajarlas
+# o quitarlas; el juego se ve mas plano, pero va igual de bien.
+SOMBRAS = ("No", "Bajas", "Altas")
+# Las filas de tipo «opcion» y sus rotulos.
+OPCIONES = {"ritmo": RITMOS, "sombras": SOMBRAS}
 FACTOR_RITMO = (1.45, 1.0, 0.72)
 
 
@@ -62,7 +69,8 @@ def cargar():
             VALORES[clave] = bool(valor)
         elif isinstance(valor, (int, float)):
             VALORES[clave] = int(valor)
-    VALORES["ritmo"] = max(0, min(len(RITMOS) - 1, VALORES["ritmo"]))
+    for clave, rotulos in OPCIONES.items():
+        VALORES[clave] = max(0, min(len(rotulos) - 1, VALORES[clave]))
     for clave in ("volumen", "musica", "efectos", "brillo"):
         VALORES[clave] = max(0, min(PASOS, VALORES[clave]))
     return VALORES
@@ -110,6 +118,11 @@ PASOS_BRILLO = 1.5
 def aplicar_brillo():
     import mundo
     mundo.brillo((VALORES["brillo"] - PASOS / 2) / (PASOS / 2) * PASOS_BRILLO)
+
+
+def aplicar_sombras():
+    import mundo
+    mundo.sombras(mundo.nivel_de_sombras())
 
 
 def _monitor():

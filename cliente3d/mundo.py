@@ -12,6 +12,8 @@ from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
                           PNMImage, PointLight, SamplerState, ShaderAttrib,
                           Texture, TextureAttrib, TransparencyAttrib)
 from PIL import Image, ImageDraw, ImageFont
+
+import luces
 from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec2, Vec3
 
 from contenido import ZONAS_SEGURAS_CAPITULO_2
@@ -173,26 +175,6 @@ def _cafeteria(mundo):
     return modelo
 
 
-# Sombras de la luz principal de cada escenario (rediseño visual). Por
-# ahora se encienden con ALCALDE_SOMBRAS=1, para comparar el antes y el
-# despues con la misma camara; seran una opcion del menu de graficos.
-# Solo proyecta UNA luz por escenario, la direccional que hace de sol o
-# de luna: simplepbr no da sombra a las luces de punto.
-SOMBRAS = os.environ.get("ALCALDE_SOMBRAS") == "1"
-MAPA_SOMBRA = int(os.environ.get("ALCALDE_MAPA_SOMBRA", "4096"))
-
-
-def _sombra_de_sol(sol, centro, ancho):
-    """El sol proyecta sombra sobre una caja de `ancho` metros alrededor
-    de `centro`. La luz direccional de Panda mira por una lente
-    ortografica: hay que decirle que trozo del mundo cubre."""
-    sol.node().setShadowCaster(True, MAPA_SOMBRA, MAPA_SOMBRA)
-    lente = sol.node().getLens()
-    lente.setFilmSize(ancho, ancho)
-    lente.setNearFar(-ancho * 1.5, ancho * 1.5)
-    sol.setPos(*centro)
-
-
 def _luces_cafeteria(mundo):
     """Luz del local. Maximo 6 luces en el mundo: simplepbr usa 8 y el
     personaje (o el invitado) trae 2 propias.
@@ -205,25 +187,40 @@ def _luces_cafeteria(mundo):
     ambiente.node().setColor((0.060, 0.066, 0.090, 1))
     _encender(mundo, ambiente)
 
-    # No hay sombras: esta luz es solo relleno, no pretende ser el sol.
+    # Relleno sin sombra, muy bajo: solo evita que lo que no toca ninguna
+    # lampara se vaya a negro.
     relleno = mundo.attachNewNode(DirectionalLight("relleno"))
-    relleno.node().setColor((0.16, 0.13, 0.10, 1))
+    relleno.node().setColor((0.10, 0.085, 0.07, 1))
     relleno.setHpr(28, -50, 0)
     _encender(mundo, relleno)
 
-    # (x, y, z, color, atenuacion)
-    puntos = (
-        ("lampara_1", (-1.8, 2.30, 0.9),  (2.0, 1.35, 0.70), (1, 0.10, 0.16)),
-        ("lampara_2", (1.7, 2.30, -0.2),  (1.7, 1.15, 0.60), (1, 0.10, 0.16)),
-        ("luz_tele",  (1.4, 2.00, 4.0),   (0.38, 0.70, 1.40), (1, 0.16, 0.30)),
-        ("farola",    (-1.6, 4.20, 5.6),  (1.9, 1.15, 0.50), (1, 0.12, 0.18)),
-    )
-    for nombre, pos, col, att in puntos:
-        luz = mundo.attachNewNode(PointLight(nombre))
-        luz.node().setColor((*col, 1))
-        luz.node().setAttenuation(att)
-        luz.setPos(*pos)
-        _encender(mundo, luz)
+    # Las dos colgantes son FOCOS hacia abajo: cada una hace su charco de
+    # luz sobre las mesas y las sillas tiran su sombra en el damero. Como
+    # luces de punto lo alumbraban todo por igual y nada proyectaba.
+    luces.foco(mundo, "lampara_1", (-1.8, 2.30, 0.9), (-1.8, 0.0, 0.9),
+               (4.6, 3.0, 1.5), apertura=142, alcance=9.0, caida=0.14)
+    luces.foco(mundo, "lampara_2", (1.7, 2.30, -0.2), (1.7, 0.0, -0.2),
+               (4.0, 2.6, 1.3), apertura=142, alcance=9.0, caida=0.14)
+    # La luz de la calle entra por la ventana del fondo y cruza la reja:
+    # las sombras de los barrotes caen sobre el suelo y las mesas. Es la
+    # farola de siempre, pero ahora la pared la tapa donde debe.
+    luces.foco(mundo, "farola", (-1.35, 3.9, 8.2), (-1.0, 0.0, 0.6),
+               (5.2, 3.3, 1.5), apertura=52, alcance=18.0, caida=0.012)
+
+    # El rebote: lo que las dos pantallas devuelven al techo y a lo alto
+    # de las paredes. Un foco hacia abajo deja todo eso a oscuras y el
+    # local parecia una cueva; esta luz de punto, sin sombra, lo levanta.
+    rebote = mundo.attachNewNode(PointLight("rebote"))
+    rebote.node().setColor((1.05, 0.72, 0.42, 1))
+    rebote.node().setAttenuation((1, 0.08, 0.07))
+    rebote.setPos(0.0, 2.75, 0.4)
+    _encender(mundo, rebote)
+
+    tele = mundo.attachNewNode(PointLight("luz_tele"))
+    tele.node().setColor((0.38, 0.70, 1.40, 1))
+    tele.node().setAttenuation((1, 0.16, 0.30))
+    tele.setPos(1.4, 2.00, 4.0)
+    _encender(mundo, tele)
 
 
 # ===================================================================
@@ -1201,8 +1198,7 @@ def _luces_ciudad(mundo):
     sol = mundo.attachNewNode(DirectionalLight("sol"))
     sol.node().setColor((1.30, 0.80, 0.45, 1))
     sol.setHpr(200, -14, 0)
-    if SOMBRAS:
-        _sombra_de_sol(sol, centro=(0.0, 0.0, 60.0), ancho=150.0)
+    luces.sol(sol, centro=(0.0, 0.0, 60.0), ancho=150.0, fondo=90.0, refuerzo=1.7)
     _encender(mundo, sol)
 
     cielo = mundo.attachNewNode(DirectionalLight("cielo"))
@@ -2177,6 +2173,8 @@ def _lluvia():
         e.setRenderModeThickness(1)
         _ENTIDADES.append(e)
         capas.append(e)
+    for capa in capas:
+        luces.sin_sombra(capa)
     _ACTUAL["lluvia"] = capas
 
 
@@ -2235,30 +2233,41 @@ def _luces_rectoria(mundo):
     luna = mundo.attachNewNode(DirectionalLight("luna"))
     luna.node().setColor((*LUNA, 1))
     luna.setHpr(160, -35, 0)
-    if SOMBRAS:
-        _sombra_de_sol(luna, centro=((XA_OESTE + XA_ESTE) / 2, 1.5,
-                                     (Z_SUR + Z_NORTE) / 2), ancho=62.0)
+    luces.sol(luna, centro=((XA_OESTE + XA_ESTE) / 2, 1.5, (Z_SUR + Z_NORTE) / 2),
+              ancho=62.0, fondo=45.0, refuerzo=1.6)
     _encender(mundo, luna)
 
-    for nombre, pos, col, att in (
-            ("lampara_rector", (0.38, 1.15, 2.0), (2.0, 1.30, 0.62), (1, 0.18, 0.30)),
-            # Las dos del archivo cuelgan del techo alto (5 m) y caen mas
-            # despacio: cada sala mide unos 20 x 23 m y tienen que llegar
-            # del mostrador al fondo.
-            ("fluorescente", (-1.0, 4.6, 19.5), (0.55, 0.75, 0.95), (1, 0.06, 0.035)),
-            ("lampara_restringido", (21.1, 4.6, 20.0), (1.6, 1.0, 0.5), (1, 0.06, 0.03)),
-            # Junto a las patrullas: tine de rojo y azul la esquina oeste de
-            # la fachada y el asfalto mojado. fondo_vivo la alterna.
-            # Cae rapido con la distancia: el despacho no tiene ventanas y
-            # no debe tenirse de sirena a traves de los muros.
-            ("patrulla", (-14.0, 2.4, Z_SUR - 4.0), (2.0, 0.15, 0.10), (1, 0.05, 0.03))):
-        luz = mundo.attachNewNode(PointLight(nombre))
-        luz.node().setColor((*col, 1))
-        luz.node().setAttenuation(att)
-        luz.setPos(*pos)
-        _encender(mundo, luz)
-        if nombre == "patrulla":
-            _ACTUAL["luz_sirena"] = luz
+    # La sirena de las patrullas: tine de rojo y azul la esquina oeste
+    # de la fachada y el asfalto mojado. fondo_vivo la alterna. Cae rapido
+    # con la distancia: el despacho no tiene ventanas.
+    sirena = mundo.attachNewNode(PointLight("patrulla"))
+    sirena.node().setColor((2.0, 0.15, 0.10, 1))
+    sirena.node().setAttenuation((1, 0.05, 0.03))
+    sirena.setPos(-14.0, 2.4, Z_SUR - 4.0)
+    _encender(mundo, sirena)
+    _ACTUAL["luz_sirena"] = sirena
+
+    # Las lamparas del colegio, por cercania (luces.Lamparas): el pasillo
+    # tiene cinco fluorescentes, y cada archivo y el despacho, la suya.
+    # Solo se encienden las cuatro mas cercanas a lo que se mira: con la
+    # luna y la sirena hacen las seis que caben.
+    frio, calido = (2.5, 2.8, 3.2), (4.4, 2.8, 1.3)
+    zm = Z_MEDIO_PASILLO
+    puntos = [{"pos": (x, 3.08, zm), "color": frio, "apertura": 148,
+               "alcance": 11.0, "caida": 0.09}
+              for x in (-3.4, 2.6, 8.6, 14.6, 20.6)]
+    puntos += [
+        # el despacho del rector: su lampara calida, desde el techo
+        {"pos": (0.3, 3.0, 1.3), "color": calido, "apertura": 140,
+         "alcance": 10.0, "caida": 0.11},
+        # los dos archivos, de techo alto (5 m): un cono ancho que llega
+        # del mostrador al fondo y deja los estantes tirando sombra larga
+        {"pos": (-1.0, ALTO_ARCHIVOS - 0.25, 19.5), "color": (1.5, 1.95, 2.5),
+         "apertura": 152, "alcance": 30.0, "caida": 0.014},
+        {"pos": (21.1, ALTO_ARCHIVOS - 0.25, 20.0), "color": (3.3, 2.1, 1.0),
+         "apertura": 152, "alcance": 30.0, "caida": 0.014},
+    ]
+    luces.Lamparas(mundo, puntos, cupo=4, radio=24.0)
 
 
 # Planos medidos desde la marca, dentro del despacho (x -5.2..4.65,
@@ -2717,6 +2726,10 @@ def _campana(mundo):
     for x in range(-3, 22, 3):
         for z in (-8.0, 0.5):
             poner("panel_calido", x, x + 1.2, y - 0.03, y - 0.005, z - 0.3, z + 0.3)
+    # Los servicios (recepcion, cocineta, impresion) no tenian plafon: su
+    # luz salia de la nada. Uno por sala, donde cuelga su foco.
+    for x in (2.8, 10.0, 17.4):
+        poner("panel_calido", x, x + 1.2, y - 0.03, y - 0.005, -13.3, -12.7)
     # El techo del piso 12, mas bajo de luz: la sala la alumbran la lampara
     # del billar y la barra, no los paneles.
     yj = YJ + ALTO_JUEGOS
@@ -2741,6 +2754,10 @@ def _ciudad_abajo(mundo):
     """
     giro = mundo.attachNewNode("ciudad_giro")
     giro.setH(GIRO_CIUDAD)
+    # La ciudad de abajo no da sombra a la oficina ni a la azotea, y son
+    # cientos de piezas: fuera de los pases de sombra (en la RTX 4060 el
+    # capitulo 3 se iba a 22 ms por fotograma dibujandola cinco veces).
+    luces.sin_sombra(giro)
     ciudad = giro.attachNewNode("ciudad")
     x, y, z = OFICINA_EN_CIUDAD
     ciudad.setPos(-x, -y, -z)
@@ -2835,27 +2852,39 @@ def _luces_campana(mundo):
     sol = mundo.attachNewNode(DirectionalLight("sol"))
     sol.node().setColor((1.30, 0.80, 0.45, 1))
     sol.setHpr(200 + GIRO_CIUDAD, -14, 0)
-    if SOMBRAS:
-        _sombra_de_sol(sol, centro=(9.0, 1.5, -4.5), ancho=34.0)
+    luces.sol(sol, centro=(9.0, 1.5 + YJ / 2, -4.5), ancho=36.0, fondo=40.0,
+              refuerzo=2.2)
     _encender(mundo, sol)
 
     cielo = mundo.attachNewNode(DirectionalLight("cielo"))
     cielo.node().setColor((0.30, 0.36, 0.55, 1))
     cielo.setHpr(20 + GIRO_CIUDAD, -35, 0)
+    luces.relleno(cielo, 0.45)
     _encender(mundo, cielo)
 
-    for nombre, pos, col, att in (
-            ("lampara_daniel", (1.0, 1.25, 2.25), (1.8, 1.2, 0.6), (1, 0.18, 0.30)),
-            ("pantallas", (8.3, 1.7, -3.3), (0.45, 0.65, 1.4), (1, 0.12, 0.12)),
-            # La sala de conferencias ya no se usa: su luz es la del billar,
-            # arriba, y no se puede añadir otra (6 por escenario).
-            ("lampara_billar", (MESA_BILLAR[0], YJ + 1.55, MESA_BILLAR[1]),
-             (2.4, 1.65, 0.85), (1, 0.18, 0.28))):
-        luz = mundo.attachNewNode(PointLight(nombre))
-        luz.node().setColor((*col, 1))
-        luz.node().setAttenuation(att)
-        luz.setPos(*pos)
-        _encender(mundo, luz)
+    # Las lamparas, por cercania (luces.Lamparas). Antes habia tres luces
+    # de punto para once salas en dos pisos: casi todas vivian del sol,
+    # que las alumbraba atravesando los muros. Ahora cada sala tiene su
+    # plafon, que proyecta, y se encienden las cuatro mas cercanas.
+    calido, y = (3.6, 3.1, 2.4), ALTO_CAMPANA - 0.12
+    plafon = {"color": calido, "apertura": 150, "alcance": 11.0, "caida": 0.085}
+    puntos = [dict(plafon, pos=(x, y, 0.5)) for x in (-0.9, 6.6, 11.6, 18.6)]
+    puntos += [dict(plafon, pos=(x, y, -8.0)) for x in (0.6, 6.6, 12.6, 18.6)]
+    puntos += [dict(plafon, pos=(x, y, -13.0)) for x in (3.4, 10.6, 18.0)]
+    puntos += [
+        # la lampara del escritorio de Daniel: baja, calida y cerrada
+        {"pos": (1.0, 1.75, 2.25), "color": (4.6, 3.0, 1.4), "apertura": 120,
+         "alcance": 6.0, "caida": 0.30},
+        # el muro de pantallas de la sala de guerra: azul, de lado
+        {"pos": (8.3, 2.1, -4.15), "mira": (8.3, 0.6, 0.5),
+         "color": (1.1, 1.6, 3.4), "apertura": 140, "alcance": 10.0, "caida": 0.10},
+        # piso 12: la lampara del billar (la que manda) y los dos plafones
+        {"pos": (MESA_BILLAR[0], YJ + 1.62, MESA_BILLAR[1]),
+         "color": (6.2, 4.2, 2.1), "apertura": 132, "alcance": 7.0, "caida": 0.20},
+        dict(plafon, pos=(-0.5, YJ + ALTO_JUEGOS - 0.12, -12.0), color=(2.6, 2.1, 1.5)),
+        dict(plafon, pos=(-0.5, YJ + ALTO_JUEGOS - 0.12, 1.5), color=(2.6, 2.1, 1.5)),
+    ]
+    luces.Lamparas(mundo, puntos, cupo=4, radio=13.5)
 
 
 def _pintar_piso(n):
@@ -3472,6 +3501,13 @@ def fondo_vivo(dt):
     """Lo que se mueve solo en el fondo: la ciudad tras los ventanales
     del capitulo 3; la lluvia y las sirenas del colegio del 2; el chat en
     las pantallas del estudio del 4."""
+    # Las lamparas por cercania siguen a lo que mira la camara: un par de
+    # metros por delante de ella, que es donde esta lo que se ve.
+    cam = application.base.camera
+    ojo = cam.getPos(application.base.render)
+    frente = application.base.render.getRelativeVector(cam, Vec3(0, 0, 1))
+    luces.seguir(dt, (ojo[0] + frente[0] * 2.5, ojo[1] + frente[1] * 2.5,
+                      ojo[2] + frente[2] * 2.5))
     if _ACTUAL["nombre"] == "campana":
         seguir_cielo()
         mover_trafico(dt)
@@ -3792,6 +3828,7 @@ def cambiar_escenario(mundo, escenario):
         plaza.desmontar()
     if _ACTUAL["contenedor"] is not None:
         _ACTUAL["contenedor"].removeNode()
+    luces.olvidar()
     _montar(mundo, escenario)
 
 
@@ -3803,10 +3840,10 @@ def _pintar_contacto(img):
         for x in range(w):
             d = math.hypot((x - w / 2) / (w / 2), (y - h / 2) / (h / 2))
             f = max(0.0, 1.0 - d)
-            px[x, y] = (0, 0, 0, int(255 * 0.62 * f * f * (3 - 2 * f)))
+            px[x, y] = (0, 0, 0, int(255 * 0.80 * f * f * (3 - 2 * f)))
 
 
-def sombra_de_contacto(actor, radio=0.46):
+def sombra_de_contacto(actor, radio=0.52):
     """Una mancha oscura bajo los pies: lo que pega a alguien al suelo.
 
     Sin ella los personajes flotan, y era lo primero que cantaba al
@@ -3815,14 +3852,12 @@ def sombra_de_contacto(actor, radio=0.46):
     no tiene resolucion para un zapato. Es el truco de toda la vida (y
     el que usan los grandes por debajo de sus sombras de verdad).
     """
-    if not SOMBRAS:
-        return None
     hoja = CardMaker("contacto")
     hoja.setFrame(-1, 1, -1, 1)
     nodo = actor.attachNewNode(hoja.generate())
-    # Sin girar: aqui la altura es Y, asi que el plano XZ en el que
-    # CardMaker hace la hoja YA es el suelo. Girada 90 quedaba de canto
-    # y no se veia (se comprobo en captura).
+    # CardMaker hace la hoja de pie (en XY, medido con getTightBounds):
+    # hay que tumbarla sobre el suelo, que aqui es el plano XZ.
+    nodo.setP(90)
     esc = actor.getSx() or 1.0
     nodo.setScale(radio / esc)
     nodo.setY(0.02 / esc)                       # un dedo sobre el suelo
@@ -3830,8 +3865,12 @@ def sombra_de_contacto(actor, radio=0.46):
     nodo.setTransparency(TransparencyAttrib.MAlpha)
     nodo.setTwoSided(True)
     nodo.setDepthWrite(False)
-    nodo.setBin("fixed", 5)                     # tras el suelo, antes que la gente
-    nodo.setLightOff(1)
+    # En el cajon «fixed», que se pinta despues del suelo: en el de las
+    # transparencias normales salia antes y el suelo la tapaba. Y SIN
+    # setLightOff: con las luces apagadas este shader no la dibuja (las
+    # dos cosas, vistas una a una en depuracion/_blob.py).
+    nodo.setBin("fixed", 5)
+    luces.sin_sombra(nodo)
     return nodo
 
 
@@ -3850,6 +3889,21 @@ def protagonista(mundo, rol=None):
     return actor
 
 
+def nivel_de_sombras():
+    """0, 1 o 2: lo que diga Ajustes, salvo que ALCALDE_SOMBRAS lo fuerce
+    (el banco lo usa para sacar la misma vista con y sin sombras)."""
+    forzado = os.environ.get("ALCALDE_SOMBRAS")
+    if forzado in ("0", "1", "2"):
+        return int(forzado)
+    import ajustes
+    return ajustes.VALORES.get("sombras", 2)
+
+
+def sombras(n):
+    """La fila «Sombras» de Ajustes: cambia la calidad en caliente."""
+    luces.calidad(n)
+
+
 def crear(escenario="cafeteria", rol=None):
     """Monta el mundo entero y devuelve (nodo_raiz, actor).
 
@@ -3857,6 +3911,10 @@ def crear(escenario="cafeteria", rol=None):
     cambiar con cambiar_escenario().
     """
     mundo = application.base.render.attachNewNode("mundo")
+    # La calidad de sombras se sabe ANTES de montar: las luces del
+    # escenario nacen ya proyectando (o no).
+    luces.preparar_shaders()
+    luces.calidad(nivel_de_sombras())
     _montar(mundo, escenario)
     actor = protagonista(mundo, rol)
 
@@ -3866,8 +3924,10 @@ def crear(escenario="cafeteria", rol=None):
     # personajes en pantalla. Nuestros esqueletos (~68 huesos) caben en las
     # 100 matrices del shader.
     _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=4,
-                                        max_lights=8, enable_shadows=SOMBRAS,
+                                        max_lights=8,
+                                        enable_shadows=bool(luces.nivel()),
                                         use_hardware_skinning=True)
+    luces.iniciar(_RENDER["tuberia"], mundo, luces.nivel())
     brillo(0.0)
     return mundo, actor
 
@@ -4454,6 +4514,7 @@ def _malla_de_luz():
     luz.setTransparency(TransparencyAttrib.MAlpha)
     luz.setDepthWrite(False)
     luz.setTwoSided(True)
+    luces.sin_sombra(luz)          # el haz es luz: no puede dar sombra
     return luz
 
 

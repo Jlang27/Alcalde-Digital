@@ -2074,6 +2074,8 @@ FILAS = (
      "Ocupa toda la pantalla. Se recuerda para la próxima vez."),
     ("brillo", "Brillo", "barra",
      "Ajústalo mirando la escena del fondo, no a ciegas."),
+    ("sombras", "Sombras", "opcion",
+     "Lo que más pesa. Bájalas o quítalas si el juego va a tirones."),
     ("volumen", "Volumen general", "barra",
      "Manda sobre la música y los efectos."),
     ("musica", "Música", "barra",
@@ -2091,7 +2093,7 @@ FILAS = (
 )
 
 # Antes de que indice empiece una seccion nueva.
-SECCIONES = {0: "Imagen", 2: "Sonido", 5: "Juego", 7: "Accesibilidad"}
+SECCIONES = {0: "Imagen", 3: "Sonido", 6: "Juego", 8: "Accesibilidad"}
 
 # Al cambiar estas dos hay que volver a dibujar la pantalla entera: la
 # paleta y el cuerpo de texto se leen cuando nace cada pieza, no despues.
@@ -2252,7 +2254,7 @@ class Ajustes:
 
     def _papeleta(self, clave, y, elegida):
         self.controles.append(E.etiqueta(
-            A.RITMOS[A.VALORES[clave]], (_CAJA_X, y), 0.82,
+            A.OPCIONES[clave][A.VALORES[clave]], (_CAJA_X, y), 0.82,
             E.TEXTO if elegida else E.TEXTO_TENUE, origen=(0, 0)))
 
     # ----------------------------------------------------------------
@@ -2279,7 +2281,8 @@ class Ajustes:
         """Transparenta el panel mientras se toca el brillo."""
         if self.velo is None:
             return
-        brillo = FILAS[self.seleccion][0] == "brillo"
+        # Brillo y sombras se ajustan viendo la escena, no el panel.
+        brillo = FILAS[self.seleccion][0] in ("brillo", "sombras")
         self.velo.color = E.tinta(VELO_BRILLO if brillo else VELO_NORMAL)
 
     def mover(self, paso):
@@ -2292,7 +2295,7 @@ class Ajustes:
         if tipo == "barra":
             A.VALORES[clave] = max(0, min(A.PASOS, A.VALORES[clave] + paso))
         elif tipo == "opcion":
-            A.VALORES[clave] = (A.VALORES[clave] + paso) % len(A.RITMOS)
+            A.VALORES[clave] = (A.VALORES[clave] + paso) % len(A.OPCIONES[clave])
         else:
             A.VALORES[clave] = paso > 0
         self._aplicar(clave)
@@ -2313,6 +2316,8 @@ class Ajustes:
             A.aplicar_ventana()
         if clave == "brillo":
             A.aplicar_brillo()
+        if clave == "sombras":
+            A.aplicar_sombras()
         if clave in REHACER:
             A.aplicar_estilo()
             if self.al_cambiar is not None:
