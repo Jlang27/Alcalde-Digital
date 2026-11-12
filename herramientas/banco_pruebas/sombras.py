@@ -11,6 +11,7 @@ import os
 
 os.environ.pop("ALCALDE_SOMBRAS", None)      # aqui manda Ajustes
 os.environ.pop("ALCALDE_TEXTURAS", None)
+os.environ.pop("ALCALDE_IMAGEN", None)
 
 from banco import *
 from banco import J
@@ -19,9 +20,12 @@ import luces
 import pantallas
 
 arrancar()
-A.VALORES["sombras"] = A.VALORES["texturas"] = 2
+A.VALORES["sombras"] = A.VALORES["texturas"] = A.VALORES["imagen"] = 2
+A.VALORES["antialias"] = 2
 J.mundo.sombras(2)
 J.mundo.texturas_calidad(2)
+J.mundo.imagen(2)
+J.mundo.antialias(2)
 tecla("down arrow", 0.2); tecla("down arrow", 0.2); tecla("enter", 0.5)
 tecla("down arrow", 0.3); tecla("down arrow", 0.3); tecla("enter", 0.5)
 for _ in range(30):
@@ -102,6 +106,47 @@ foto("texturas_no")
 tecla("right arrow", 0.4)
 tecla("right arrow", 0.5)
 assert texturas.nivel() == 2 and lados() == {1024}, lados()
+
+# --- Imagen de cine (posproceso.py) y Antialiasing ----------------------
+import posproceso
+
+
+def entrada(nombre):
+    dato = tuberia._post_process_quad.get_shader_input(nombre)   # guardado: el
+    return float(dato.get_vector()[0])     # vector apunta dentro de el
+
+
+tecla("down arrow", 0.2)
+assert pantallas.FILAS[J.cl.ajustes.seleccion][0] == "imagen"
+assert posproceso.nivel() == 2 and entrada("pos_resplandor") == 1.0
+foto("imagen_cine")
+tecla("left arrow", 0.4)                      # Cine -> Suave: sin resplandor
+assert A.VALORES["imagen"] == 1 and entrada("pos_resplandor") == 0.0
+assert entrada("pos_cine") == 1.0
+tecla("left arrow", 0.4)                      # Suave -> No: la imagen de antes
+assert A.VALORES["imagen"] == 0 and entrada("pos_cine") == 0.0
+foto("imagen_no")
+tecla("right arrow", 0.3)
+tecla("right arrow", 0.4)
+assert posproceso.nivel() == 2 and entrada("pos_resplandor") == 1.0
+
+tecla("down arrow", 0.2)
+assert pantallas.FILAS[J.cl.ajustes.seleccion][0] == "antialias"
+assert tuberia.msaa_samples == 4
+tecla("left arrow", 0.5)                      # 4x -> 2x: simplepbr rehace el cuadro
+tecla("left arrow", 0.5)                      # 2x -> No
+assert tuberia.msaa_samples == 0
+# ...y el posprocesado sigue puesto en el cuadro nuevo
+assert entrada("pos_resplandor") == 1.0 and entrada("pos_cine") == 1.0
+foto("antialias_no")
+# las sombras sobreviven a que se rehaga el cuadro
+assert tuberia.enable_shadows and sol.node().isShadowCaster()
+for _ in range(3):
+    tecla("right arrow", 0.5)                 # hasta 8x
+assert tuberia.msaa_samples == 8
+foto("antialias_8x")
+tecla("left arrow", 0.5)                      # de vuelta a 4x
+assert tuberia.msaa_samples == 4 and A.VALORES["antialias"] == 2
 
 tecla("escape", 0.4)
 tecla("escape", 0.5)

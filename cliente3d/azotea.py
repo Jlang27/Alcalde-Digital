@@ -21,7 +21,7 @@ from panda3d.core import AmbientLight, DirectionalLight, Fog, LColor, PointLight
 from PIL import ImageDraw
 
 import mundo as M
-from ursina import Cylinder
+from ursina import Cylinder, color
 
 
 def _cilindro():
@@ -44,7 +44,8 @@ PLANO_PELEA = (Vec3(0.0, 1.45, -6.4), Vec3(0.0, 1.2, 0.0), 44)
 
 # Para el banco de pruebas y el cierre del dia (foto de la escena).
 PLANOS_AZOTEA = {
-    "PG":      (Vec3(0.0, 2.6, -7.8), 1.2, 0.0, 56),
+    # dentro de la azotea: mas atras queda el caseton de la escalera
+    "PG":      (Vec3(1.0, 2.35, -4.4), 1.2, 0.0, 68),
     "PM":      (Vec3(-1.2, 1.55, -3.6), 1.30, 6.0),
     "PP":      (Vec3(-0.9, 1.62, -1.9), 1.55, 6.0),
     "LATERAL": (Vec3(-4.0, 1.5, -1.0), 1.3, -6.0),
@@ -96,6 +97,74 @@ def _pintar_pantalla_vecina(img):
            fill=(150, 200, 255, 255), anchor="mm")
 
 
+def _pintar_afiche(img):
+    """El afiche de Ospina, como los de la calle: tinta azul, titular
+    apretado y la casilla marcada."""
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(29, 95, 168, 255))
+    d.rectangle((0, int(h * 0.72), w, h), fill=(240, 237, 229, 255))
+    d.text((w / 2, h * 0.22), "OSPINA", font=M._letra(int(h * 0.15)),
+           fill=(240, 237, 229, 255), anchor="mm")
+    d.text((w / 2, h * 0.36), "ALCALDE", font=M._letra(int(h * 0.085)),
+           fill=(224, 164, 42, 255), anchor="mm")
+    d.text((w / 2, h * 0.55), "Un colegio mejor", font=M._letra(int(h * 0.055), False),
+           fill=(240, 237, 229, 255), anchor="mm")
+    lado = int(h * 0.12)
+    x0, y0 = int(w * 0.12), int(h * 0.80)
+    d.rectangle((x0, y0, x0 + lado, y0 + lado), outline=(23, 24, 26, 255), width=5)
+    d.line((x0 + 8, y0 + 8, x0 + lado - 8, y0 + lado - 8), fill=(23, 24, 26, 255), width=8)
+    d.line((x0 + lado - 8, y0 + 8, x0 + 8, y0 + lado - 8), fill=(23, 24, 26, 255), width=8)
+    d.text((x0 + lado + 18, y0 + lado / 2), "VOTA", font=M._letra(int(h * 0.075)),
+           fill=(23, 24, 26, 255), anchor="lm")
+
+
+def _caseton(cont, muro, metal, bombilla):
+    """El caseton de la escalera, que cierra la azotea por el sur. Sin el,
+    por ese lado no habia ni pretil ni ciudad: se veia el cielo vacio con
+    el trafico de la avenida flotando en el. Va en su nodo porque la camara
+    de la pelea se pone justo ahi: `caseton(False)` lo esconde."""
+    nodo = cont.attachNewNode("caseton")
+    z = FRENTE_Z - 0.75
+    alto = 4.4
+    M._pieza(nodo, "cube", muro, (ANCHO * 2 + 0.6, alto, 0.5), (0, alto / 2, z))
+    M._pieza(nodo, "cube", muro, (ANCHO * 2 + 0.9, 0.18, 0.75), (0, alto + 0.09, z))
+    # la puerta de la escalera, con su marco, su luz y el numero de planta
+    puerta = M._material((0.07, 0.10, 0.12, 1), rugosidad=0.45, metalico=0.6, textura="metal")
+    M._pieza(nodo, "cube", metal, (1.22, 2.26, 0.06), (2.6, 1.13, z + 0.27))
+    M._pieza(nodo, "cube", puerta, (1.06, 2.14, 0.06), (2.6, 1.07, z + 0.29))
+    M._pieza(nodo, "cube", metal, (0.04, 0.16, 0.05), (2.2, 1.05, z + 0.33))
+    M._pieza(nodo, "cube", metal, (0.5, 0.07, 0.22), (2.6, 2.55, z + 0.36))
+    M._pieza(nodo, "cube", bombilla, (0.34, 0.03, 0.14), (2.6, 2.505, z + 0.36))
+    # tuberias, una caja de registros y la rejilla del extractor
+    for x in (-5.9, -5.7):
+        M._pieza(nodo, "cube", metal, (0.07, alto - 0.3, 0.07), (x, (alto - 0.3) / 2, z + 0.3))
+    M._pieza(nodo, "cube", metal, (0.7, 0.9, 0.2), (-4.4, 1.5, z + 0.34))
+    # Oscuros y mates: en metal claro, el sol de frente los quemaba en un
+    # rectangulo blanco que parecia una pantalla sin imagen.
+    hueco = M._material((0.012, 0.012, 0.014, 1), rugosidad=0.95)
+    lama = M._material((0.07, 0.07, 0.075, 1), rugosidad=0.8)
+    M._pieza(nodo, "cube", hueco, (1.5, 1.0, 0.1), (-1.2, 3.1, z + 0.3))
+    for k in range(6):
+        M._pieza(nodo, "cube", lama, (1.4, 0.05, 0.06), (-1.2, 2.72 + k * 0.15, z + 0.36))
+    # un afiche de campaña medio despegado: la eleccion llega hasta aqui
+    papel = M._material((0.75, 0.73, 0.66, 1), rugosidad=0.9)
+    M._pieza(nodo, "cube", papel, (0.96, 1.36, 0.02), (0.6, 1.5, z + 0.26))
+    # Fuera del PBR, como las pantallas (ni el quad ni una lamina cogian
+    # bien la luz ni la textura), pero atenuado: es papel, no una pantalla.
+    cartel = M._pantalla_plana(M._textura("afiche_azotea", _pintar_afiche, 352, 512),
+                               (0.6, 1.5, z + 0.285), 0.88, 1.28, (0.6, 1.5, 0.0))
+    cartel.color = color.rgb(0.42, 0.36, 0.34)      # la luz del atardecer en el muro
+    cartel.reparentTo(nodo)                         # se esconde con el caseton
+    cartel.setPos(0.6, 1.5, z + 0.285)
+    _ESTADO["caseton"] = nodo
+
+
+def caseton(visible):
+    nodo = _ESTADO.get("caseton")
+    if nodo is not None and not nodo.isEmpty():
+        nodo.show() if visible else nodo.hide()
+
+
 def construir(cont):
     """Monta la azotea y la ciudad de abajo dentro del contenedor."""
     M._ciudad_abajo(cont)
@@ -118,6 +187,7 @@ def construir(cont):
                  (k * 1.2, 0.005, (FONDO_Z + FRENTE_Z) / 2))
     for k in range(-3, 4):
         M._pieza(cont, "cube", losa_oscura, (ANCHO * 2, 0.012, 0.03), (0, 0.006, k * 1.2))
+    _caseton(cont, pretil, metal, bombilla)
     # el pretil: atras bajo (que se vea la ciudad), a los lados mas alto
     M._pieza(cont, "cube", pretil, (ANCHO * 2, ALTO_PRETIL, 0.3),
              (0, ALTO_PRETIL / 2, FONDO_Z))

@@ -1831,6 +1831,7 @@ def empezar_kombat():
     # Nodo: el traje del alcalde a oscuras, con la mascara de la red. Es
     # provisional hasta que lleguen los modelos de luchador.
     cl.nodo = mundo.luchador(cl.mundo, "alcalde")
+    azotea.caseton(False)          # la camara de la pelea se pone donde el
     cl.kombat = kombat_cliente.Combate(
         cl.partida.kombat, cl.actor, cl.nodo,
         aviso_sofia="sofia_en_el_chat" in cl.partida.heredado())
@@ -1851,6 +1852,7 @@ def cerrar_kombat():
     if cl.nodo is not None:
         mundo.retirar_luchador(cl.nodo)
         cl.nodo = None
+        azotea.caseton(True)
 
 
 # ===================================================================

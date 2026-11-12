@@ -567,7 +567,7 @@ class Partida8:
         self.motivo = motivo
         if ganador == "daniel":
             # Mesa limpia es cerrar con la 8 sin una sola falta; por reloj no.
-            limpia = self.faltas["daniel"] == 0 and motivo.startswith("metió la 8")
+            limpia = self.faltas["daniel"] == 0 and motivo == "metió la 8 en la tronera cantada"
             self.resultado = "mesa_limpia" if limpia else "gano"
         else:
             self.resultado = "perdio"
@@ -939,6 +939,13 @@ if __name__ == "__main__":
     p.tirar(math.radians(45), 0.35)
     _parar_todo(p)
     assert p.fase == "fin" and p.resultado == "perdio", (p.resultado, p.motivo)
+
+    # 4b. Si es el asesor quien la mete antes de tiempo, Daniel gana, pero
+    #     no es «mesa limpia»: esa es cerrar el mismo con la 8.
+    p = Partida8(semilla=2)
+    p.faltas["daniel"] = 0
+    p._fin("daniel", "metió la 8 antes de tiempo")
+    assert p.resultado == "gano", p.resultado
 
     # 5. La 8 en la tronera cantada, sin faltas: mesa limpia.
     p = Partida8(semilla=3)

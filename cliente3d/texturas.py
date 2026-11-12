@@ -428,6 +428,14 @@ def coordenadas_de_mundo(nodo, referencia, metros):
     if nodo.node().isGeomNode():
         mallas.append(nodo)
     for malla in mallas:
+        if malla.node().getNumParents() > 1:
+            # Ursina cuelga la MISMA malla de todos sus cubos (instancias):
+            # escribirle coordenadas a uno se las cambiaba a todos, y solo
+            # el ultimo vestido quedaba bien; los demas, con la textura
+            # estirada en rayas. Cada pieza se queda con su copia.
+            propia = malla.copyTo(malla.getParent())
+            malla.detachNode()
+            malla = propia
         a_mundo = malla.getMat(referencia)
         a_objeto = referencia.getMat(malla)
         gnodo = malla.node()

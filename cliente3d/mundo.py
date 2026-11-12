@@ -14,6 +14,8 @@ from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
 from PIL import Image, ImageDraw, ImageFont
 
 import luces
+import posproceso
+import ambiente
 import texturas
 from ursina import Entity, Mesh, application, camera, color, destroy, scene, Vec2, Vec3
 
@@ -3600,7 +3602,7 @@ def _quitar_mapa_de_brillo(actor):
     textura = Texture("rugosidad_plana")
     textura.load(plana)
 
-    etapa = None
+    etapa = relieve = None
     for geom in actor.findAllMatches("**/+GeomNode"):
         nodo = geom.node()
         for i in range(nodo.getNumGeoms()):
@@ -3610,9 +3612,21 @@ def _quitar_mapa_de_brillo(actor):
             for j in range(attrib.getNumOnStages()):
                 if attrib.getOnStage(j).getName() == "Metal Rough":
                     etapa = attrib.getOnStage(j)
+                elif attrib.getOnStage(j).getName() == "Normal":
+                    relieve = attrib.getOnStage(j)
 
     if etapa is not None:
         actor.setTexture(etapa, textura, 10000)
+    if relieve is not None:
+        # El relieve del personaje, plano. Los mapas de relieve se
+        # encendieron para el decorado (texturas.py), y con ellos los de
+        # estos modelos, que no traen tangentes: a contraluz se les
+        # marcaban las aristas de cada triangulo, como una malla de alambre.
+        liso = PNMImage(1, 1)
+        liso.setXelVal(0, 0, 128, 128, 255)
+        normal = Texture("relieve_plano")
+        normal.load(liso)
+        actor.setTexture(relieve, normal, 10000)
 
 
 def _niebla(mundo, densidad=0.038):
@@ -3686,6 +3700,7 @@ def _montar(mundo, escenario):
         _niebla(mundo, 0.014)
     _ACTUAL["nombre"] = escenario
     _ACTUAL["contenedor"] = cont
+    ambiente.poner(escenario, cont)
 
 
 # Por donde se puede andar y donde no. Los numeros salen de medir la
@@ -3920,6 +3935,39 @@ def nivel_de_texturas():
     return ajustes.VALORES.get("texturas", 2)
 
 
+def nivel_de_imagen():
+    """0, 1 o 2: Ajustes, o ALCALDE_IMAGEN si se fuerza (posproceso.py)."""
+    forzado = os.environ.get("ALCALDE_IMAGEN")
+    if forzado in ("0", "1", "2"):
+        return int(forzado)
+    import ajustes
+    return ajustes.VALORES.get("imagen", 2)
+
+
+def con_reflejos():
+    """Ajustes, o ALCALDE_REFLEJOS (0/1) si se fuerza (ambiente.py)."""
+    forzado = os.environ.get("ALCALDE_REFLEJOS")
+    if forzado in ("0", "1"):
+        return forzado == "1"
+    import ajustes
+    return bool(ajustes.VALORES.get("reflejos", True))
+
+
+def reflejos(si):
+    """La fila «Reflejos del cielo» de Ajustes, en caliente."""
+    ambiente.activar(si)
+
+
+def imagen(n):
+    """La fila «Imagen de cine» de Ajustes, en caliente."""
+    posproceso.calidad(n)
+
+
+def antialias(i):
+    """La fila «Antialiasing» de Ajustes, en caliente."""
+    posproceso.antialias(i)
+
+
 def texturas_calidad(n):
     """La fila «Texturas» de Ajustes: cambia la calidad en caliente."""
     texturas.calidad(n)
@@ -3940,6 +3988,7 @@ def crear(escenario="cafeteria", rol=None):
     # La calidad de sombras se sabe ANTES de montar: las luces del
     # escenario nacen ya proyectando (o no).
     luces.preparar_shaders()
+    posproceso.preparar_shaders()
     luces.calidad(nivel_de_sombras())
     texturas.calidad(nivel_de_texturas())
     _montar(mundo, escenario)
@@ -3950,13 +3999,17 @@ def crear(escenario="cafeteria", rol=None):
     # En una grafica integrada eso era la mitad del fotograma con cinco
     # personajes en pantalla. Nuestros esqueletos (~68 huesos) caben en las
     # 100 matrices del shader.
-    _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=4,
+    import ajustes
+    muestras = posproceso.MUESTRAS[ajustes.VALORES.get("antialias", 2)]
+    _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=muestras,
                                         max_lights=8,
                                         use_normal_maps=True,
                                         enable_shadows=bool(luces.nivel()),
                                         use_hardware_skinning=True)
     luces.iniciar(_RENDER["tuberia"], mundo, luces.nivel())
     texturas.iniciar(mundo)
+    posproceso.iniciar(_RENDER["tuberia"], nivel_de_imagen())
+    ambiente.iniciar(_RENDER["tuberia"], con_reflejos())
     brillo(0.0)
     return mundo, actor
 

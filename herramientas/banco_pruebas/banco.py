@@ -53,6 +53,10 @@ def arrancar(ritmo=None):
     global _app
     A.cargar()
     A.VALORES["pantalla_completa"] = False
+    # Los graficos, al maximo: si no, cada prueba y cada captura salian
+    # con lo que el ultimo que jugo en este PC dejo puesto en Ajustes.
+    # (ALCALDE_SOMBRAS, _TEXTURAS e _IMAGEN siguen mandando si se ponen.)
+    A.VALORES.update(sombras=2, texturas=2, imagen=2, antialias=2, reflejos=True)
     if ritmo is not None:
         A.VALORES["ritmo"] = ritmo
     A.guardar = lambda: None

@@ -39,6 +39,9 @@ VALORES = {
     "ritmo": 1,                    # 0 pausado, 1 normal, 2 rapido
     "sombras": 2,                  # 0 no, 1 bajas, 2 altas (luces.py)
     "texturas": 2,                 # 0 no, 1 bajas, 2 altas (texturas.py)
+    "imagen": 2,                   # 0 no, 1 suave, 2 cine (posproceso.py)
+    "antialias": 2,                # 0 no, 1 2x, 2 4x, 3 8x (posproceso.py)
+    "reflejos": True,              # el cielo en lo pulido (ambiente.py)
 }
 
 RITMOS = ("Pausado", "Normal", "Rápido")
@@ -50,7 +53,13 @@ SOMBRAS = ("No", "Bajas", "Altas")
 # Las texturas casi no cuestan tiempo, cuestan memoria de video: en
 # «Altas» son de 1024 px con relieve y brillo; en «Bajas», de 512.
 TEXTURAS = ("No", "Bajas", "Altas")
-OPCIONES = {"ritmo": RITMOS, "sombras": SOMBRAS, "texturas": TEXTURAS}
+# El posprocesado: «Suave» (color y viñeta) no cuesta nada; «Cine» añade
+# el resplandor de las luces, que pide reducir la imagen en cada fotograma.
+IMAGEN = ("No", "Suave", "Cine")
+# Bordes sin dientes de sierra (MSAA). 8x solo en graficas dedicadas.
+ANTIALIAS = ("No", "2x", "4x", "8x")
+OPCIONES = {"ritmo": RITMOS, "sombras": SOMBRAS, "texturas": TEXTURAS,
+            "imagen": IMAGEN, "antialias": ANTIALIAS}
 FACTOR_RITMO = (1.45, 1.0, 0.72)
 
 
@@ -132,6 +141,21 @@ def aplicar_sombras():
 def aplicar_texturas():
     import mundo
     mundo.texturas_calidad(mundo.nivel_de_texturas())
+
+
+def aplicar_imagen():
+    import mundo
+    mundo.imagen(mundo.nivel_de_imagen())
+
+
+def aplicar_reflejos():
+    import mundo
+    mundo.reflejos(mundo.con_reflejos())
+
+
+def aplicar_antialias():
+    import mundo
+    mundo.antialias(VALORES["antialias"])
 
 
 def _monitor():

@@ -269,24 +269,29 @@ class Cuerpo:
 # ---------------------------------------------------------------------
 
 def poner_mascara(actor, mira):
-    """Una careta blanca de ojos rojos que envuelve media cabeza. Se monta en
-    ejes del mundo con el luchador ya de perfil (mira = +1 o -1 en x) y se
-    cuelga del hueso con wrtReparentTo: no hay que adivinar los ejes del
-    hueso. Envuelve y no es una placa porque la camara ve la cara de lado."""
+    """El casco de Nodo: negro pulido, con una visera roja encendida que da
+    la vuelta a la cara. Antes era una caja blanca y, de perfil (que es
+    como se ve toda la pelea), se leia como una pantalla en blanco pegada
+    a la cabeza. La visera envuelve frente y costados: se ve desde la
+    camara lateral, y con el resplandor de «Imagen de cine», brilla.
+    Se monta en ejes del mundo con el luchador ya de perfil (mira = +1 o
+    -1 en x) y se cuelga del hueso con wrtReparentTo: no hay que adivinar
+    los ejes del hueso."""
     huesos = {j.getName().split(":")[-1]: j for j in actor.getJoints()}
     if "Head" not in huesos:
         return None
     raiz_mundo = actor.getParent()
     cabeza = actor.exposeJoint(None, "modelRoot", huesos["Head"].getName())
     raiz = raiz_mundo.attachNewNode("mascara")
-    raiz.setPos(cabeza.getPos(raiz_mundo) + Vec3(mira * 0.07, 0.08, 0))
-    blanco = mundo._material((0.85, 0.83, 0.78, 1), rugosidad=0.35)
-    rojo = mundo._material((0.05, 0.0, 0.0, 1), emision=(3.0, 0.15, 0.1, 1))
-    mundo._pieza(raiz, "cube", blanco, (0.15, 0.21, 0.205), (0, 0, 0))
-    for dz in (-0.05, 0.05):
-        mundo._pieza(raiz, "cube", rojo, (0.06, 0.02, 0.035), (mira * 0.055, 0.03, dz))
+    raiz.setPos(cabeza.getPos(raiz_mundo) + Vec3(mira * 0.015, 0.095, 0))
+    casco = mundo._material((0.012, 0.012, 0.016, 1), rugosidad=0.22, metalico=0.7)
+    rojo = mundo._material((0.05, 0.0, 0.0, 1), emision=(4.5, 0.25, 0.15, 1))
+    mundo._pieza(raiz, "sphere", casco, (0.25, 0.29, 0.26), (0, 0, 0))
+    # la visera: una banda que asoma un centimetro por delante y por los lados
+    mundo._pieza(raiz, "cube", rojo, (0.15, 0.030, 0.272), (mira * 0.062, 0.015, 0))
+    mundo._pieza(raiz, "cube", rojo, (0.012, 0.030, 0.20), (mira * 0.128, 0.015, 0))
     raiz.wrtReparentTo(cabeza)
-    raiz.setColorScale(1, 1, 1, 1, 200)      # Nodo va oscurecido; la careta no
+    raiz.setColorScale(1, 1, 1, 1, 200)      # Nodo va oscurecido; el casco no
     return raiz
 
 
@@ -630,6 +635,12 @@ class Combate:
         audio.ambiente(True, audio.AMBIENTE_CIUDAD_ALTO, fundido=1.5, nivel=0.5)
         for _ in range(3):
             self.hud.decir("golpe_santi")
+        # A la linea de pelea (z = 0): Santiago viene de emitir junto al
+        # tripode y Cuerpo solo mueve la x; se quedaba dos metros mas cerca
+        # de la camara, enorme y cortado por el borde.
+        for actor in (actor_santi, actor_nodo):
+            actor.setY(0)
+            actor.setZ(0)
         self._pintar(0.0)
         self.mascara = poner_mascara(actor_nodo, pelea.nodo.mira)
 

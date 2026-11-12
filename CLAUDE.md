@@ -35,6 +35,18 @@ Videojuego educativo sobre el uso responsable de las redes sociales, con estruct
 - `herramientas/`: `aligerar_glb.py` (texturas a 1024 **y endereza**: todo `.glb` nuevo pasa por aquí), `revisar_glb.py`, `unir_esqueletos.py`, `componer_intro.py` (música/ambiente sintetizados), `componer_lluvia.py` (lluvia y trueno del cap. 2, en WAV), `componer_objetos.py` (canica, despertador, mecha y petardo), `generar_cafeteria.py`, `sintetizar_animaciones.py` (`correr`/`agachado`/`agachado_caminar` derivadas por IK, sin Blender), scripts de Blender.
 - Un `.glb` recién modificado se carga primero **desde Ursina** (juego o banco de pruebas): la caché de modelos de Panda3D guarda la conversión de ejes del primer proceso que lo abre, y si es Panda3D puro (Z arriba) Ursina lo verá tumbado.
 
+## Gráficos (rediseño, cada pieza con su fila en Ajustes y cambio en caliente)
+- `cliente3d/luces.py` — **Sombras** (No/Bajas/Altas): el sol de cada escenario proyecta (`luces.sol`), las lámparas son focos de cono blando (`luces.foco`) y los escenarios grandes declaran todas sus lámparas y encienden las más cercanas (`luces.Lamparas`). Parchea `simplepbr.frag` antes de `simplepbr.init` (`preparar_shaders`).
+- `cliente3d/texturas.py` — **Texturas** (No/Bajas/Altas): madera, estuco, baldosa, hormigón… generadas con numpy (color, relieve y brillo) y guardadas en `.cache_texturas/` (fuera de git); `vestir` pone coordenadas por metros de mundo. Necesita `numpy` (en `requirements.txt`).
+- `cliente3d/posproceso.py` — **Imagen de cine** (No/Suave/Cine) y **Antialiasing** (No/2x/4x/8x): parchea `tonemap.frag`. «Suave» = etalonaje (sombras al azul, luces al ámbar), viñeta y grano; «Cine» añade el resplandor, que lee los mipmaps de la propia escena (sin pases extra; medido: no cambia el tiempo de fotograma). simplepbr rehace el cuadro final al cambiar el MSAA: `posproceso.iniciar` envuelve `_setup_tonemapping` para reponer sus entradas.
+- Para comparar: `ALCALDE_SOMBRAS`, `ALCALDE_TEXTURAS` y `ALCALDE_IMAGEN` (0/1/2) fuerzan la calidad; `banco_pruebas/depuracion/ver_antes_despues.py <cap> <sufijo>` saca las mismas cámaras y mide el fotograma, y `hoja_comparar.py` las pega lado a lado. Regresión de las cuatro filas: `banco_pruebas/sombras.py`.
+- Orden del rediseño: 1 sombras ✔ · 2 texturas ✔ · 3 posprocesado ✔ · 6 antialiasing ✔ · **falta** 4 luz ambiente por imagen (`env_map` de simplepbr) y 5 atrezo (llenar mesas y estantes).
+- El banco fuerza la calidad al máximo (`banco.arrancar`): antes cada captura salía con lo que el último jugador dejó en `ajustes.json`.
+- Antialiasing «No» pone `AntialiasAttrib.M_none`: el «auto» de simplepbr sin multimuestreo es el suavizado de polígonos antiguo y dibuja las aristas de cada triángulo (personajes como malla de alambre).
+- Resplandor: dos anillos de lecturas con umbral 1,2–1,3 (emisores), no la cadena de mipmaps con umbral bajo, que hacía brillar los tejados al sol.
+- Azotea: el caseton de la escalera cierra el sur (sin él se veía el tráfico flotando en el cielo); `azotea.caseton(False)` lo esconde en la pelea, porque la cámara 2.5D se pone ahí. Nodo lleva casco negro con visera roja (la careta blanca se leía como una pantalla en blanco). `Combate` lleva a los dos a z = 0.
+- Ojo al leer entradas de shader en pruebas: `nodo.get_shader_input(x).get_vector()` sobre un temporal devuelve basura; guardar el `ShaderInput` en una variable antes.
+
 ## Cómo ejecutar y probar
 - Cliente 3D: `venv-win\Scripts\python.exe cliente3d/juego3d.py` · Linux: `.venv/bin/python cliente3d/juego3d.py`
 - Visor de modelos: `python previsualizar.py assets/personajes/<rol>.glb`

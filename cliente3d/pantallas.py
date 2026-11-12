@@ -2078,6 +2078,12 @@ FILAS = (
      "Lo que más pesa. Bájalas o quítalas si el juego va a tirones."),
     ("texturas", "Texturas", "opcion",
      "Madera, piedra, tela. Apenas pesan; bájalas si falta memoria de video."),
+    ("imagen", "Imagen de cine", "opcion",
+     "Resplandor de las luces, color y viñeta. «Suave» no pesa nada."),
+    ("antialias", "Antialiasing", "opcion",
+     "Bordes sin dientes de sierra. 8x, solo con gráfica dedicada."),
+    ("reflejos", "Reflejos del cielo", "casilla",
+     "El atardecer en los metales y una luz que cambia según a dónde mira cada cosa."),
     ("volumen", "Volumen general", "barra",
      "Manda sobre la música y los efectos."),
     ("musica", "Música", "barra",
@@ -2094,8 +2100,13 @@ FILAS = (
      "Agranda el cuerpo de texto; los titulares no se tocan."),
 )
 
-# Antes de que indice empiece una seccion nueva.
-SECCIONES = {0: "Imagen", 4: "Sonido", 7: "Juego", 9: "Accesibilidad"}
+# Antes de que indice empiece una seccion nueva. Por CLAVE de fila y no
+# por numero: al añadir dos filas de graficos los numeros se quedaron
+# donde estaban y «Sonido» titulaba «Imagen de cine».
+_ABRE_SECCION = {"pantalla_completa": "Imagen", "volumen": "Sonido",
+                 "ritmo": "Juego", "alto_contraste": "Accesibilidad"}
+SECCIONES = {i: _ABRE_SECCION[f[0]] for i, f in enumerate(FILAS)
+             if f[0] in _ABRE_SECCION}
 
 # Al cambiar estas dos hay que volver a dibujar la pantalla entera: la
 # paleta y el cuerpo de texto se leen cuando nace cada pieza, no despues.
@@ -2109,8 +2120,11 @@ VELO_BRILLO = 96
 _FILA_X = -0.52          # el rotulo
 _CAJA_X = 0.20           # el centro de la caja del valor
 _CAJA_ANCHO = 0.40
-_SALTO = 0.052
-_SALTO_SECCION = 0.044
+# Catorce filas y cuatro titulos entre el filete de arriba y la linea de
+# ayuda: con 0,052 y 0,044 (los de once filas) las dos ultimas caian
+# debajo del pie.
+_SALTO = 0.042
+_SALTO_SECCION = 0.030
 
 
 class Ajustes:
@@ -2176,7 +2190,7 @@ class Ajustes:
             y = self.ys[i]
             if i in SECCIONES:
                 self._nace(E.pequena(SECCIONES[i].upper(),
-                                     (_FILA_X, y + 0.034), E.TEXTO_TENUE,
+                                     (_FILA_X, y + 0.030), E.TEXTO_TENUE,
                                      escala=0.52), 0.06 + i * 0.03)
             self.rotulos.append(
                 self._nace(E.etiqueta(rotulo, (_FILA_X, y), 0.92, E.TEXTO),
@@ -2205,11 +2219,11 @@ class Ajustes:
             elegida = i == self.seleccion
             # La caja del valor: es lo que convierte la lista en unos
             # ajustes y no en un indice.
-            self.controles.append(E.banda(_CAJA_ANCHO, 0.044, (_CAJA_X, y),
+            self.controles.append(E.banda(_CAJA_ANCHO, 0.036, (_CAJA_X, y),
                                           E.luz(34 if elegida else 16),
                                           z=E.Z_ADORNO + 0.01))
             self.controles.append(E.banda(_CAJA_ANCHO, 0.0022,
-                                          (_CAJA_X, y - 0.022),
+                                          (_CAJA_X, y - 0.018),
                                           E.luz(70 if elegida else 28),
                                           z=E.Z_ADORNO))
             if tipo == "barra":
@@ -2268,7 +2282,7 @@ class Ajustes:
             _apagar(pieza)
         y = self.ys[self.seleccion]
         caja, filo, largo = E.marca_seleccion(-0.60, y - 0.004, 1.00,
-                                              alto=0.050,
+                                              alto=0.041,
                                               tinta_filo=E.ACENTO_UI)
         caja.animate_scale_x(1.0, duration=0.22, curve=curve.out_cubic)
         filo.animate_scale_x(largo, duration=0.26, curve=curve.out_cubic)
@@ -2284,7 +2298,8 @@ class Ajustes:
         if self.velo is None:
             return
         # Brillo y sombras se ajustan viendo la escena, no el panel.
-        brillo = FILAS[self.seleccion][0] in ("brillo", "sombras", "texturas")
+        brillo = FILAS[self.seleccion][0] in ("brillo", "sombras", "texturas",
+                                              "imagen", "antialias", "reflejos")
         self.velo.color = E.tinta(VELO_BRILLO if brillo else VELO_NORMAL)
 
     def mover(self, paso):
@@ -2322,6 +2337,12 @@ class Ajustes:
             A.aplicar_sombras()
         if clave == "texturas":
             A.aplicar_texturas()
+        if clave == "imagen":
+            A.aplicar_imagen()
+        if clave == "antialias":
+            A.aplicar_antialias()
+        if clave == "reflejos":
+            A.aplicar_reflejos()
         if clave in REHACER:
             A.aplicar_estilo()
             if self.al_cambiar is not None:

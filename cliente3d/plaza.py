@@ -1149,6 +1149,8 @@ def estado(nuevo=None, forzar=False):
         e.enabled = nuevo == "caotica"
     for sitio in _PLAZA["gentio"]:
         sitio.show() if nuevo == "pacifica" else sitio.hide()
+    import ambiente
+    ambiente.poner("plaza_central", _PLAZA["nodos"][nuevo], nuevo)   # su cielo
     col, densidad = datos["niebla"]
     niebla = Fog("niebla_plaza")
     niebla.setColor(*col)

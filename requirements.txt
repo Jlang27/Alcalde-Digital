@@ -1,3 +1,4 @@
 ursina
 panda3d-simplepbr
 panda3d-gltf
+numpy
