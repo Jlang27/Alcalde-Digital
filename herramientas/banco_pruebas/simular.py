@@ -20,7 +20,7 @@ ROLES = ["ciudadano", "periodista", "influencer", "alcalde"]
 
 
 def main(partidas=400):
-    fallos, todas, finales = 0, 0, Counter()
+    fallos, todas, finales, creen = 0, 0, Counter(), Counter()
     for semilla in range(partidas):
         rnd = random.Random(semilla)
         try:
@@ -36,6 +36,17 @@ def main(partidas=400):
                         p.descubrir(rnd.choice(frontera))
                     ganadas, total = p.decisiones_descubiertas()
                     todas += ganadas == total
+                    # el tablero: jugadas al azar entre las que valen
+                    p.abrir_tablero()
+                    for _ in range(rnd.randint(0, 4)):
+                        e = p.estado_tablero()
+                        quien = [v for v, f in e["fichas"].items()
+                                 if f["conocido"] and f["frase"]
+                                 and f["estado"] != "convencido"]
+                        if e["pruebas"] and quien and rnd.random() < 0.7:
+                            p.presentar(rnd.choice(quien), rnd.choice(e["pruebas"])[0])
+                        else:
+                            p.avisar_contacto(rnd.choice(("ana", "luis")))
                 pasos = 0
                 while not p.arbol_decision.termino() and pasos < 20:
                     opciones = p.opciones()
@@ -45,6 +56,7 @@ def main(partidas=400):
                     pasos += 1
                 if p.pistas is not None:
                     finales[p.arbol_decision.camino[-1].id] += 1
+                    creen[len(p.desenlace_red["creyentes"])] += 1
                 assert sum(p.porcentajes().values()) == 100
             p.resultado_eleccion()
         except Exception:
@@ -53,6 +65,7 @@ def main(partidas=400):
                 traceback.print_exc()
     print(f"fallos {fallos}/{partidas}  ·  dia 1 con todas las decisiones: {todas}")
     print("finales del dia 1:", finales.most_common())
+    print("vecinos que acabaron creyendolo (de 8):", sorted(creen.items()))
 
 
 if __name__ == "__main__":

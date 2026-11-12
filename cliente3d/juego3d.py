@@ -35,9 +35,11 @@ import estilo as E
 import intro
 import mundo
 import pantallas
+import tablero
 import minimapa
 from jugador import Jugador
 from contenido import INDICADORES_META, PERSONAJE_DEL_DIA, DUENO_PERSONAJE
+from contenido import CELULAR, FUENTE_CELULAR
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
                        HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
@@ -50,7 +52,8 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
 import ritmo
 from persecucion import ANCHO_PASILLO, distancia_a_ruta
 from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
-                   TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
+                   TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, MINUTOS_MIRAR,
+                   en_lista)
 import sigilo
 from sigilo import Vigilante
 # El directo del dia 4: 1 responde y 2 borra lo que pide atencion.
@@ -136,6 +139,8 @@ class Cliente:
         self.captura = None           # la secuencia de la captura
         self.sospecha = None          # el medidor de «te estan viendo»
         self.vio_aviso = False        # el aviso de «hablar cuesta», una vez
+        self.tablero = None           # el tablero del dia 1 (tablero.Tablero)
+        self.fichas = pantallas.Fichas()   # lo que acaba de dar una respuesta
         self.dia_avisado = None       # el aviso de la jornada, una vez por dia
         self.aviso_papel = None
         self.al_cerrar_aviso = None   # lo que sigue al cerrar la tarjeta
@@ -477,8 +482,9 @@ def entrar_capitulo():
 
 TEXTOS_CONFIRMACION = {
     "menu": ("¿Volver al menú?", "Se pierde la partida en curso."),
-    "telefono": ("¿Sacar el teléfono?",
-                 "Se acaba la investigación: ya no podrás hablar con nadie."),
+    "telefono": ("¿Ir al tablero?",
+                 "Se acaba la mañana: ya no podrás hablar con nadie ni "
+                 "mirar el celular."),
     "salir": ("¿Salir del juego?", ""),
 }
 
@@ -781,8 +787,9 @@ def construir_zonas():
     global hay_zonas
     limpiar(cl.zonas); limpiar(cl.marcas)
     pub = cl.partida.publicacion
-    # Solo el dia que tiene pistas: los demas no tienen nada que destapar.
-    hay = cl.partida.pistas is not None
+    # El dia 1 ya no investiga aqui: el celular se mira durante la manana
+    # (F) y este panel solo acompaña a la consecuencia de la jugada publica.
+    hay = False
     hay_zonas = hay
 
     pintar_pistas()
@@ -917,6 +924,12 @@ def pintar_publicacion():
 def refrescar_opciones():
     limpiar(cl.opciones)
     if cl.dia_cerrado:
+        return
+    if cl.tablero is not None:
+        # En el tablero las opciones son la jugada publica. Por turnos, el
+        # corcho vuelve cuando el teclado regresa (ver cerrar_modal).
+        if not es_multijugador():
+            retomar_tablero()
         return
     opciones = cl.partida.opciones()
     ocultas = cl.partida.ocultas_bajo(cl.partida.arbol_decision.cursor.id)
@@ -1221,9 +1234,10 @@ def cerrar_contexto():
 
 TEXTO_JORNADA = (
     "Son las 7:30 y la reunión de padres es a las 8:30. Habla con la gente "
-    "y mira bien la publicación. Cuando saques el teléfono se acaba la "
-    "investigación: ya no podrás preguntar nada más, solo decidir. "
-    "Con Tab abres tu libreta.")
+    "(E) y revisa la publicación en tu celular (F): hablar cuesta 10 minutos "
+    "y mirar, 5. Mientras tanto el rumor sigue bajando por el barrio. Cuando "
+    "quieras, pulsa Enter para ir al tablero y cortar la red con lo que "
+    "hayas reunido. Con Tab abres tu libreta.")
 
 
 def abrir_libre():
@@ -1281,7 +1295,8 @@ def abrir_libre():
                              if p is not None and p.sigilo is not None else [])
     cl.jugador.encuadrar()
     cl.jugador.activar()
-    cl.aviso = pantallas.AvisoLibre(telefono=p is None or p.con_telefono)
+    cl.aviso = pantallas.AvisoLibre(telefono=p is None or p.con_telefono,
+                                    tablero=p is not None and p.pistas is not None)
     cl.mapa.preparar(mundo.escenario(), mundo.limites(),
                      mundo.bloqueos(), mundo.muros())
     pintar_reloj_manana()
@@ -1366,10 +1381,109 @@ def empezar_decision(notificacion=True):
     audio.musica(audio.MUSICA_TENSION, fundido=1.8, nivel=0.45)
     audio.ambiente(True, sonido_del_lugar()[2], fundido=1.5, nivel=0.45)
     mundo.corte("PG")
+    if cl.partida.pistas is not None:
+        abrir_tablero()             # el dia 1 no decide en el telefono
+        return
     pintar_publicacion()
     refrescar_opciones()
     for e in cl.hud:
         e.enabled = True
+
+
+# ===================================================================
+#  EL TABLERO DEL DIA 1: cortar la red del rumor (reglas en la Partida)
+# ===================================================================
+
+TEXTO_TABLERO = (
+    "Esta es la red por la que baja el rumor, con lo que alcanzaste a "
+    "descubrir. Elige a un vecino con las flechas y enséñale, con su número, "
+    "la prueba que rebate lo que dice: si lo convences, deja de pasarlo. "
+    "Tienes tres jugadas y, después de cada una, el rumor avanza un nivel. "
+    "Tu jugada pública (Espacio) cierra el día.")
+
+
+def opciones_publicas():
+    """Lo que la Partida deja elegir en publico, y cuantas faltaron."""
+    p = cl.partida
+    return ([(o.id, o.texto) for o in p.opciones()],
+            len(p.ocultas_bajo(p.arbol_decision.raiz.id)))
+
+
+def abrir_tablero():
+    """La Partida congela la red como quedo y el corcho la cuelga."""
+    p = cl.partida
+    tarde = p.manana_agotada()
+    p.abrir_tablero()
+
+    def colgar():
+        cl.estado = "juego"
+        cl.tablero = tablero.Tablero(p.estado_tablero(), *opciones_publicas())
+
+    abrir_aviso_papel("8:30 · EMPEZÓ LA REUNIÓN" if tarde else f"{p.hora()} · EL TABLERO",
+                      "Corta la red del rumor", TEXTO_TABLERO, colgar)
+
+
+def retomar_tablero():
+    """Vuelve el corcho despues de que otro jugador entrara en escena, con
+    lo que haya cambiado (su opcion nueva, por ejemplo)."""
+    if cl.tablero is not None:
+        cl.tablero.mostrar(True)
+        cl.tablero.refrescar(cl.partida.estado_tablero(), *opciones_publicas())
+
+
+def soltar_tablero():
+    """Quita el corcho y deja el telefono a la vista: lo que sigue (la
+    consecuencia, o el tiempo agotado) se cuenta sobre la escena."""
+    if cl.tablero is None:
+        return
+    cl.tablero.cerrar()
+    cl.tablero = None
+    pintar_publicacion()
+    for e in cl.hud:
+        e.enabled = True
+
+
+def tecla_tablero(tecla):
+    t, p = cl.tablero, cl.partida
+    if tecla == "escape":
+        if t.modo == "publica":
+            audio.efecto("volver")
+            t.cerrar_publica()
+        else:
+            abrir_pausa()
+        return
+    if t.ocupado > 0:
+        return                      # se esta contando la jugada anterior
+    if t.modo == "publica":
+        if tecla.isdigit() and tecla != "0":
+            id_opcion = t.opcion(int(tecla) - 1)
+            if id_opcion is not None:
+                soltar_tablero()
+                al_elegir(id_opcion)
+        return
+    flechas = {"left arrow": (-1, 0), "right arrow": (1, 0),
+               "up arrow": (0, 1), "down arrow": (0, -1)}
+    if tecla in flechas:
+        if t.mover(*flechas[tecla]):
+            audio.efecto("mover")
+    elif tecla == "tab":
+        abrir_libreta()
+    elif tecla in ("space", "enter"):
+        t.abrir_publica()
+    elif tecla == "a" and t.sel is not None:
+        res = p.avisar_contacto(t.sel)
+        if res is None:
+            audio.efecto("volver")
+        else:
+            t.aplicar(t.sel, res, p.estado_tablero(), avisado=True)
+    elif tecla.isdigit() and tecla != "0" and t.sel is not None:
+        id_pista = t.prueba(int(tecla) - 1)
+        res = p.presentar(t.sel, id_pista) if id_pista else None
+        if res is None:
+            audio.efecto("volver")      # sin jugadas, ya convencido o ya probada
+        else:
+            audio.efecto("pagina")
+            t.aplicar(t.sel, res, p.estado_tablero())
 
 
 # ===================================================================
@@ -2391,11 +2505,11 @@ def pintar_reloj_manana():
     # 0.889: no se salia, pero sin aire se leia como recortado.
     r.append(E.banda(0.64, 0.115, (0.535, 0.415), E.tinta(215), z=E.Z_ADORNO))
     r.append(E.pequena("LA MAÑANA · REUNIÓN DE PADRES A LAS 8:30",
-                       (0.235, 0.462), E.TEXTO_TENUE, escala=0.44))
+                       (0.235, 0.464), E.TEXTO_TENUE, escala=0.52))
     hora = E.titular(p.hora(), (0.235, 0.440), 1.5, E.TEXTO)
     r.append(hora)
     cifra = E.pequena(f"ya lo creen {ya} de {total} vecinos",
-                      (0.400, 0.430), E.TEXTO, escala=0.50)
+                      (0.400, 0.434), E.TEXTO, escala=0.64)
     r.append(cifra)
     r += E.barra_voto(0.42, ya / max(total, 1), (0.400, 0.392), E.GAITAN,
                       grosor=0.010, col_riel=E.luz(30))
@@ -2419,14 +2533,19 @@ def abrir_dialogo(id_npc):
             "empieza la reunión de padres. Piensa bien a quién le preguntas.",
             lambda: abrir_dialogo(id_npc))
         return
-    nombre, quien = NPCS_CAPITULO_1[id_npc]
+    celular = id_npc == CELULAR
+    if celular and not cl.partida.preguntas_de(CELULAR):
+        cl.cola_avisos.append(("Ya miraste todo lo que tiene la publicación.",
+                               "TU CELULAR", "Nada nuevo", E.OSPINA))
+        return
+    nombre, quien = FUENTE_CELULAR if celular else NPCS_CAPITULO_1[id_npc]
     cerrar_libre()
     cl.estado = "dialogo"
     cl.con_quien = id_npc
     actor = cl.npcs.get(id_npc)
     if actor is not None and "hablar" in actor.getAnimNames():
         actor.loop("hablar")
-    animar("hablar")
+    animar("celular" if celular else "hablar")
     cl.dialogo = pantallas.Dialogo(nombre, quien, elegir_pregunta)
     cl.dialogo.apuntar(x_en_pantalla(cl.npcs.get(cl.con_quien)))
     audio.agachar(True)
@@ -2524,6 +2643,8 @@ def abrir_libreta():
                   if e.enabled]
     if cl.alerta is not None:
         cl.tapados += [e for e in cl.alerta.piezas if e.enabled]
+    if cl.tablero is not None:
+        cl.tapados += [e for e in cl.tablero.piezas() if e.enabled]
     for e in cl.tapados:
         e.enabled = False
     # en el celular, el reloj no corre: update() solo lo avanza en "juego"
@@ -2577,9 +2698,12 @@ def mostrar_preguntas():
     # El tercer dato dice si esa pregunta abre rama: se mira si el nodo
     # tiene hijos en el arbol de pistas. Es leer lo que la Partida ya
     # sabe, no una regla nueva del cliente.
-    opciones = [(n.nombre, f"{MINUTOS_POR_RONDA} min", bool(n.hijos))
+    celular = cl.con_quien == CELULAR
+    costo = MINUTOS_MIRAR if celular else MINUTOS_POR_RONDA
+    opciones = [(n.nombre, f"{costo} min", bool(n.hijos))
                 for n in cl.preguntas_menu]
-    cl.dialogo.preguntar(opciones + [("Despedirse", "", False)])
+    cl.dialogo.preguntar(opciones + [("Guardar el celular" if celular
+                                      else "Despedirse", "", False)])
 
 
 def elegir_pregunta(i):
@@ -2590,11 +2714,27 @@ def elegir_pregunta(i):
         return
     p = cl.partida
     id_pista = cl.preguntas_menu[i].id
-    antes = len(p.novedades)
+    antes, hechos = len(p.novedades), len(p.hechos_nuevos)
     ok, texto = p.descubrir(id_pista)
     if not ok:
         cerrar_dialogo()
         return
+    # Lo que dio la respuesta, dicho ya: el aviso grande espera al final
+    # de la charla, y sin esto no se sabia si la pregunta habia servido.
+    spec = p.datos_pista[id_pista]
+    fichas = []
+    if spec["aristas"]:
+        n = len(spec["aristas"])
+        fichas.append((f"+ {n} HILO{'S' if n != 1 else ''} EN LA RED", E.TEXTO_TENUE))
+    if len(p.hechos_nuevos) > hechos:
+        fichas.append(("+ EXPEDIENTE", E.OSPINA))
+    if "prueba" in spec:
+        fichas.append(("+ PRUEBA PARA EL TABLERO", E.LLERAS))
+    if len(p.novedades) > antes:
+        fichas.append(("+ NUEVA JUGADA PÚBLICA", E.GAITAN))
+    cl.fichas.poner(fichas)
+    if fichas:
+        audio.efecto("pista")
     # Gesto, no solo texto: el que pregunta asiente y al que le
     # preguntan le cambia la cara. Si el personaje no tiene ese clip,
     # reaccionar() no hace nada y se queda hablando como antes.
@@ -2604,13 +2744,18 @@ def elegir_pregunta(i):
     audio.efecto("pasa_tiempo")
     # Si no abrio decision, igual se anota: la red crece o el dato queda.
     if len(p.novedades) == antes:
-        cl.cola_avisos.append((texto, "PISTA ANOTADA", "La red crece", E.LLERAS))
+        if "prueba" in spec:
+            cl.cola_avisos.append((spec["prueba"][1], "PRUEBA PARA EL TABLERO",
+                                   "Tienes una prueba", E.LLERAS))
+        else:
+            cl.cola_avisos.append((texto, "PISTA ANOTADA", "La red crece", E.LLERAS))
     pintar_reloj_manana()
     cl.dialogo.decir(p.datos_pista[id_pista]["respuesta"])
 
 
 def cerrar_dialogo():
     id_npc = cl.con_quien
+    cl.fichas.cerrar()
     cl.dialogo.cerrar()
     cl.dialogo = None
     cl.con_quien = None
@@ -2629,8 +2774,9 @@ def agotar_manana():
     # Despues de sacar el telefono, que vacia la cola: este aviso va primero.
     audio.efecto("timbre")
     empezar_decision(notificacion=False)
-    cl.cola_avisos.append((f"Empezó la reunión de padres. Ya lo creen {ya} "
-                           f"vecinos.", "8:30", "Se acabó la mañana", E.GAITAN))
+    if cl.partida.pistas is None:       # el dia 1 lo dice en la tarjeta del tablero
+        cl.cola_avisos.append((f"Empezó la reunión de padres. Ya lo creen {ya} "
+                               f"vecinos.", "8:30", "Se acabó la mañana", E.GAITAN))
 
 
 # ===================================================================
@@ -2727,7 +2873,7 @@ def cerrar_modal(acepta):
     cl.partida.resolver_interrupcion(acepta)
     refrescar_opciones()
     if es_multijugador():
-        pasar_control(cl.partida.protagonista, lambda: None, devolver=True)
+        pasar_control(cl.partida.protagonista, retomar_tablero, devolver=True)
 
 
 # ===================================================================
@@ -2935,6 +3081,12 @@ def datos_red(p):
                   if protegidos else
                   (E.TINTA_TENUE, "No protegiste a nadie: el rumor siguió su "
                                   "camino."))
+    convencidos = p.desenlace_red.get("convencidos", [])
+    if convencidos:
+        hilos = len(p.desenlace_red.get("cortadas", []))
+        lineas.append((E.RESTREPO, f"Convenciste a {en_lista(p.nombres(convencidos))}: "
+                                   f"{hilos} hilo{'s' if hilos != 1 else ''} "
+                                   f"cortado{'s' if hilos != 1 else ''}."))
     if camino:
         lineas.append((E.TINTA, f"Rastreo (BFS, {len(camino) - 1} saltos): "
                                 + " → ".join(red.datos[v]["nombre"]
@@ -3131,8 +3283,9 @@ def atender_alertas(dt):
     """Una a una: si salen dos pistas seguidas, la segunda espera."""
     if cl.alerta is not None and cl.alerta.actualizar(dt):
         cerrar_alerta()
-    if cl.alerta is not None or cl.estado == "dialogo":
-        # en la charla no: taparia la respuesta que se esta leyendo
+    if cl.alerta is not None or cl.estado == "dialogo" or cl.tablero is not None:
+        # en la charla no: taparia la respuesta que se esta leyendo; y el
+        # tablero cuenta lo suyo en su propia franja
         return
     x, y = (-0.46, -0.12) if cl.estado == "juego" else (0.0, 0.30)
     if cl.partida.novedades:
@@ -3352,11 +3505,16 @@ def update():
             cerrar_dia()
         return
 
+    if cl.tablero is not None:
+        cl.tablero.actualizar(time.dt)
+
     habia_modal = p.interrupcion is not None
     # leer no cuesta: con una alerta en pantalla el reloj no corre
     p.actualizar(0 if cl.alerta is not None else time.dt)
 
     if p.interrupcion is not None and not habia_modal:
+        if cl.tablero is not None:
+            cl.tablero.mostrar(False)     # otro jugador entra en la escena
         if es_multijugador():
             pasar_control(p.interrupcion.jugador, abrir_modal)
             return
@@ -3369,10 +3527,11 @@ def update():
         mundo.corte("PM")
         refrescar_opciones()
         if es_multijugador():
-            pasar_control(p.protagonista, lambda: None, devolver=True)
+            pasar_control(p.protagonista, retomar_tablero, devolver=True)
             return
 
     if p.tiempo_restante <= 0 and p.interrupcion is None:
+        soltar_tablero()
         anunciar_tiempo_agotado()
         return
 
@@ -3386,6 +3545,8 @@ def update():
 
     reloj_barra.scale_x = max(0.0001, 0.70 * resto)
     reloj_barra.color = E.ALERTA if resto < 0.3 else E.TEXTO
+    if cl.tablero is not None:
+        cl.tablero.poner_reloj(resto, p.tiempo_restante)
     if p.interrupcion is None:
         audio.tension(resto)
     # el tic-tac entra con la barra en rojo, y se calla en una interrupcion
@@ -3571,6 +3732,11 @@ def input(tecla):
                 audio.efecto("pagina")
         return
 
+    elif (cl.estado == "juego" and cl.tablero is not None and not cl.dia_cerrado
+          and cl.partida.interrupcion is None and not cl.modal):
+        tecla_tablero(tecla)
+        return
+
     elif (cl.estado == "juego" and tecla == "tab" and not cl.dia_cerrado
           and cl.nodo_pendiente is None and cl.partida.interrupcion is None):
         abrir_libreta()
@@ -3646,6 +3812,10 @@ def input(tecla):
                 abrir_confirmacion("telefono")
             else:
                 empezar_decision()
+        elif tecla == "f" and cl.partida.pistas is not None:
+            # el celular es una fuente mas de la manana: se le «pregunta»
+            audio.efecto("notificacion")
+            abrir_dialogo(CELULAR)
         elif tecla == "tab":
             abrir_libreta()
         elif tecla == "escape":

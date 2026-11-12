@@ -7,7 +7,7 @@ hacia la eleccion, que es la espina dorsal del guion.
 
 import math
 
-from ursina import (Button, Entity, Func, Mesh, Vec3, camera, color, curve,
+from ursina import (Button, Entity, Func, Mesh, Text, Vec3, camera, color, curve,
                     destroy, invoke)
 
 import ajustes as A
@@ -350,12 +350,19 @@ class Contexto:
 class AvisoLibre:
     """El rotulito de cuando te devuelven el control del personaje."""
 
-    def __init__(self, telefono=True):
-        """telefono: si se puede sacar (el capitulo 2 no lo tiene)."""
+    def __init__(self, telefono=True, tablero=False):
+        """telefono: si se puede sacar (el capitulo 2 no lo tiene).
+        tablero: el dia 1, donde el celular se mira (F) y Enter lleva al
+        tablero; en la cafeteria no hay de quien esconderse."""
         self.piezas = []
         self.piezas += E.degradado_vertical(-0.52, -0.36, alfa=210)
         self.piezas.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
                                    z=E.Z_ADORNO))
+        if tablero:
+            self.piezas += E.leyenda((("wasd", "moverse"), ("e", "hablar"),
+                                      ("f", "celular"), ("enter", "ir al tablero"),
+                                      ("tab", "libreta"), ("esc", "menú")), -0.458)
+            return
         self.piezas += E.leyenda((("wasd", "moverse"),
                                   ("shift", "correr"),
                                   ("ctrl", "agacharse"),
@@ -1397,9 +1404,14 @@ class UltimaHora:
     Es un cintillo de noticiero y no un «logro desbloqueado»: en Ciudad
     Nova lo que te llega es información, y se anuncia como se anuncia
     una noticia. La casilla tachada dice que ya está en tu tarjetón.
+
+    Se rehizo para que se lea de pie y a un metro (la feria): el cuerpo
+    va al tamaño del diálogo, entra cayendo con la casilla sellándose y
+    una línea que se consume dice cuánto le queda en pantalla.
     """
 
-    ANCHO = 0.80
+    ANCHO = 0.96
+    ALTO = 0.190
 
     def __init__(self, texto, x=0.0, y=0.30, rotulo="ÚLTIMA HORA",
                  titulo="Nueva decisión", tinta=None):
@@ -1412,36 +1424,84 @@ class UltimaHora:
         self.reloj = 0.0
         # Lo que tarda en leerse, no un numero fijo: a 2,6 s no daba para
         # leer una pista entera.
-        self.duracion = max(4.5, 2.5 + len(texto) * 0.05)
+        self.duracion = max(4.0, 2.4 + len(texto) * 0.045)
         a = self.piezas.append
-        x0 = x - self.ANCHO / 2
+        ancho, alto = min(self.ANCHO, 2 * (0.87 - abs(x))), self.ALTO
+        x0 = x - ancho / 2
+        # Todo cuelga de una caja: asi el aviso entero cae y se asienta.
+        caja = Entity(parent=camera.ui, position=(x, y + 0.10))
+        caja.animate_y(y, duration=0.34, curve=curve.out_back)
 
-        # alto para dos renglones de letra pequena: las pistas los traen
-        fondo = E.banda(0.001, 0.150, (x, y - 0.015), E.tinta(238))
-        fondo.animate_scale_x(self.ANCHO, duration=0.35, curve=curve.out_cubic)
-        a(fondo)
-        filo = E.banda(0.001, 0.008, (x, y + 0.064), tinta)
-        filo.animate_scale_x(self.ANCHO, duration=0.35, curve=curve.out_cubic)
-        a(filo)
+        def pon(e):
+            e.parent = caja
+            e.x -= x
+            e.y -= y
+            a(e)
+            return e
 
-        self.piezas += E.casilla((x0 + 0.050, y), tinta, marcada=True,
-                                 lado=0.040, fondo=E.NOCHE, z=E.Z_ADORNO - 0.02)
-        tx = x0 + 0.090
+        pon(E.banda(ancho, alto, (x + 0.006, y - 0.007), E.tinta(120),
+                    z=E.Z_ADORNO + 0.004))
+        pon(E.banda(ancho, alto, (x, y), E.tinta(244)))
+        pon(E.banda(ancho, 0.010, (x, y + alto / 2 - 0.005), tinta,
+                    z=E.Z_ADORNO - 0.004))
+        # la linea que se consume: cuanto le queda al aviso
+        self.resto = pon(E.banda(ancho, 0.0045, (x0, y - alto / 2 + 0.002), tinta,
+                                 z=E.Z_ADORNO - 0.004))
+        self.resto.origin = (-0.5, 0)
+        self.ancho = ancho
+        # la casilla cae como un sello: grande y se asienta
+        marca = Entity(parent=caja, position=(x0 + 0.062 - x, 0.0))
+        for p in E.casilla((0, 0), tinta, marcada=True, lado=0.060, fondo=E.NOCHE,
+                           padre=marca, z=E.Z_ADORNO - 0.02):
+            a(p)
+        marca.scale = 1.7
+        marca.animate_scale(1.0, duration=0.30, delay=0.12, curve=curve.out_back)
+        tx = x0 + 0.118
         textos = (
-            E.pequena(rotulo, (tx, y + 0.046), tinta, escala=0.60),
-            E.titular(titulo, (tx, y + 0.022), 1.30, E.TEXTO),
-            E.pequena(texto, (tx, y - 0.026), E.TEXTO_TENUE, escala=0.62),
+            pon(E.pequena(rotulo, (tx, y + 0.068), tinta, escala=0.74)),
+            pon(E.titular(titulo, (tx, y + 0.040), 1.55, E.TEXTO)),
+            pon(E.pequena(texto, (tx, y - 0.022), E.TEXTO, escala=0.80)),
         )
-        textos[2].wordwrap = 52
+        textos[2].wordwrap = int(60 * (ancho - 0.14) / (self.ANCHO - 0.14))
         for i, t in enumerate(textos):
             t.alpha = 0
-            t.fade_in(duration=0.3, delay=0.15 + i * 0.08)
-            a(t)
+            t.fade_in(duration=0.25, delay=0.10 + i * 0.07)
+        # los contenedores, al final: destroy() no se lleva a los hijos
+        self.piezas += [marca, caja]
 
     def actualizar(self, dt):
         """Devuelve True cuando ya ha durado lo suyo."""
         self.reloj += dt
+        self.resto.scale_x = max(0.0001, self.ancho * (1 - self.reloj / self.duracion))
         return self.reloj >= self.duracion
+
+    def cerrar(self):
+        _limpiar(self.piezas)
+
+
+class Fichas:
+    """Lo que acaba de darte una respuesta, en el momento: fichas cortas
+    sobre el cuadro de diálogo («+ PRUEBA PARA EL TABLERO»). El aviso
+    grande espera a que acabe la charla; esto dice ya si valió la pena."""
+
+    def __init__(self):
+        self.piezas = []
+
+    def poner(self, fichas):
+        """fichas: [(texto, tinta)], de abajo arriba."""
+        self.cerrar()
+        for i, (texto, tinta) in enumerate(fichas):
+            ancho = 0.050 + len(texto) * 0.0118
+            x, y = 0.86 - ancho / 2, -0.176 + i * 0.050
+            caja = Entity(parent=camera.ui, position=(x + 0.25, y))
+            caja.animate_x(x, duration=0.28, delay=i * 0.09, curve=curve.out_cubic)
+            self.piezas.append(E.banda(ancho, 0.042, (0, 0), E.tinta(244), padre=caja))
+            self.piezas.append(E.banda(0.010, 0.042, (-ancho / 2 + 0.005, 0), tinta,
+                                       padre=caja, z=E.Z_ADORNO - 0.004))
+            t = Text(text=texto, parent=caja, origin=(-0.5, 0),
+                     position=(-ancho / 2 + 0.024, 0), scale=0.62, color=E.TEXTO,
+                     **E.fuente_titular())
+            self.piezas += [t, caja]
 
     def cerrar(self):
         _limpiar(self.piezas)

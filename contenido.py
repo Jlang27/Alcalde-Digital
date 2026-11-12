@@ -387,6 +387,7 @@ PISTAS_CAPITULO_1 = [
                    "El que circula lo cortaron justo antes de esa parte."),
      "texto": "Sofía vio el video completo: Ospina habla de remodelar, no de cerrar.",
      "abre": ("verificar",), "aristas": [("sofia", "concejo")],
+     "prueba": ("video", "Sofía vio el video completo: es remodelar"),
      "revela": ("ospina_remodelar",)},
     # ---- Don Hernan: lo cree, y justo por eso sabe de donde vino ----
     {"id": "hernan_saludo", "npc": "hernan", "padre": None, "costo": 0,
@@ -404,26 +405,57 @@ PISTAS_CAPITULO_1 = [
      "respuesta": ("Pues... la verdad, no. Se unieron al grupo esta semana.",
                    "Todas el mismo día, ahora que lo dice. Y ninguna tiene foto."),
      "texto": "Las 40 cuentas entraron al grupo el mismo día, sin foto.",
+     "prueba": ("bots", "Las 40 entraron al grupo el mismo día"),
      "abre": (), "aristas": [("grupo", "bot1"), ("grupo", "bot2"), ("grupo", "bot3")]},
-    # ---- en el celular (zonas de la publicacion) ----
-    {"id": "perfil", "npc": None, "padre": None, "costo": 3,
+    # ---- a quien se lo pasaron: los hilos que se cortan en el tablero ----
+    {"id": "hernan_familia", "npc": "hernan", "padre": "hernan_saludo", "costo": 0,
+     "pregunta": "¿A quién se lo reenvió usted?",
+     "respuesta": ("A mi hermana Lina, que es la que mueve el chat de la cuadra.",
+                   "Ahí están Jorge, el papá de tu amigo Luis, y Caro, la mamá de Ana.",
+                   "Si Lina lo pone ahí, lo ve medio barrio."),
+     "texto": "Hernán se lo reenvió a Lina; de su chat pasa a Jorge y a Caro.",
+     "abre": (), "aristas": [("lina", "hernan"), ("jorge", "lina"), ("caro", "lina"),
+                             ("luis", "jorge"), ("ana", "caro")]},
+    {"id": "rafa_cliente", "npc": "cajero", "padre": "rafa_saludo", "costo": 0,
+     "pregunta": "¿A quién más se lo mostró?",
+     "respuesta": ("A Pedro, el del taller, que vino temprano por su tinto.",
+                   "Se fue furioso. Seguro ya lo anda contando."),
+     "texto": "Don Rafa se lo mostró a Pedro, el del taller.",
+     "abre": (), "aristas": [("pedro", "cajero")]},
+    # ---- en el celular: se mira durante la manana y cuesta 5 minutos ----
+    {"id": "perfil", "npc": None, "padre": None, "costo": 0,
      "accion": "Mirar el perfil de @NovaAlerta",
+     "respuesta": ("@NovaAlerta se unió a Civitas hace 2 días.",
+                   "Sin foto de portada ni descripción: solo esta publicación."),
+     "prueba": ("cuenta", "@NovaAlerta tiene 2 días de creada"),
      "texto": "@NovaAlerta: cuenta creada hace 2 días.",
      "abre": ("reportar",), "aristas": []},
-    {"id": "cuenta", "npc": None, "padre": "perfil", "costo": 3,
+    {"id": "cuenta", "npc": None, "padre": "perfil", "costo": 0,
      "accion": "Verificar la cuenta",
+     "respuesta": ("0 fotos y 12 seguidores.",
+                   "Los 12 son cuentas nuevas que le reenvían todo lo que publica."),
+     "prueba": ("cuenta", "Sus 12 seguidores son cuentas falsas"),
      "texto": "0 fotos, 12 seguidores... y los 12 son cuentas nuevas que le reenvían todo.",
      "abre": (), "aristas": [("bot1", "nova"), ("bot2", "nova"), ("bot3", "nova")]},
-    {"id": "comentarios", "npc": None, "padre": None, "costo": 3,
+    {"id": "comentarios", "npc": None, "padre": None, "costo": 0,
      "accion": "Leer los comentarios",
+     "respuesta": ("«¡Compartan antes de que lo borren!», una y otra vez.",
+                   "40 cuentas casi idénticas lo reenvían al grupo de mamás."),
+     "prueba": ("bots", "40 cuentas idénticas lo reenvían"),
      "texto": "40 cuentas casi idénticas lo reenvían al grupo de mamás del colegio.",
      "abre": (), "aristas": [("grupo", "bot1"), ("grupo", "bot2"), ("grupo", "bot3")]},
-    {"id": "fecha", "npc": None, "padre": "comentarios", "costo": 3,
+    {"id": "fecha", "npc": None, "padre": "comentarios", "costo": 0,
      "accion": "Ver la hora de publicación",
+     "respuesta": ("Publicado a las 6:02 a. m.",
+                   "Las 40 cuentas lo compartieron en ese mismo minuto."),
+     "prueba": ("bots", "Las 40 lo compartieron en el mismo minuto"),
      "texto": "Publicado a las 6:02 a. m.: las 40 cuentas lo compartieron en ese mismo minuto.",
      "abre": ("d_bots",), "aristas": []},
-    {"id": "foto", "npc": None, "padre": None, "costo": 3,
+    {"id": "foto", "npc": None, "padre": None, "costo": 0,
      "accion": "Mirar el video",
+     "respuesta": ("El clip dura 0:14.",
+                   "El video original del concejo dura 2:30: alguien lo recortó."),
+     "prueba": ("video", "El clip dura 0:14; el original, 2:30"),
      "texto": "El clip dura 0:14. El video original del concejo dura 2:30: alguien lo recortó.",
      "abre": ("v_desmentir",), "aristas": [], "revela": ("ospina_remodelar",)},
 ]
@@ -519,6 +551,7 @@ TEXTO_BANDERA = {
     "expusiste_bots": "Que expusiste las cuentas bot.",
     "rastreaste_el_origen": "Que llegaste hasta @NovaAlerta.",
     "llegaste_tarde": "Que el rumor te ganó la carrera.",
+    "convenciste_vecinos": "Que fuiste vecino por vecino con pruebas, y te creyeron.",
     "te_sacaron_del_colegio": "Que te sacaron del colegio de noche.",
     "sacaste_la_propuesta": "Que sacaste del colegio la propuesta del equipo de Ospina.",
     "publicaste_la_propuesta": "Que publicaste la propuesta aunque te amenazaron.",
@@ -599,9 +632,53 @@ ARISTAS_CAPITULO_1 = [
     ("sofia", "concejo"),
 ]
 # A las 7:30 el rumor ya va por el nivel 3 (Hernan y Don Rafa lo tienen) y
-# baja un nivel cada RONDAS_POR_NIVEL charlas.
+# baja un nivel cada RONDAS_POR_NIVEL charlas (media hora): a las 8:00
+# llega a Lina y a Pedro y a las 8:30 a Jorge y a Caro. En el tablero
+# baja un nivel mas con cada jugada.
 NIVEL_INICIAL = 3
-RONDAS_POR_NIVEL = 2
+RONDAS_POR_NIVEL = 3
+
+
+# ===================================================================
+#  DIA 1: EL TABLERO  (PLAN_MEJORAS P2)
+# ===================================================================
+# Al acabar la manana no se saca el telefono: se abre el tablero con la
+# red que se alcanzo a descubrir. Cada jugada (convencer a un vecino con
+# una prueba o avisar a un contacto) deja avanzar el rumor un nivel; la
+# jugada publica es el arbol de decision de siempre y cierra el dia.
+CELULAR = "celular"                  # el «vecino» que eres tu mirando el telefono
+FUENTE_CELULAR = ("Tu celular", "la publicación de @NovaAlerta")
+JUGADAS_TABLERO = 3
+CONTACTOS = ("ana", "luis")          # a quienes puedes avisar sin prueba
+# Las tres familias de prueba: tres maneras de comprobar una publicacion.
+FAMILIAS_PRUEBA = {
+    "bots": "QUIÉN LO COMPARTE",
+    "video": "EL VIDEO ORIGINAL",
+    "cuenta": "QUIÉN LO PUBLICA",
+}
+# Lo que afirma cada vecino y la familia de prueba que lo rebate: quien se
+# fia de que «lo dicen muchos» cede ante los bots; quien «vio el video»,
+# ante el original; quien confia en la cuenta, ante quien la publica.
+VECINOS_TABLERO = {
+    "hernan": {"frase": "Cuarenta personas no se equivocan.", "familia": "bots",
+               "cede": "Todas el mismo día y sin foto… Me usaron de altavoz. No lo reenvío más."},
+    "lina": {"frase": "Lo compartió todo el grupo de mamás.", "familia": "bots",
+             "cede": "¿Cuentas falsas? Con razón no conocía a ninguna. Lo borro del chat de la cuadra."},
+    "cajero": {"frase": "Yo vi el video: lo dice clarito.", "familia": "video",
+               "cede": "¿Catorce segundos de dos minutos y medio? Me vieron la cara. No se lo muestro a nadie más."},
+    "pedro": {"frase": "Está en video, ¿qué más prueba quiere?", "familia": "video",
+              "cede": "Si el video completo dice remodelar, es otra cosa. Gracias por avisar."},
+    "caro": {"frase": "Lo publicó @NovaAlerta, que es de noticias.", "familia": "cuenta",
+             "cede": "¿Dos días de creada? Eso no es un medio. A Ana no le digo nada."},
+    "jorge": {"frase": "@NovaAlerta siempre avisa primero.", "familia": "cuenta",
+              "cede": "Seguidores falsos… Entonces no avisa: fabrica. Ahí lo dejo."},
+}
+# Lo que contesta quien no se convence, segun de que se fia.
+RESISTE = {
+    "bots": "Puede ser, pero es que lo dice muchísima gente.",
+    "video": "Yo sé lo que vi en el video.",
+    "cuenta": "Pues a mí esa cuenta nunca me ha fallado.",
+}
 
 
 # ===================================================================
@@ -788,7 +865,7 @@ PUBLICACIONES = [
         "contexto": "Daniel Ospina propuso REMODELAR el colegio. Alguien recortó el video.",
         "compartidos": 1240,
         # mas que los 25 s de serie: el dia 1 tiene cinco zonas que mirar
-        "tiempo": 40.0,
+        "tiempo": 120.0,
         # Lo que se ve en el celular. Publicado a las 6:02 (la pista de la
         # hora) y son las 7:30: «hace 1 h». Los que comentan son los bots
         # del grafo: leer los comentarios es verlos repetir lo mismo.

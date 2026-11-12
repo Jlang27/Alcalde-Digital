@@ -45,6 +45,8 @@ _NORMAL = {
     "LLERAS": (224, 164, 42), "RESTREPO": (62, 143, 86),
     "GRIS_NODO": (201, 197, 187), "UI": (232, 228, 218),
     "ACENTO_UI": (72, 198, 214),
+    # el corcho del tablero del dia 1: papel de estraza, calido como la escena
+    "CORCHO": (198, 164, 122),
 }
 
 _CONTRASTE = {
@@ -56,6 +58,7 @@ _CONTRASTE = {
     "LLERAS": (124, 84, 0), "RESTREPO": (0, 92, 40),
     "GRIS_NODO": (110, 110, 110), "UI": (255, 255, 255),
     "ACENTO_UI": (120, 236, 255),
+    "CORCHO": (228, 228, 228),
 }
 
 ALTO_CONTRASTE = False

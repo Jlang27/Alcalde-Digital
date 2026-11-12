@@ -37,6 +37,7 @@ from contenido import (
     OPCIONES_CAPITULO_1, OCULTAS_CAPITULO_1, PISTAS_CAPITULO_1,
     VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1, NIVEL_INICIAL, RONDAS_POR_NIVEL,
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
+    CELULAR, JUGADAS_TABLERO, CONTACTOS, FAMILIAS_PRUEBA, VECINOS_TABLERO, RESISTE,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
     OPCIONES_QUE_PROTEGEN, PERSONAJE_DEL_DIA, DUENO_PERSONAJE, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO, DIA_PLAZA, TENSION_PLAZA,
     RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, DIFICULTAD_NODO, TACO_DANIEL, DIFICULTAD_ASESOR,
@@ -84,6 +85,7 @@ MARGEN_MINIMO = 2.0
 # desde el origen). A las 8:30 empieza la reunion de padres y se acabo.
 HORA_INICIO = 7 * 60 + 30
 MINUTOS_POR_RONDA = 10
+MINUTOS_MIRAR = 5              # mirar algo en el celular: media charla
 MAX_RONDAS = 6
 EFECTO_RONDA = {"desinformacion": 2}
 COMPARTIDOS_POR_RONDA = 150
@@ -276,7 +278,8 @@ class Partida:
         self.total_decisiones = 0
         self.novedades = []           # opciones recien ganadas, para la alerta
         self.compartidos = 0
-        self.rondas = 0               # charlas de la manana (10 min cada una)
+        self.minutos = 0              # minutos de la manana gastados (10 por charla)
+        self.tablero = None           # el tablero del dia 1 (ver abrir_tablero)
         self.tiempo_total = TIEMPO_ESCENA
         self.desenlace_red = None     # {"creyentes": [...], "protegidos": [...]}
 
@@ -636,7 +639,8 @@ class Partida:
         self.por_abrir = set()
         self.total_decisiones = 0
         self.novedades = []
-        self.rondas = 0
+        self.minutos = 0
+        self.tablero = None
         if self.publicacion["id"] != CAPITULO_1:
             return
 
@@ -677,6 +681,16 @@ class Partida:
         for a, b in ARISTAS_CAPITULO_1:
             self.red.agregar_arista(a, b)
 
+    @property
+    def rondas(self):
+        """Charlas de 10 minutos que lleva la manana (puede ser 2,5: mirar
+        el celular cuesta media)."""
+        return self.minutos / MINUTOS_POR_RONDA
+
+    @rondas.setter
+    def rondas(self, valor):
+        self.minutos = int(valor * MINUTOS_POR_RONDA)
+
     def descubrir(self, id_pista):
         """El jugador encontro una pista. Devuelve (exito, texto).
 
@@ -685,13 +699,13 @@ class Partida:
         con el origen, el arbol de decision recibe la rama de rastrear.
         """
         if (self.pistas is None or self.arbol_decision is None
-                or self.arbol_decision.termino()):
-            return False, ""
+                or self.arbol_decision.termino() or self.tablero is not None):
+            return False, ""            # con el tablero abierto ya no se investiga
         nodo = self.pistas.buscar(id_pista)
         if nodo is None or id_pista not in self.datos_pista:
             return False, ""
         spec = self.datos_pista[id_pista]
-        if spec["npc"] and self.manana_agotada():
+        if self.manana_agotada():
             return False, "Ya son las 8:30: empezó la reunión de padres."
         if nodo.costo and self.tiempo_restante < nodo.costo + MARGEN_MINIMO:
             return False, "No queda tiempo para mirar esto."
@@ -701,12 +715,13 @@ class Partida:
         if not ok:
             return False, mensaje
 
-        # Hablar cuesta una ronda: mientras charlas, el rumor no se queda
-        # quieto. (Las zonas del celular ya cobraron sus segundos arriba.)
+        # Todo cuesta manana: hablar, diez minutos; mirar el celular, cinco.
+        # Mientras tanto el rumor no se queda quieto.
+        costo = MINUTOS_POR_RONDA if spec["npc"] else MINUTOS_MIRAR
+        self.minutos = min(MAX_RONDAS * MINUTOS_POR_RONDA, self.minutos + costo)
         if spec["npc"]:
-            self.rondas += 1
             self._aplicar_efectos(EFECTO_RONDA)
-            self.compartidos += COMPARTIDOS_POR_RONDA
+        self.compartidos += COMPARTIDOS_POR_RONDA * costo // MINUTOS_POR_RONDA
         for a, b in spec["aristas"]:
             self.red_conocida.agregar_arista(a, b)
         self._saber(spec.get("revela", ()))
@@ -743,21 +758,26 @@ class Partida:
         sabe) filtrada por quien responde. Saber algo nuevo mueve la
         frontera, y por eso a otro NPC le aparece una pregunta nueva.
         """
-        if self.pistas is None or self.manana_agotada():
+        if self.pistas is None or self.manana_agotada() or self.tablero is not None:
             return []
+        # el celular es un vecino mas: lo suyo son las pistas sin npc
+        quien = None if id_npc == CELULAR else id_npc
         return [n for n in self.pistas.frontera()
-                if self.datos_pista[n.id]["npc"] == id_npc]
+                if self.datos_pista[n.id]["npc"] == quien]
 
     def manana_agotada(self):
         return self.rondas >= MAX_RONDAS
 
     def hora(self):
-        minutos = HORA_INICIO + self.rondas * MINUTOS_POR_RONDA
+        minutos = HORA_INICIO + self.minutos
         return f"{minutos // 60}:{minutos % 60:02d}"
 
     def nivel_rumor(self):
-        """Hasta que nivel del BFS desde el origen va el rumor."""
-        return NIVEL_INICIAL + self.rondas // RONDAS_POR_NIVEL
+        """Hasta que nivel del BFS desde el origen va el rumor: por la
+        hora durante la manana y por las jugadas en el tablero."""
+        if self.tablero is not None:
+            return self.tablero["nivel"]
+        return NIVEL_INICIAL + self.minutos // (RONDAS_POR_NIVEL * MINUTOS_POR_RONDA)
 
     def vecinos(self):
         """Los que votan: a quienes el rumor les puede cambiar el voto."""
@@ -774,14 +794,163 @@ class Partida:
         """
         g = self.red.invertido()
         g.eliminar_vertice(ORIGEN_JUGADOR)
+        # Y sin los hilos que cortaste en el tablero: quien se convencio
+        # ya no se lo pasa a nadie (eliminar_arista sobre la misma copia).
+        if self.tablero is not None:
+            for de, a in self.tablero["cortadas"]:
+                g.eliminar_arista(de, a)
         return g
 
     def creyentes(self, nivel=None):
-        """Vecinos a los que ya les llego el rumor, por BFS desde el origen."""
+        """Vecinos a los que ya les llego el rumor, por BFS desde el origen.
+
+        En el tablero no se recalcula: quien ya lo creia lo sigue creyendo
+        aunque despues se corte el hilo por el que le llego, asi que manda
+        el conjunto de alcanzados, menos los que convenciste.
+        """
         if self.red is None:
             return []
+        if self.tablero is not None and nivel is None:
+            t = self.tablero
+            return [v for v in self.vecinos()
+                    if v in t["alcanzados"] and v not in t["convencidos"]]
         _, prof = self._sin_ti().bfs(ORIGEN_RUMOR, max_prof=nivel or self.nivel_rumor())
         return [v for v in self.vecinos() if v in prof]
+
+    # =============================================================
+    #  EL TABLERO: cortar la red, vecino por vecino
+    # =============================================================
+
+    def abrir_tablero(self):
+        """Se acabo la manana: la red queda como esta y empiezan las jugadas."""
+        if self.red is None or self.tablero is not None:
+            return
+        nivel = self.nivel_rumor()
+        _, prof = self._sin_ti().bfs(ORIGEN_RUMOR, max_prof=nivel)
+        self.tablero = {"nivel": nivel, "alcanzados": set(prof),
+                        "convencidos": set(), "avisados": set(), "cortadas": [],
+                        "jugadas": JUGADAS_TABLERO, "intentos": set()}
+
+    def conocidos(self):
+        """Los vertices que el jugador ya vio: los que tocan un hilo
+        descubierto, el autor de la publicacion y sus propios contactos."""
+        vistos = {ORIGEN_RUMOR, *CONTACTOS}
+        for a, b in self.red_conocida.aristas():
+            vistos.update((a, b))
+        return vistos
+
+    def _siguientes(self):
+        """A quienes les llega el rumor si avanza un nivel: un paso de BFS
+        desde todos los alcanzados, sin entrar en los avisados."""
+        t, g = self.tablero, self._sin_ti()
+        return sorted({w for v in t["alcanzados"] for w in g.vecinos(v)
+                       if w not in t["alcanzados"] and w not in t["avisados"]})
+
+    def _avanzar_frente(self):
+        nuevos = self._siguientes()
+        self.tablero["alcanzados"].update(nuevos)
+        self.tablero["nivel"] += 1
+        return nuevos
+
+    def _alcance_final(self, sin=()):
+        """Vecinos que acabarian creyendolo si nadie hace nada mas (el BFS
+        hasta agotarse), opcionalmente sin los hilos que salen de «sin»."""
+        t, g = self.tablero, self._sin_ti()
+        for v in sin:
+            for w in list(g.vecinos(v)):
+                g.eliminar_arista(v, w)
+        alcanzados, frente = set(t["alcanzados"]), set(t["alcanzados"])
+        while frente:
+            frente = {w for v in frente for w in g.vecinos(v)
+                      if w not in alcanzados and w not in t["avisados"]}
+            alcanzados |= frente
+        fuera = t["convencidos"] | set(sin)
+        return {v for v in self.vecinos() if v in alcanzados and v not in fuera}
+
+    def pruebas(self):
+        """Las pistas ya ganadas que sirven para convencer, en el orden en
+        que estan escritas: [(id, familia, titulo)]."""
+        if self.pistas is None:
+            return []
+        return [(i, *spec["prueba"]) for i, spec in self.datos_pista.items()
+                if "prueba" in spec and self.pistas.buscar(i).desbloqueada]
+
+    def _puede_jugar(self):
+        return (self.tablero is not None and self.tablero["jugadas"] > 0
+                and self.arbol_decision is not None
+                and self.arbol_decision.cursor is self.arbol_decision.raiz)
+
+    def presentar(self, id_vecino, id_pista):
+        """Le enseñas una prueba a un vecino. Devuelve None si la jugada no
+        vale, o {"ok", "dice", "cortadas", "nuevos"}: si la prueba rebate lo
+        que afirma, se convence y se cortan los hilos que salen de el; en
+        cualquier caso la jugada se gasta y el rumor avanza un nivel."""
+        t = self.tablero
+        familia = dict((i, f) for i, f, _ in self.pruebas()).get(id_pista)
+        if (not self._puede_jugar() or familia is None
+                or id_vecino not in VECINOS_TABLERO
+                or id_vecino not in self.conocidos()
+                or id_vecino in t["convencidos"]
+                or (id_vecino, id_pista) in t["intentos"]):
+            return None
+        t["jugadas"] -= 1
+        t["intentos"].add((id_vecino, id_pista))
+        spec = VECINOS_TABLERO[id_vecino]
+        ok = familia == spec["familia"]
+        cortadas = []
+        if ok:
+            t["convencidos"].add(id_vecino)
+            # en la red, «a -> b» es «a lo recibio de b»: se cortan las que
+            # llegan a el, que en el sentido del rumor son las que salen
+            cortadas = [(id_vecino, a) for a, b in self.red.aristas()
+                        if b == id_vecino and a != ORIGEN_JUGADOR]
+            t["cortadas"] += cortadas
+        return {"ok": ok, "dice": spec["cede"] if ok else RESISTE[spec["familia"]],
+                "cortadas": cortadas, "nuevos": self._avanzar_frente()}
+
+    def avisar_contacto(self, id_vecino):
+        """Le escribes a un contacto tuyo antes de que le llegue: ya no se
+        lo cree. No pide prueba, pero gasta la jugada y salva solo a el."""
+        t = self.tablero
+        if (not self._puede_jugar() or id_vecino not in CONTACTOS
+                or id_vecino in t["alcanzados"] or id_vecino in t["avisados"]):
+            return None
+        t["jugadas"] -= 1
+        t["avisados"].add(id_vecino)
+        return {"ok": True, "dice": "", "cortadas": [],
+                "nuevos": self._avanzar_frente()}
+
+    def estado_tablero(self):
+        """Todo lo que el tablero necesita para dibujarse, ya calculado
+        (asi el cliente no repite el BFS ni conoce las reglas)."""
+        t = self.tablero
+        conocidos, creen = self.conocidos(), set(self.creyentes())
+        final = self._alcance_final()
+        fichas = {}
+        for v, d in self.red.datos.items():
+            if d["tipo"] in ("jugador", "testigo", "medio"):
+                continue                  # el tablero es por donde baja el rumor
+            estado = ("convencido" if v in t["convencidos"] else
+                      "avisado" if v in t["avisados"] else
+                      "cree" if v in t["alcanzados"] else "sano")
+            spec = VECINOS_TABLERO.get(v, {})
+            # a cuantos salvas si lo convences ahora: BFS con y sin sus hilos
+            salva = (len(final) - len(self._alcance_final(sin=(v,)))
+                     if v in VECINOS_TABLERO and estado in ("cree", "sano") else 0)
+            fichas[v] = {"nombre": d["nombre"], "tipo": d["tipo"], "voto": d["voto"],
+                         "conocido": v in conocidos, "estado": estado,
+                         "frase": spec.get("frase", ""), "contacto": v in CONTACTOS,
+                         "salva": salva}
+        cortadas = set(t["cortadas"])
+        hilos = [(b, a, b in self.red_conocida.vecinos(a), (b, a) in cortadas)
+                 for a, b in self.red.aristas() if a in fichas and b in fichas]
+        return {"fichas": fichas, "hilos": hilos,
+                "pruebas": [(i, f, FAMILIAS_PRUEBA[f], titulo)
+                            for i, f, titulo in self.pruebas()],
+                "intentos": set(t["intentos"]),
+                "jugadas": t["jugadas"], "total": JUGADAS_TABLERO,
+                "proximos": self._siguientes(), "creen": len(creen),
+                "vecinos": len(self.vecinos()), "hora": self.hora()}
 
     def nombres(self, vertices):
         return [self.red.datos[v]["nombre"] for v in vertices]
@@ -841,24 +1010,32 @@ class Partida:
         """A quien le llego el rumor y a quien protegiste, con nombres."""
         if self.red is None:
             return
+        self.abrir_tablero()          # por si el dia se cerro sin pasar por el
+        t = self.tablero
         ids = {n.id for n in self.arbol_decision.camino}
-        if ids & OPCIONES_QUE_PROTEGEN:
-            # frenaste el rumor: quien aun no lo tenia, ya no lo tendra
-            creyentes = self.creyentes()
-            protegidos = [v for v in self.vecinos() if v not in creyentes]
-        else:
-            # no lo frenaste: sigue hasta el final del grafo
-            creyentes = self.creyentes(nivel=len(self.red.adyacencia))
-            protegidos = []
+        if not ids & OPCIONES_QUE_PROTEGEN:
+            # no lo frenaste en publico: sigue hasta donde lo dejen los
+            # hilos que cortaste y los contactos que avisaste
+            while self._avanzar_frente():
+                pass
         ola = {}
         if "compartir" in ids:
-            # y si lo compartiste, ademas sale de ti: tus contactos tambien
+            # y si lo compartiste, ademas sale de ti: tus contactos tambien,
+            # por mucho que les hubieras avisado
             _, ola = self.red.invertido().bfs(ORIGEN_JUGADOR)
-            creyentes = [v for v in self.vecinos() if v in creyentes or v in ola]
+            t["alcanzados"].update(ola)
+            t["avisados"].difference_update(ola)
+        creyentes = self.creyentes()
+        protegidos = [v for v in self.vecinos() if v not in creyentes]
+        if t["convencidos"]:
+            self.banderas_del_dia.append("convenciste_vecinos")
+            self.banderas.add("convenciste_vecinos")
         # la ola va en el desenlace (nivel de cada uno desde ti) para que
         # el cliente la dibuje sin repetir el BFS por su cuenta
         self.desenlace_red = {"creyentes": creyentes, "protegidos": protegidos,
-                              "ola": ola}
+                              "ola": ola, "cortadas": list(t["cortadas"]),
+                              "convencidos": sorted(t["convencidos"]),
+                              "avisados": sorted(t["avisados"])}
 
     def _mover_encuesta(self):
         """Lo que hiciste hoy, convertido en intencion de voto."""

@@ -34,14 +34,22 @@ print("tras decidir:", estado())
 foto("devuelve_control")
 tecla("enter", 0.5)
 print("tras devolver:", estado())
+t = J.cl.tablero
+assert t is not None and all(e.enabled for e in t.fijo), "el tablero no volvio"
+print("jugada publica:", [x for _id, x in t.opciones])
+assert len(t.opciones) == 3, t.opciones          # la que metio el otro jugador
+pasar(0.5); foto("tablero_con_opcion_ajena")
 elegir_texto("Compartir")
 while not J.cl.dia_cerrado:
     pasar(0.3)
 while J.cl.pagina is None:
     pasar(frames=1)
-for _ in range(3):
-    tecla("enter", 0.2)
+for _ in range(12):
+    if estado() in ("rotulo", "cinematica"):
+        break
     tecla("enter", 0.4)
+if estado() == "cinematica":
+    tecla("enter", 1.0)
 hasta_estado("rotulo", 10)
 pasar(1.5); foto("rotulo_dia2")
 print("dia", p.dia_actual + 1, "· protagonista:", p.nombre_protagonista,

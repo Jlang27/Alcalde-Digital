@@ -216,6 +216,8 @@ def sacar_telefono():
     if J.cl.confirmando:
         tecla("left arrow", 0.1)     # a «Sí»
         tecla("enter", 0.5)
+    if estado() == "aviso_papel":    # el dia 1: la tarjeta que explica el tablero
+        tecla("enter", 0.4)
     assert estado() == "juego", estado()
 
 
@@ -228,6 +230,16 @@ def opciones_visibles():
 
 
 def elegir_texto(texto):
+    if J.cl.tablero is not None:
+        # el dia 1: la opcion es la jugada publica del tablero
+        t = J.cl.tablero
+        while t.ocupado > 0:
+            pasar(0.2)
+        tecla("space", 0.3)
+        textos = [x for _id, x in t.opciones]
+        assert texto in textos, f"no hay opcion {texto!r}: {textos}"
+        tecla(str(textos.index(texto) + 1), 0.5)
+        return True
     for t, b in opciones_visibles():
         if t == texto:
             clic(b)
