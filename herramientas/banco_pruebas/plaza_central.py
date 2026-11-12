@@ -105,6 +105,8 @@ tecla("down arrow", 0.2)
 tecla("down arrow", 0.2)
 tecla("enter", 0.3)
 assert J.cl.confirmando == "menu", J.cl.confirmando
+assert not any(e.enabled for e in J.cl.pausa + J.cl.pausa_marca), "la pausa asoma bajo la pregunta"
+foto("plaza_pausa_confirmar")
 tecla("s", 0.6)
 assert not J.cl.pausa and not J.cl.pausa_marca, "la pausa se quedo en pantalla"
 pasar(0.5)

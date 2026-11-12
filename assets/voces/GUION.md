@@ -46,35 +46,35 @@ sostenga.
 |---|---------|-----------|---|-------|
 |   | `cap2_rector_01_valeria.ogg` | Valeria Samper | 3.4 | Rector, en Civitas dicen que van a cerrar el colegio. |
 |   | `cap2_rector_02_rector.ogg` | El rector | 3.4 | No tenemos ninguna orden de cierre. Nadie nos ha notificado nada. |
-|   | `cap2_rector_03_rector.ogg` | El rector | 3.2 | Lo único que hay es una propuesta del equipo de Ospina. Y está en el archivo. |
+|   | `cap2_rector_03_rector.ogg` | El rector | 3.2 | Lo único que hay es una propuesta del equipo de De la Estrella. Y está en el archivo. |
 
 ### `cap3_llegada`
 
 | ✔ | archivo | personaje | s | línea |
 |---|---------|-----------|---|-------|
-|   | `cap3_llegada_01_asesor.ogg` | El asesor | 2.6 | Daniel... ¿ya viste cómo vamos? |
-|   | `cap3_llegada_02_daniel.ogg` | Daniel Ospina | 2.0 | Algo vi en el teléfono. |
+|   | `cap3_llegada_01_asesor.ogg` | El asesor | 2.6 | Abel... ¿ya viste cómo vamos? |
+|   | `cap3_llegada_02_daniel.ogg` | Abel de la Estrella | 2.0 | Algo vi en el teléfono. |
 |   | `cap3_llegada_03_asesor.ogg` | El asesor | 3.2 | Es peor. Lo del colegio nos está hundiendo, y rápido. |
 |   | `cap3_llegada_04_asesor.ogg` | El asesor | 3.6 | Tenemos que hablar, pero aquí no. En mi oficina, en conferencias. |
-|   | `cap3_llegada_05_daniel.ogg` | Daniel Ospina | 1.8 | ¿Qué tan grave es? |
+|   | `cap3_llegada_05_daniel.ogg` | Abel de la Estrella | 1.8 | ¿Qué tan grave es? |
 |   | `cap3_llegada_06_asesor.ogg` | El asesor | 2.4 | Te espero allá. No tardes. |
 
 ### `cap3_mesa`
 
 | ✔ | archivo | personaje | s | línea |
 |---|---------|-----------|---|-------|
-|   | `cap3_mesa_01_asesor.ogg` | El asesor | 3.2 | Daniel, las encuestas por la mentira del colegio cayeron 10 puntos. |
-|   | `cap3_mesa_02_asesor.ogg` | El asesor | 3.0 | Tenemos que reaccionar. Podemos publicar esto sobre Bravo. |
-|   | `cap3_mesa_03_daniel.ogg` | Daniel Ospina | 2.0 | ¿Es verdad? |
+|   | `cap3_mesa_01_asesor.ogg` | El asesor | 3.2 | Abel, las encuestas por la mentira del colegio cayeron 10 puntos. |
+|   | `cap3_mesa_02_asesor.ogg` | El asesor | 3.0 | Tenemos que reaccionar. Podemos publicar esto sobre Pineda. |
+|   | `cap3_mesa_03_daniel.ogg` | Abel de la Estrella | 2.0 | ¿Es verdad? |
 |   | `cap3_mesa_04_asesor.ogg` | El asesor | 3.0 | No completamente... Nadie lo va a comprobar. |
 
 ### `cap4_privado`
 
 | ✔ | archivo | personaje | s | línea |
 |---|---------|-----------|---|-------|
-|   | `cap4_privado_01_privado.ogg` | Mensaje privado · cifrado | 3.0 | Tenemos información que puede destruir a Bravo. |
+|   | `cap4_privado_01_privado.ogg` | Mensaje privado · cifrado | 3.0 | Tenemos información que puede destruir a Pineda. |
 |   | `cap4_privado_02_privado.ogg` | Mensaje privado · cifrado | 3.0 | Si la publicas hoy en tu directo, son 40 millones. |
-|   | `cap4_privado_03_santiago.ogg` | Santiago Lleras | 2.0 | ¿Y si es falsa? |
+|   | `cap4_privado_03_santiago.ogg` | Juan Hernández | 2.0 | ¿Y si es falsa? |
 |   | `cap4_privado_04_privado.ogg` | Mensaje privado · cifrado | 3.4 | Eso no importa. Lo importante es que la gente la crea. |
 
 ## Cómo suena cada personaje
@@ -84,4 +84,4 @@ sostenga.
 - **Mensaje privado · cifrado** (`privado`): OPCIONAL. Es texto en un monitor: si se graba, va filtrada (grave, con eco corto), nunca natural.
 - **Radio de tienda** (`radio`): locutor de radio, tono neutro de noticiero, con un punto metálico.
 
-Las líneas del protagonista llevan su nombre en el archivo porque **quien protagoniza cada día cambia con los turnos**. Están puestas con el personaje que manda el guion (cap. 2 Valeria, cap. 3 Daniel, cap. 4 Santiago); si ese día juega otro, esa línea va muda, que es mejor que una voz que no es la suya.
+Las líneas del protagonista llevan su nombre en el archivo porque **quien protagoniza cada día cambia con los turnos**. Están puestas con el personaje que manda el guion (cap. 2 Valeria, cap. 3 Abel, cap. 4 JH777); si ese día juega otro, esa línea va muda, que es mejor que una voz que no es la suya.

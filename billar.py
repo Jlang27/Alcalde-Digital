@@ -1,7 +1,7 @@
 """Dia 3, «La partida del asesor»: billar a 8 bolas contra el asesor.
 
-El asesor pone las condiciones: si gana el, publica el rumor sobre Bravo
-esta noche; si gana Daniel, rueda de prensa y el expediente a la
+El asesor pone las condiciones: si gana el, publica el rumor sobre Pineda
+esta noche; si gana Abel, rueda de prensa y el expediente a la
 trituradora. Aqui solo estan las REGLAS y la FISICA; el cliente dibuja.
 
 Lo que se toma del 8 bolas de los moviles (y por que):
@@ -343,7 +343,7 @@ class Partida8:
     ('falta', quien, motivo), ('grupo', quien, 'lisas'|'rayadas'),
     ('turno', quien, bola_en_mano), ('repite', quien), ('saque_bueno',),
     ('choque', m/s), ('banda', m/s) y ('fin', resultado, motivo).
-    resultado: 'mesa_limpia' (gana Daniel sin ninguna falta), 'gano' o
+    resultado: 'mesa_limpia' (gana Abel sin ninguna falta), 'gano' o
     'perdio'.
     """
     # (el «metió la 8 en la tronera cantada» de _resolver es lo que cuenta
@@ -358,7 +358,7 @@ class Partida8:
         self.saque = True
         self.bola_en_mano = "cocina"     # None, 'cocina' o 'toda'
         self.reloj = DURACION
-        # El taco de Daniel sale de lo que heredo (ver contenido.TACOS).
+        # El taco de Abel sale de lo que heredo (ver contenido.TACOS).
         self.taco = dict(guia=1.0, tiempo=0.0, en_mano=0)
         self.taco.update(taco or {})
         self.reloj_tiro = self.tiempo_tiro()
@@ -436,7 +436,7 @@ class Partida8:
         return True
 
     def regalar_bola_en_mano(self):
-        """El taco de Daniel puede traer bolas en mano de regalo (herencia)."""
+        """El taco de Abel puede traer bolas en mano de regalo (herencia)."""
         if self.turno == "daniel" and self.fase == "apunta" and self.bolas_regalo > 0 \
                 and self.bola_en_mano is None:
             self.bolas_regalo -= 1
@@ -940,7 +940,7 @@ if __name__ == "__main__":
     _parar_todo(p)
     assert p.fase == "fin" and p.resultado == "perdio", (p.resultado, p.motivo)
 
-    # 4b. Si es el asesor quien la mete antes de tiempo, Daniel gana, pero
+    # 4b. Si es el asesor quien la mete antes de tiempo, Abel gana, pero
     #     no es «mesa limpia»: esa es cerrar el mismo con la 8.
     p = Partida8(semilla=2)
     p.faltas["daniel"] = 0
@@ -994,7 +994,7 @@ if __name__ == "__main__":
     _parar_todo(p)
     assert p.grupo and not p.mesa.bolas[9].en_mesa, "no la metio"
 
-    # 8. Aunque Daniel solo cometa faltas, el asesor no se regala la partida
+    # 8. Aunque Abel solo cometa faltas, el asesor no se regala la partida
     #    metiendo la 8 antes de tiempo (el arbol descarta esos tiros).
     regaladas = 0
     for s in range(12):

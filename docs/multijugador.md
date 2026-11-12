@@ -65,8 +65,8 @@ Ya implementado en `Partida._repartir_dias()`:
 |---|---|---|
 | 1 | Mateo Gaitán | Ciudadano |
 | 2 | Valeria Samper | Periodista |
-| 3 | Daniel Ospina | Alcalde (el asiento político) |
-| 4 | Santiago Lleras (Nova Kombat) | Influencer |
+| 3 | Abel de la Estrella | Alcalde (el asiento político) |
+| 4 | Juan Hernández (Nova Kombat) | Influencer |
 | 5 | Mateo Gaitán | Ciudadano |
 
 Si el dueño no está en la partida, el día va al jugador con menos días. Con un
@@ -228,7 +228,7 @@ de hoy, y se agranda con `M` cuando alguien quiere analizar el recorrido.
     y las zonas que toca (sin poder elegir).
   - *Día 2:* el sigilo entero, con los conos en el mapa.
   - *Día 3:* la oficina y el asesor.
-  - *Día 4:* el directo **como lo vería su público**: el chat y lo que Santiago
+  - *Día 4:* el directo **como lo vería su público**: el chat y lo que JH777
     responde o borra.
   - *Día 5:* el duelo (marcador y aciertos) o la persecución (los dos en el
     mapa a lo largo de la ruta).

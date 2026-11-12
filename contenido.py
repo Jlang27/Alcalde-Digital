@@ -192,7 +192,7 @@ ROLES = {
     },
     "influencer": {
         "nombre": "Influencer",
-        "personaje": "Santiago Lleras",
+        "personaje": "Juan Hernández",
         "simbolo": "I",
         "lema": "Gran alcance: cada decisión pesa el doble.",
         "descripcion": "Lo que comparte llega a miles al instante.\n"
@@ -211,7 +211,7 @@ ROLES = {
     # Ciudadano, Periodista, Influencer y Alcalde). No es candidato: es
     # quien gobierna hasta la eleccion. Tiene los datos oficiales y la voz
     # de la institucion, y por eso todo lo que dice se lee como politica.
-    # Antes era el «Candidato» Daniel Ospina, que el dia 1 protagonizaba un
+    # Antes era el «Candidato» Abel de la Estrella, que el dia 1 protagonizaba un
     # rumor sobre si mismo.
     "alcalde": {
         "nombre": "Alcalde",
@@ -230,13 +230,13 @@ ROLES = {
             ("promesa", "Rendición de cuentas", "Comprometerte en firme", 2, "^", "confianza_cand"),
         ],
     },
-    # Daniel Ospina, candidato a alcalde: solo se juega en el capitulo 3
+    # Abel de la Estrella, candidato a alcalde: solo se juega en el capitulo 3
     # («La primera jugada sucia»), no aparece en el reparto. Comparte el
     # arbol del Alcalde: sus ramas (comunicado, debate, gabinete...) ya
     # estan conectadas al arbol de decision y son las de un politico.
     "candidato": {
         "nombre": "Candidato",
-        "personaje": "Daniel Ospina",
+        "personaje": "Abel de la Estrella",
         "simbolo": "D",
         "lema": "Ganar la alcaldía sin perder lo que prometiste.",
         "descripcion": "Va primero en las encuestas hasta que el rumor del\n"
@@ -374,18 +374,18 @@ PISTAS_CAPITULO_1 = [
      "abre": (), "aristas": [], "revela": ("ruiz_acta",)},
     # ---- Sofia: sin lo de Rafa, esquiva el tema ----
     {"id": "sofia_saludo", "npc": "sofia", "padre": None, "costo": 0,
-     "pregunta": "Hola, Sofía. ¿Qué opinas de lo de Ospina?",
+     "pregunta": "Hola, Sofía. ¿Qué opinas de lo de De la Estrella?",
      "respuesta": ("Estoy esperando la reunión de padres de las 8:30. La organiza Medina.",
                    "Y fíjate: Medina no ha dicho ni una palabra del video. A ella le",
-                   "conviene que Ospina caiga. No, no quiero hablar más del video hoy."),
+                   "conviene que De la Estrella caiga. No, no quiero hablar más del video hoy."),
      "texto": "Sofía no quiere hablar del video, pero se queja de que Medina calla.",
      "abre": (), "aristas": [], "revela": ("medina_calla",)},
     {"id": "sofia_video", "npc": "sofia", "padre": "rafa_alboroto", "costo": 0,
      "pregunta": "Don Rafa dice que tú sabes que el video está cortado.",
      "respuesta": ("Sí. Vi el video entero anoche, en el canal del concejo.",
-                   "Dura dos minutos y medio. Ospina habla de REMODELAR el colegio.",
+                   "Dura dos minutos y medio. De la Estrella habla de REMODELAR el colegio.",
                    "El que circula lo cortaron justo antes de esa parte."),
-     "texto": "Sofía vio el video completo: Ospina habla de remodelar, no de cerrar.",
+     "texto": "Sofía vio el video completo: De la Estrella habla de remodelar, no de cerrar.",
      "abre": ("verificar",), "aristas": [("sofia", "concejo")],
      "prueba": ("video", "Sofía vio el video completo: es remodelar"),
      "revela": ("ospina_remodelar",)},
@@ -396,7 +396,7 @@ PISTAS_CAPITULO_1 = [
                    "Me llegó por el grupo de mamás y ya se lo reenvié a mi familia.",
                    "Si cierran el colegio, ¿a dónde mando yo a mis dos hijos?",
                    "Y si fuera remodelar, igual: promesas de obra hay en cada elección",
-                   "y la plata nunca aparece. ¿Ospina dijo de dónde la va a sacar?"),
+                   "y la plata nunca aparece. ¿De la Estrella dijo de dónde la va a sacar?"),
      "texto": "Don Hernán lo cree: le llegó por el grupo de mamás.",
      "abre": (), "aristas": [("tu", "hernan"), ("hernan", "grupo")],
      "revela": ("ospina_plata",)},
@@ -474,25 +474,25 @@ PISTAS_CAPITULO_1 = [
 #   barrio: lo que opina un vecino; dice si al barrio le importa o no
 HECHOS = {
     "ospina_remodelar": {
-        "candidato": "Daniel Ospina", "tema": "Educación",
+        "candidato": "Abel de la Estrella", "tema": "Educación",
         "texto": "Propone remodelar el colegio del barrio, no cerrarlo.",
         "barrio": ""},
     "ospina_plata": {
-        "candidato": "Daniel Ospina", "tema": "Educación",
+        "candidato": "Abel de la Estrella", "tema": "Educación",
         "texto": "Su plan de obras no dice de dónde sale la plata.",
         "barrio": "Don Hernán: «Promesas de obra hay en cada elección»."},
     "bravo_nova": {
-        "candidato": "Hugo Bravo", "tema": "Juego limpio",
+        "candidato": "Juan Pineda", "tema": "Juego limpio",
         "texto": "@NovaAlerta reenvía material de su campaña.",
         "barrio": ""},
     "bravo_anuncios": {
-        "candidato": "Hugo Bravo", "tema": "Juego limpio",
+        "candidato": "Juan Pineda", "tema": "Juego limpio",
         "texto": "Su campaña pagó anuncios en el grupo de mamás esa misma mañana.",
         "barrio": ""},
     "medina_calla": {
         "candidato": "Juan Medina", "tema": "Convivencia",
         "texto": "Organiza la reunión de padres y no ha dicho nada del rumor.",
-        "barrio": "Sofía: «A ella le conviene que Ospina caiga»."},
+        "barrio": "Sofía: «A ella le conviene que De la Estrella caiga»."},
     "ruiz_acta": {
         "candidato": "Elena Ruiz", "tema": "Transparencia",
         "texto": "Su campaña publicó el acta del concejo con la propuesta completa.",
@@ -509,31 +509,31 @@ REVELA_POR_NODO = {
 # ===================================================================
 #  ENCUESTA: como se mueve la intencion de voto
 # ===================================================================
-ENCUESTA_INICIAL = {"Daniel Ospina": 25, "Hugo Bravo": 22,
+ENCUESTA_INICIAL = {"Abel de la Estrella": 25, "Juan Pineda": 22,
                     "Juan Medina": 26, "Elena Ruiz": 27}
 
 # Puntos de encuesta que mueve pasar por un nodo, cualquier dia.
 VOTOS_POR_NODO = {
-    "c_result": {"Daniel Ospina": -4, "Hugo Bravo": 3},
-    "i_result": {"Daniel Ospina": -1},
-    "v_desmentir": {"Daniel Ospina": 3},
-    "v_reportar": {"Daniel Ospina": 1},
-    "d_rastreo": {"Hugo Bravo": -5, "Daniel Ospina": 1},
-    "d_bots": {"Hugo Bravo": -3},
-    "b_nova": {"Hugo Bravo": -3},
-    "b_cuentas": {"Daniel Ospina": -1, "Elena Ruiz": 1},
+    "c_result": {"Abel de la Estrella": -4, "Juan Pineda": 3},
+    "i_result": {"Abel de la Estrella": -1},
+    "v_desmentir": {"Abel de la Estrella": 3},
+    "v_reportar": {"Abel de la Estrella": 1},
+    "d_rastreo": {"Juan Pineda": -5, "Abel de la Estrella": 1},
+    "d_bots": {"Juan Pineda": -3},
+    "b_nova": {"Juan Pineda": -3},
+    "b_cuentas": {"Abel de la Estrella": -1, "Elena Ruiz": 1},
     # capitulo 2: la propuesta desmiente el rumor de los colegios... si sale
-    "p_result": {"Daniel Ospina": 5, "Hugo Bravo": -2},
-    "g_result": {"Daniel Ospina": -4, "Hugo Bravo": 2},
-    # capitulo 3: la partida de billar con el asesor (el expediente sobre Bravo)
-    "r3_rumor": {"Daniel Ospina": 6, "Hugo Bravo": -6},
-    "r3_prensa": {"Daniel Ospina": 1},
-    "r3_mesa_limpia": {"Daniel Ospina": 3, "Hugo Bravo": -1},
-    # capitulo 4: el montaje contra Bravo que le ofrecen a Santiago
+    "p_result": {"Abel de la Estrella": 5, "Juan Pineda": -2},
+    "g_result": {"Abel de la Estrella": -4, "Juan Pineda": 2},
+    # capitulo 3: la partida de billar con el asesor (el expediente sobre Pineda)
+    "r3_rumor": {"Abel de la Estrella": 6, "Juan Pineda": -6},
+    "r3_prensa": {"Abel de la Estrella": 1},
+    "r3_mesa_limpia": {"Abel de la Estrella": 3, "Juan Pineda": -1},
+    # capitulo 4: el montaje contra Pineda que le ofrecen a JH777
     # Un audio de fraude contra la Alcaldia le sirve al que vive del
     # escandalo y le resta a los demas: «si todo esta comprado, para que».
-    "a4_perdio": {"Hugo Bravo": 4, "Daniel Ospina": -2, "Juan Medina": -1, "Elena Ruiz": -1},
-    "a4_desenmascarado": {"Hugo Bravo": -2, "Elena Ruiz": 1},
+    "a4_perdio": {"Juan Pineda": 4, "Abel de la Estrella": -2, "Juan Medina": -1, "Elena Ruiz": -1},
+    "a4_desenmascarado": {"Juan Pineda": -2, "Elena Ruiz": 1},
     "a4_gano": {},
 }
 
@@ -553,13 +553,13 @@ TEXTO_BANDERA = {
     "llegaste_tarde": "Que el rumor te ganó la carrera.",
     "convenciste_vecinos": "Que fuiste vecino por vecino con pruebas, y te creyeron.",
     "te_sacaron_del_colegio": "Que te sacaron del colegio de noche.",
-    "sacaste_la_propuesta": "Que sacaste del colegio la propuesta del equipo de Ospina.",
+    "sacaste_la_propuesta": "Que sacaste del colegio la propuesta del equipo de De la Estrella.",
     "publicaste_la_propuesta": "Que publicaste la propuesta aunque te amenazaron.",
     "guardaste_la_propuesta": "Que te callaste la propuesta por miedo a perder el trabajo.",
-    "ospina_jugo_sucio": "Que Ospina publicó un rumor sobre Bravo.",
-    "ospina_dio_la_cara": "Que Ospina rechazó la guerra sucia y dio la cara en vivo.",
-    "asesor_a_tus_espaldas": "Que el asesor de Ospina empezó a actuar a sus espaldas.",
-    "ospina_se_defendio_con_datos": "Que Ospina se defendió con su propuesta publicada.",
+    "ospina_jugo_sucio": "Que De la Estrella publicó un rumor sobre Pineda.",
+    "ospina_dio_la_cara": "Que De la Estrella rechazó la guerra sucia y dio la cara en vivo.",
+    "asesor_a_tus_espaldas": "Que el asesor de De la Estrella empezó a actuar a sus espaldas.",
+    "ospina_se_defendio_con_datos": "Que De la Estrella se defendió con su propuesta publicada.",
     "la_alcaldia_en_duda": "Que perdiste el reto y transmitiste el audio falso contra la Alcaldía.",
     "le_ganaste_a_nodo": "Que le ganaste a Nodo en directo y el audio no salió.",
     "expusiste_la_red_fantasma": "Que le quitaste la máscara a Nodo en directo.",
@@ -607,13 +607,13 @@ VERTICES_CAPITULO_1 = {
     "bot2": ("@nova_real", "bot", None, 0),
     "bot3": ("@mama_preocupada7", "bot", None, 0),
     "grupo": ("Grupo Mamás del Colegio", "grupo", None, 0),
-    "hernan": ("Don Hernán", "vecino", "Daniel Ospina", 3),
+    "hernan": ("Don Hernán", "vecino", "Abel de la Estrella", 3),
     "cajero": ("Don Rafa", "vecino", "Juan Medina", 2),
-    "lina": ("Lina", "vecino", "Daniel Ospina", 2),
-    "pedro": ("Pedro", "vecino", "Daniel Ospina", 2),
+    "lina": ("Lina", "vecino", "Abel de la Estrella", 2),
+    "pedro": ("Pedro", "vecino", "Abel de la Estrella", 2),
     "jorge": ("Jorge", "vecino", "Elena Ruiz", 2),
-    "caro": ("Caro", "vecino", "Daniel Ospina", 2),
-    "ana": ("Ana", "vecino", "Daniel Ospina", 2),
+    "caro": ("Caro", "vecino", "Abel de la Estrella", 2),
+    "ana": ("Ana", "vecino", "Abel de la Estrella", 2),
     "luis": ("Luis", "vecino", "Juan Medina", 2),
     "sofia": ("Sofía", "testigo", None, 0),
     "concejo": ("Canal del Concejo", "medio", None, 0),
@@ -688,15 +688,15 @@ RESISTE = {
 #  QUIEN PROTAGONIZA CADA DIA
 # ===================================================================
 # Como en Detroit: cada capitulo es de un PERSONAJE, no de un turno. El
-# guion esta escrito para el (el asesor le dice «Daniel», el colegio es de
+# guion esta escrito para el (el asesor le dice «Abel», el colegio es de
 # Valeria), asi que la rotacion antigua (dia % jugadores) metia a Mateo en
-# el despacho de Daniel. Ahora el dia lo juega quien controla a su
+# el despacho de Abel. Ahora el dia lo juega quien controla a su
 # personaje; sin dueño en la partida, el jugador que menos dias lleva.
 # Con un solo jugador, ese jugador los interpreta a todos, como en Detroit.
 #   indice de dia -> rol del personaje (None: el que menos dias lleve)
 PERSONAJE_DEL_DIA = {0: "ciudadano", 1: "periodista", 2: "candidato",
                      3: "influencer", 4: "ciudadano"}
-# Daniel Ospina no esta en el reparto: lo interpreta el asiento politico,
+# Abel de la Estrella no esta en el reparto: lo interpreta el asiento politico,
 # el del Alcalde. Los demas personajes son de su propio rol.
 DUENO_PERSONAJE = {"candidato": "alcalde"}
 
@@ -707,7 +707,7 @@ DIA_SIGILO = 1
 # El capitulo 3, «La primera jugada sucia», en el comando de campana: se
 # mira la oficina y se decide en la mesa de conferencias, sin telefono.
 DIA_CAMPANA = 2
-# El capitulo 4, «La oferta», en el estudio de Santiago: un directo con el
+# El capitulo 4, «La oferta», en el estudio de JH777: un directo con el
 # chat a toda velocidad (transmision.py) y la oferta en un privado cifrado.
 DIA_ESTUDIO = 3
 # El capitulo 5, «La plaza», en la Plaza Central de Ciudad Nova: la misma
@@ -860,9 +860,9 @@ PUBLICACIONES = [
         "id": "colegio",
         "escenario": "colegio",
         "autor": "@NovaAlerta",
-        "texto": "El candidato Daniel Ospina quiere cerrar el colegio del barrio.",
+        "texto": "El candidato Abel de la Estrella quiere cerrar el colegio del barrio.",
         "veracidad": "falsa",
-        "contexto": "Daniel Ospina propuso REMODELAR el colegio. Alguien recortó el video.",
+        "contexto": "Abel de la Estrella propuso REMODELAR el colegio. Alguien recortó el video.",
         "compartidos": 1240,
         # mas que los 25 s de serie: el dia 1 tiene cinco zonas que mirar
         "tiempo": 120.0,
@@ -944,23 +944,39 @@ PUNTOS_CAPITULO_3 = {
     # el ascensor de la recepcion sube a la sala de juegos (piso 12)
     "ascensor": {"verbo": "subir a la sala de juegos", "zona": (-2.4, -0.2, -14.4, -12.4)},
 }
-# Lo que Nodo le escribe por privado cuando se acaba el chat. Es el hilo
-# que faltaba: antes la pelea aparecia de la nada, nada mas el rotulo.
-RETO_NODO = (
+# Lo que Nodo le escribe al PC en mitad del directo (cine_azotea.py). Es
+# el hilo que faltaba: antes la pelea aparecia de la nada. Va en trozos
+# porque cada uno es un subtitulo; en la pantalla del PC sale entero.
+RETO_NODO_PARTES = (
     "Tengo un audio tuyo. Bueno, «tuyo»: suena a ti diciendo que la "
-    "Alcaldía prepara un fraude en el conteo. Lo suelto esta noche en "
-    "cien mil pantallas… salvo que me ganes delante de todas. Nova "
-    "Kombat, un asalto, aquí y ahora. Tú tienes datos; yo tengo bulos. "
-    "Veamos qué corre más.")
+    "Alcaldía prepara un fraude en el conteo.",
+    "Lo suelto esta noche en cien mil pantallas… salvo que me ganes "
+    "delante de todas.",
+    "Nova Kombat, un asalto, aquí y ahora. Tú tienes datos; yo tengo "
+    "bulos. Veamos qué corre más.",
+)
+RETO_NODO = " ".join(RETO_NODO_PARTES)
+RETO_NODO_REMATE = "O ME GANAS, O LO SUELTO"
+# (texto, segundos) de JH777 hablandole a su camara antes del mensaje.
+DIRECTO_AZOTEA = (
+    ("¡Buenas noches, Ciudad Nova! Otro directo desde la azotea, con la "
+     "ciudad entera ahí abajo.", 4.2),
+    ("Hoy hablamos de la elección, pero con datos: nada de lo que «dicen "
+     "por ahí».", 3.8),
+    ("Así que si les llega un audio raro, primero verifican y después "
+     "comparten… Esperen, me escribieron al PC.", 4.6),
+)
+# Lo que contesta al leerlo, ya mirando a camara.
+RESPUESTA_RETO = ("¿Quiere pelea en directo? Pues que la tenga.", 3.0)
 TEXTO_MAPA_DISTRITOS = (
-    "Desde el rumor del colegio, Bravo te gana los distritos del sur, los "
+    "Desde el rumor del colegio, Pineda te gana los distritos del sur, los "
     "del Colegio Técnico Nova. Si no reaccionas, el mapa se tiñe de rojo "
     "antes del debate.")
 # (quien, lo que dice, segundos) al empezar el capitulo 3: el asesor entra
-# en el despacho de Daniel, preocupado, y lo cita arriba, en la sala de
+# en el despacho de Abel, preocupado, y lo cita arriba, en la sala de
 # juegos del piso 12 (se sube en ascensor; alli le enseña el expediente).
 DIALOGO_ASESOR_PREOCUPADO = (
-    ("asesor", "Daniel... ¿ya viste cómo vamos?", 2.6),
+    ("asesor", "Abel... ¿ya viste cómo vamos?", 2.6),
     ("daniel", "Algo vi en el teléfono.", 2.0),
     ("asesor", "Es peor. Lo del colegio nos está hundiendo, y rápido.", 3.2),
     ("asesor", "Tenemos que hablar, pero aquí no. Sube a la sala de juegos, piso 12.", 3.6),
@@ -970,37 +986,37 @@ DIALOGO_ASESOR_PREOCUPADO = (
 # (quien, lo que dice, segundos) junto a la mesa de billar: el asesor pone
 # las condiciones. Las dos primeras las ajusta dialogo_expediente().
 DIALOGO_EXPEDIENTE = (
-    ("asesor", "Daniel, las encuestas por la mentira del colegio cayeron 10 puntos.", 3.2),
-    ("asesor", "Esto sobre Bravo nos devuelve la elección. Nadie lo va a comprobar.", 3.4),
+    ("asesor", "Abel, las encuestas por la mentira del colegio cayeron 10 puntos.", 3.2),
+    ("asesor", "Esto sobre Pineda nos devuelve la elección. Nadie lo va a comprobar.", 3.4),
     ("daniel", "No voy a publicar una mentira.", 2.2),
     ("asesor", "Entonces juguémonoslo. Una partida: si gano yo, sale esta noche.", 3.4),
     ("asesor", "Si ganas tú, rueda de prensa y esto a la trituradora.", 3.0),
     ("daniel", "Pon las bolas.", 1.8),
 )
-# El taco de Daniel y el pulso del asesor salen de lo que paso el dia 2
-# (HERENCIAS): con la propuesta ya publica, Daniel juega tranquilo; sin
+# El taco de Abel y el pulso del asesor salen de lo que paso el dia 2
+# (HERENCIAS): con la propuesta ya publica, Abel juega tranquilo; sin
 # ella, el asesor llega desesperado y juega a ganar. Ver billar.Partida8.
 TACO_DANIEL = {"propuesta_publica": {"guia": 1.5, "tiempo": 5.0, "en_mano": 1}}
 DIFICULTAD_ASESOR = {"sin_propuesta": 1.25}
 
 
-# --- Capitulo 4: el directo de Santiago (reglas en transmision.py) ---
+# --- Capitulo 4: el directo de JH777 (reglas en transmision.py) ---
 # El chat que pasa solo: (autor, texto). Sin preguntas: lo que pregunta
 # algo espera en la cola y hay que atenderlo.
 RELLENO_CHAT_4 = (
-    ("lunita_07", "holaaa santi"), ("el_pibe_nova", "primera vez que llego a tiempo jaja"),
+    ("lunita_07", "holaaa jh"), ("el_pibe_nova", "primera vez que llego a tiempo jaja"),
     ("caro.mtz", "saludos desde Nova Sur"), ("dagoberto", "ese setup está brutal"),
     ("juanes_rx", "jajajaja"), ("mafe_dibuja", "qué bonita la luz del estudio"),
-    ("tavo_99", "SANTIIII"), ("lau.parra", "llegué, llegué"), ("kevin_ok", "+1"),
-    ("valen_r", "te quiero santi jaja"), ("el_profe_g", "buenas noches a todos"),
+    ("tavo_99", "JH777!!!"), ("lau.parra", "llegué, llegué"), ("kevin_ok", "+1"),
+    ("valen_r", "te quiero jh jaja"), ("el_profe_g", "buenas noches a todos"),
     ("nico_beats", "pon otra vez la canción del intro"), ("sofi.gg", "jajaja no puedo"),
-    ("pipe_cr7", "grande santi"), ("andre_m", "saludos a mi mamá que me está viendo"),
+    ("pipe_cr7", "grande jh"), ("andre_m", "saludos a mi mamá que me está viendo"),
     ("bryan.nova", "los del colegio técnico presentes"),
     ("dani_ela", "ese aro de luz ilumina más que mi futuro"),
     ("mono_lopez", "aguante el barrio"), ("isa_canta", "holiii"),
     ("la_negra_t", "te veo desde el bus"), ("ferchito", "qué nivel"),
     ("majo.b", "eso no me lo esperaba"), ("toto_88", "el chat va rapidísimo"),
-    ("cami.lo", "jajaja el de atrás"), ("santi_fan_1", "te sigo desde el primer video"),
+    ("cami.lo", "jajaja el de atrás"), ("jh_fan_1", "te sigo desde el primer video"),
 )
 # Los que piden algo, en el orden en que entran. tipo: pregunta (se
 # responde), bulo, odio o estafa (se borran): transmision.ACCION_DE.
@@ -1008,7 +1024,7 @@ PEDIDOS_CHAT_4 = (
     {"autor": "mateo_estudia", "tipo": "pregunta",
      "texto": "¿Cómo sé si una noticia del colegio es falsa?"},
     {"autor": "NovaAlerta_oficial", "tipo": "bulo",
-     "texto": "COMPARTAN YA: Ospina cierra el colegio el lunes. Pásenlo antes de que lo borren."},
+     "texto": "COMPARTAN YA: De la Estrella cierra el colegio el lunes. Pásenlo antes de que lo borren."},
     {"autor": "laura.vota", "tipo": "pregunta",
      "texto": "¿Vas a hablar de la elección en el directo de hoy?"},
     {"autor": "gana_facil_ya", "tipo": "estafa",
@@ -1022,13 +1038,13 @@ PEDIDOS_CHAT_4 = (
     {"autor": "camila_r", "tipo": "pregunta",
      "texto": "¿Tú a quién le crees cuando ves algo en Civitas?"},
     {"autor": "la_verdad_de_bravo", "tipo": "bulo",
-     "texto": "Bravo se robó la plata de las vías, todo el mundo lo sabe."},
+     "texto": "Pineda se robó la plata de las vías, todo el mundo lo sabe."},
     {"autor": "sorteo_civitas", "tipo": "estafa",
      "texto": "¡Ganaste un celular! Manda tus datos y tu clave para reclamarlo."},
 )
 # Lo que se mira con E el dia 4 (zonas en el plano de mundo.py). El dia
 # ya no pasa en el estudio sino en la AZOTEA: con E en el tripode
-# Santiago se pone a emitir, y de ahi sale el reto de Nodo.
+# JH777 se pone a emitir, y de ahi sale el reto de Nodo.
 # La zona es generosa a proposito (el tripode esta en x -5,6 y el aro de
 # luz en -4,9): es lo unico que hay que hacer ahi arriba y buscarlo a
 # tientas no divierte a nadie.
@@ -1041,7 +1057,7 @@ TEXTO_PATROCINADORES = (
     "se van ese mismo día.")
 # (quien, lo que dice, segundos) en el privado cifrado que corta el directo.
 MENSAJE_CIFRADO = (
-    ("privado", "Tenemos información que puede destruir a Bravo.", 3.0),
+    ("privado", "Tenemos información que puede destruir a Pineda.", 3.0),
     ("privado", "Si la publicas hoy en tu directo, son 40 millones.", 3.0),
     ("santiago", "¿Y si es falsa?", 2.0),
     ("privado", "Eso no importa. Lo importante es que la gente la crea.", 3.4),
@@ -1051,7 +1067,7 @@ MENSAJE_CIFRADO = (
 # --- Capitulo 4: «Nova Kombat» (kombat.py) ---
 # Lo que la herencia le hace a Nodo (kombat.IANodo, dificultad).
 DIFICULTAD_NODO = {"nodo_agresivo": 1.08, "nodo_tranquilo": 0.85}
-# Nodo reta a Santiago en su directo: si pierde, transmite el audio falso
+# Nodo reta a JH777 en su directo: si pierde, transmite el audio falso
 # contra la Alcaldia («preparan fraude en el conteo»); si gana, Nodo dice
 # quien esta detras. La pelea decide la rama, como el minijuego del 5.
 #   (resultado, texto, detalle, corto, (hoja, texto, efectos, bandera, detalle, corto))
@@ -1103,7 +1119,7 @@ def construir_arbol_capitulo_4():
 # contesta. Una linea por frase (tres frases de dos compases por ronda,
 # rival y respuesta).
 LETRAS_RITMO = (
-    (("rival", "«Ospina cierra el colegio el lunes, ¡pásalo!»"),
+    (("rival", "«De la Estrella cierra el colegio el lunes, ¡pásalo!»"),
      ("mateo", "¿Y quién lo dijo? Sin fuente no lo paso."),
      ("rival", "«Lo vi en un grupo, tiene mil compartidos»"),
      ("mateo", "Mil compartidos no hacen una verdad."),
@@ -1125,8 +1141,9 @@ LETRAS_RITMO = (
 TEXTO_DUELO = (
     "Hay gente compartiendo el bulo del colegio entre el público. Los "
     "músicos de la plaza te retan a un duelo frente a la tarima: el rival "
-    "canta el rumor y tú le contestas. Pulsa las flechas cuando las notas "
-    "lleguen a las marcas de arriba. Tres rondas.")
+    "canta el rumor y tú le contestas. Pulsa D, F, J y K (una tecla por "
+    "carril, como dice encima de cada marca) cuando las notas lleguen a "
+    "las marcas de arriba. Tres rondas.")
 FINAL_DUELO = {
     "perfecta": ("LA PLAZA CANTA LA VERDAD",
                  "La plaza corea tu respuesta y el bulo se queda sin eco: la gente "
@@ -1216,7 +1233,7 @@ HOJAS_CAPITULO_3 = (
       "Le ganas limpio y rompes el expediente delante de él: das la rueda "
       "de prensa sin nada que esconder.",
       "TRITURADORA")),
-    ("gano", "Ganar la partida", "El rumor sobre Bravo no sale.", "GANASTE",
+    ("gano", "Ganar la partida", "El rumor sobre Pineda no sale.", "GANASTE",
      ("r3_prensa", "Frente a los micrófonos",
       {"confianza": 10, "info_verificada": 6, "desinformacion": -4},
       "ospina_dio_la_cara",
@@ -1226,7 +1243,7 @@ HOJAS_CAPITULO_3 = (
      ("r3_rumor", "Indignación en la calle",
       {"desinformacion": 14, "conflictos": 10, "convivencia": -8, "confianza": -6},
       "ospina_jugo_sucio",
-      "El asesor publica el rumor sobre Bravo: ganas apoyo rápido, pero "
+      "El asesor publica el rumor sobre Pineda: ganas apoyo rápido, pero "
       "desatas violencia e indignación.",
       "INDIGNACIÓN")),
 )
@@ -1242,7 +1259,7 @@ def construir_arbol_capitulo_3(herencias=()):
         |- Perder la partida -> indignacion en la calle (hoja)
 
     Lo que hereda del capitulo 2 no abre ramas: cambia la partida (el
-    taco de Daniel y el pulso del asesor, TACO_DANIEL y DIFICULTAD_ASESOR).
+    taco de Abel y el pulso del asesor, TACO_DANIEL y DIFICULTAD_ASESOR).
     """
     raiz = NodoDecision("raiz", "«Si gano yo, sale esta noche.»", corto="EL RETO")
     arbol = ArbolDecision(raiz)
@@ -1274,7 +1291,7 @@ def construir_arbol_capitulo_2():
         "p_result", "Represalias en Nova",
         efectos={"info_verificada": 12, "desinformacion": -10, "confianza": 6},
         rasgo="rigor", bandera="publicaste_la_propuesta",
-        detalle="Aclaras la verdad y limpias el nombre de Ospina, pero en "
+        detalle="Aclaras la verdad y limpias el nombre de De la Estrella, pero en "
                 "Nova Noticias empiezan las represalias contra ti.",
         corto="REPRESALIAS"))
     guardar = raiz.agregar_hijo(NodoDecision(
@@ -1284,7 +1301,7 @@ def construir_arbol_capitulo_2():
         "g_result", "El ataque sigue",
         efectos={"desinformacion": 10, "confianza": -6, "info_verificada": -4},
         bandera="guardaste_la_propuesta",
-        detalle="Salvas tu puesto, pero el ataque infundado contra Ospina "
+        detalle="Salvas tu puesto, pero el ataque infundado contra De la Estrella "
                 "sigue escalando.",
         corto="SIGUE EL ATAQUE"))
     return arbol
@@ -1489,7 +1506,7 @@ RAMAS_POR_BANDERA = {
     "sabe_bravo_nova": (
         "raiz", "b_nova", "Recordar quién está detrás de @NovaAlerta",
         {"desinformacion": -8, "confianza": 4}, "rigor", 1,
-        "Sabes que esa cuenta trabaja para Bravo. Lo dices, con la captura.",
+        "Sabes que esa cuenta trabaja para Pineda. Lo dices, con la captura.",
         "Detrás de Nova"),
     "sabe_bravo_anuncios": (
         "raiz", "b_anuncios", "Preguntar quién paga los anuncios",
@@ -1499,7 +1516,7 @@ RAMAS_POR_BANDERA = {
     "sabe_ospina_plata": (
         "raiz", "b_cuentas", "Exigir cuentas claras a los candidatos",
         {"info_verificada": 6, "confianza": 3}, "rigor", 1,
-        "Ni el rumor ni la promesa: pides los números. Ospina tampoco los tiene.",
+        "Ni el rumor ni la promesa: pides los números. De la Estrella tampoco los tiene.",
         "Exigir cuentas"),
     "sabe_ruiz_acta": (
         "raiz", "b_acta", "Buscar el acta oficial antes de opinar",
@@ -1542,20 +1559,20 @@ HERENCIAS = (
             "rastreaste_el_origen"),
      "texto": "El portero del colegio vio el desmentido: te perdona un aviso más."},
     {"id": "propuesta_publica", "dia": DIA_CAMPANA, "si": ("publicaste_la_propuesta",),
-     "texto": "La propuesta de Ospina ya es pública: Daniel juega tranquilo "
+     "texto": "La propuesta de De la Estrella ya es pública: Abel juega tranquilo "
               "(guía más larga, más tiempo y una bola en mano)."},
     {"id": "sin_propuesta", "dia": DIA_CAMPANA,
      "si": ("guardaste_la_propuesta", "te_sacaron_del_colegio"),
-     "texto": "Nadie vio la propuesta de Ospina: el asesor llega desesperado y juega a ganar."},
+     "texto": "Nadie vio la propuesta de De la Estrella: el asesor llega desesperado y juega a ganar."},
     {"id": "nodo_agresivo", "dia": DIA_ESTUDIO, "si": ("ospina_jugo_sucio",),
-     "texto": "El rumor de Ospina contra Bravo calentó la red: Nodo llega con más bulos."},
+     "texto": "El rumor de De la Estrella contra Pineda calentó la red: Nodo llega con más bulos."},
     {"id": "nodo_tranquilo", "dia": DIA_ESTUDIO, "si": ("ospina_dio_la_cara",),
-     "texto": "La rueda de prensa de Ospina calmó la red: Nodo llega con menos munición."},
+     "texto": "La rueda de prensa de De la Estrella calmó la red: Nodo llega con menos munición."},
     {"id": "sofia_en_el_chat", "dia": DIA_ESTUDIO,
      "si": ("desmentiste_una_falsa", "publicaste_la_propuesta"),
      "texto": "Sofía, la del colegio, está en tu chat: avisa cuando Nodo va a lanzar un bulo."},
     {"id": "logo_de_la_red", "dia": DIA_PLAZA, "si": ("expusiste_la_red_fantasma",),
-     "texto": "Santiago le quitó la máscara a Nodo: su cara ya es conocida en la plaza."},
+     "texto": "JH777 le quitó la máscara a Nodo: su cara ya es conocida en la plaza."},
     {"id": "alcaldia_en_duda", "dia": DIA_PLAZA, "si": ("la_alcaldia_en_duda",),
      "texto": "El audio del «fraude en el conteo» corre por la plaza: nadie cree en la Alcaldía."},
 )
@@ -1574,7 +1591,7 @@ TITULARES = {
     "difundiste_una_falsa": ("El video del colegio arrasa en Civitas",
                              "{nombre} lo compartió sin verificar y ya lo creen cientos de vecinos."),
     "desmentiste_una_falsa": ("El video del colegio estaba recortado",
-                              "{nombre} publica el original: Ospina hablaba de remodelar, no de cerrar."),
+                              "{nombre} publica el original: De la Estrella hablaba de remodelar, no de cerrar."),
     "reportaste_con_prueba": ("Moderación baja el bulo del colegio",
                               "{nombre} lo reportó con la prueba y la publicación cayó en minutos."),
     "dejaste_correr_una_falsa": ("Nadie frena el rumor del colegio",
@@ -1583,19 +1600,19 @@ TITULARES = {
                        "{nombre} expone a los bots que lo compartieron en el mismo minuto."),
     "rastreaste_el_origen": ("@NovaAlerta, al descubierto",
                              "{nombre} sigue la cadena del rumor hasta la cuenta que lo inventó."),
-    "publicaste_la_propuesta": ("Sale a la luz la propuesta de Ospina",
+    "publicaste_la_propuesta": ("Sale a la luz la propuesta de De la Estrella",
                                 "{nombre} la publica pese a las amenazas: remodelar, no cerrar."),
     "guardaste_la_propuesta": ("Silencio en Nova Noticias",
-                               "La propuesta de Ospina sigue en un cajón y el ataque no para."),
+                               "La propuesta de De la Estrella sigue en un cajón y el ataque no para."),
     "te_sacaron_del_colegio": ("Intrusa en el Colegio Técnico Nova",
                                "Sacan a {nombre} de los archivos sin la propuesta."),
-    "ospina_jugo_sucio": ("Ospina responde con otro rumor",
-                          "El expediente sobre Bravo enciende la calle: hay indignación y peleas."),
-    "ospina_dio_la_cara": ("Ospina da la cara en vivo",
+    "ospina_jugo_sucio": ("De la Estrella responde con otro rumor",
+                          "El expediente sobre Pineda enciende la calle: hay indignación y peleas."),
+    "ospina_dio_la_cara": ("De la Estrella da la cara en vivo",
                            "Rechaza la guerra sucia y explica su propuesta frente a los micrófonos."),
-    "asesor_a_tus_espaldas": ("Movimientos raros en la campaña de Ospina",
-                              "Su asesor investiga a Bravo por su cuenta."),
-    "ospina_se_defendio_con_datos": ("Ospina se defiende con su propuesta",
+    "asesor_a_tus_espaldas": ("Movimientos raros en la campaña de De la Estrella",
+                              "Su asesor investiga a Pineda por su cuenta."),
+    "ospina_se_defendio_con_datos": ("De la Estrella se defiende con su propuesta",
                                      "Muestra el documento publicado y deja sin piso al rumor."),
     "la_alcaldia_en_duda": ("«Fraude en el conteo»: el audio que pagó la red",
                             "{nombre} perdió el reto de Nodo y lo transmitió a cientos de miles."),
@@ -1627,7 +1644,7 @@ TITULARES = {
 def dialogo_expediente(caida, herencias):
     """El dialogo de la mesa del capitulo 3, con lo que paso de verdad.
 
-    caida: puntos que perdio Ospina desde el inicio (None si el capitulo se
+    caida: puntos que perdio De la Estrella desde el inicio (None si el capitulo se
     juega suelto y no hay historia: entonces se cuenta el guion). Mismo
     numero de lineas y de hablantes que DIALOGO_EXPEDIENTE: la escena
     las cronometra por posicion (cine_campana.T_LINEAS).
@@ -1635,24 +1652,24 @@ def dialogo_expediente(caida, herencias):
     lineas = [list(l) for l in DIALOGO_EXPEDIENTE]
     if caida is not None:
         if caida >= 1:
-            lineas[0][1] = (f"Daniel, por la mentira del colegio caímos "
+            lineas[0][1] = (f"Abel, por la mentira del colegio caímos "
                             f"{caida} punto{'s' if caida != 1 else ''}.")
         else:
-            lineas[0][1] = "Daniel, aguantamos lo del colegio, pero Bravo nos pisa los talones."
+            lineas[0][1] = "Abel, aguantamos lo del colegio, pero Pineda nos pisa los talones."
     if "sin_propuesta" in herencias:
-        lineas[1][1] = "Nadie vio tu propuesta. Esto sobre Bravo es lo único que nos queda."
+        lineas[1][1] = "Nadie vio tu propuesta. Esto sobre Pineda es lo único que nos queda."
     elif "propuesta_publica" in herencias:
-        lineas[1][1] = "Tu propuesta ya salió, sí... pero con esto sobre Bravo lo rematamos."
+        lineas[1][1] = "Tu propuesta ya salió, sí... pero con esto sobre Pineda lo rematamos."
     return tuple(tuple(l) for l in lineas)
 
 
 def dialogo_captura(herencias):
-    """Lo que confiesa el de la mochila. Si Santiago ya expuso a la red
+    """Lo que confiesa el de la mochila. Si JH777 ya expuso a la red
     fantasma, Mateo reconoce el logo (misma cantidad de lineas)."""
     if "logo_de_la_red" not in herencias:
         return DIALOGO_CAPTURA
     return (
-        ("mateo", "Ese logo... es el de la red que Santiago expuso en su directo.", 3.2),
+        ("mateo", "Ese logo... es el de la red que JH777 expuso en su directo.", 3.2),
         ("sospechoso", "¡Suéltame! Yo solo cargo la mochila: me pagan por plaza.", 3.0),
         ("sospechoso", "Un tal «Nodo». Todo va a la misma cuenta… mira la lista.", 3.4),
     )
@@ -1661,17 +1678,17 @@ def dialogo_captura(herencias):
 # Pedidos del chat que trae lo de dias anteriores (ver pedidos_chat_4).
 PEDIDOS_CONTRA_BRAVO = (
     {"autor": "expediente_bravo", "tipo": "bulo",
-     "texto": "Lo dijo la campaña de Ospina: Bravo tiene cuentas en el extranjero. ¡Compartan!"},
+     "texto": "Lo dijo la campaña de De la Estrella: Pineda tiene cuentas en el extranjero. ¡Compartan!"},
     {"autor": "fuera_bravo_ya", "tipo": "odio",
-     "texto": "Los que votan por Bravo son unos ladrones igual que él."},
+     "texto": "Los que votan por Pineda son unos ladrones igual que él."},
 )
 PEDIDO_SOFIA = {"autor": "sofia.colegio", "tipo": "pregunta",
-                "texto": "Santi, ¿es verdad que el video del colegio estaba recortado?"}
+                "texto": "JH, ¿es verdad que el video del colegio estaba recortado?"}
 
 
 def pedidos_chat_4(herencias):
     """Los pedidos del directo segun lo que paso antes: con la guerra sucia
-    de Ospina entra mas odio contra Bravo; con su rueda de prensa, un bulo
+    de De la Estrella entra mas odio contra Pineda; con su rueda de prensa, un bulo
     menos; y Sofia vuelve si alguien desmintio el video del colegio."""
     pedidos = list(PEDIDOS_CHAT_4)
     if "chat_sereno" in herencias:

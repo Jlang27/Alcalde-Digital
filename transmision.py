@@ -1,6 +1,6 @@
 """Reglas del directo del capitulo 4 («La oferta»).
 
-Santiago transmite y el chat corre a toda velocidad. Casi todo es ruido
+JH777 transmite y el chat corre a toda velocidad. Casi todo es ruido
 (saludos, risas) que pasa solo; de vez en cuando entra un mensaje que
 pide algo y espera en la cola con un plazo:
 

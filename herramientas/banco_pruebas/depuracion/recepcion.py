@@ -3,7 +3,7 @@
     venv-win\\Scripts\\python.exe herramientas/banco_pruebas/depuracion/recepcion.py
 
 Saca el mapa de lo libre en la franja del mostrador y los ascensores, y
-tres vistas desde donde pasa Daniel de verdad: el camino desde la
+tres vistas desde donde pasa Abel de verdad: el camino desde la
 oficina, plantado frente al mostrador y esperando el ascensor. Sirve
 para decidir dónde van los figurantes sin adivinar.
 """

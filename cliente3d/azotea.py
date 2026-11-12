@@ -1,4 +1,4 @@
-"""Capitulo 4: la azotea desde la que Santiago pelea en directo («Nova Kombat»).
+"""Capitulo 4: la azotea desde la que JH777 pelea en directo («Nova Kombat»).
 
 La azotea de un edificio de ocho pisos con la Ciudad Nova de la intro abajo
 (mundo._ciudad_abajo: la misma ciudad, el mismo mitin y el mismo trafico que
@@ -16,6 +16,7 @@ de enfrente. Ambar contra azul, como el resto del juego.
 """
 
 import math
+import textwrap
 
 from panda3d.core import AmbientLight, DirectionalLight, Fog, LColor, PointLight, Vec3
 from PIL import ImageDraw
@@ -53,7 +54,7 @@ PLANOS_AZOTEA = {
     "DOS":     (Vec3(1.6, 1.7, -4.4), 1.2, 10.0),
 }
 
-# Donde se planta Santiago para emitir y desde donde le graba su propia
+# Donde se planta JH777 para emitir y desde donde le graba su propia
 # camara: la del tripode. Es el plano que sale en pantalla mientras hace
 # el directo, antes de que Nodo le lance el reto.
 MARCA_DIRECTO = (-4.15, -2.85)
@@ -67,7 +68,13 @@ BLOQUEOS = (
     (4.80, 6.00, 0.60, 3.20),        # las dos maquinas de aire
     (-5.95, -5.25, -2.95, -2.25),    # el tripode de la camara
     (-5.15, -4.65, -3.15, -2.65),    # el pie del aro de luz
+    (-4.70, -3.60, -2.05, -1.45),    # la mesa del PC
 )
+
+# El PC del directo, en una mesa a la derecha de JH777 (+z, mirando al
+# tripode): ahi le entra el mensaje de Nodo (cine_azotea.py). La pantalla
+# da la cara a la marca, hacia -z.
+MONITOR_PC = Vec3(-4.15, 1.15, -1.70)
 
 _ESTADO = {"reloj": 0.0, "guirnalda": [], "neon": None}
 
@@ -80,7 +87,7 @@ def _pintar_letrero(img):
         d.text((w / 2 + dx, h * 0.47 + dy), "NOVA KOMBAT", font=letra,
                fill=col, anchor="mm")
     sub = M._letra(int(h * 0.13), titular=False)
-    d.text((w / 2, h * 0.86), "EN DIRECTO  ·  @santilleras", font=sub,
+    d.text((w / 2, h * 0.86), "EN DIRECTO  ·  @jh777", font=sub,
            fill=(240, 236, 228, 255), anchor="mm")
 
 
@@ -91,14 +98,14 @@ def _pintar_pantalla_vecina(img):
     d.rectangle((0, 0, w, int(h * 0.18)), fill=(195, 59, 51, 255))
     d.text((w * 0.04, h * 0.09), "EN DIRECTO", font=M._letra(int(h * 0.11)),
            fill=(255, 255, 255, 255), anchor="lm")
-    d.text((w / 2, h * 0.48), "SANTI vs NODO", font=M._letra(int(h * 0.22)),
+    d.text((w / 2, h * 0.48), "JH777 vs NODO", font=M._letra(int(h * 0.22)),
            fill=(240, 236, 228, 255), anchor="mm")
     d.text((w / 2, h * 0.76), "si pierde, sale el audio", font=M._letra(int(h * 0.09), False),
            fill=(150, 200, 255, 255), anchor="mm")
 
 
 def _pintar_afiche(img):
-    """El afiche de Ospina, como los de la calle: tinta azul, titular
+    """El afiche de De la Estrella, como los de la calle: tinta azul, titular
     apretado y la casilla marcada."""
     d, (w, h) = ImageDraw.Draw(img), img.size
     d.rectangle((0, 0, w, h), fill=(29, 95, 168, 255))
@@ -157,6 +164,80 @@ def _caseton(cont, muro, metal, bombilla):
     cartel.reparentTo(nodo)                         # se esconde con el caseton
     cartel.setPos(0.6, 1.5, z + 0.285)
     _ESTADO["caseton"] = nodo
+
+
+def _pc(nodo, metal, goma):
+    """La mesa con el PC del directo: tablero, patas, monitor, teclado y torre."""
+    x, z = MONITOR_PC.x, MONITOR_PC.z - 0.05
+    madera = M._material((0.16, 0.10, 0.06, 1), rugosidad=0.6, textura="madera")
+    M._pieza(nodo, "cube", madera, (1.05, 0.05, 0.56), (x, 0.74, z))
+    for dx in (-0.48, 0.48):
+        for dz in (-0.23, 0.23):
+            M._pieza(nodo, "cube", metal, (0.04, 0.72, 0.04), (x + dx, 0.36, z + dz))
+    M._pieza(nodo, "cube", goma, (0.68, 0.42, 0.04), (x, MONITOR_PC.y, MONITOR_PC.z + 0.03))
+    M._pieza(nodo, "cube", goma, (0.05, 0.22, 0.05), (x, 0.86, MONITOR_PC.z + 0.06))
+    M._pieza(nodo, "cube", goma, (0.24, 0.015, 0.16), (x, 0.77, MONITOR_PC.z + 0.06))
+    M._pieza(nodo, "cube", goma, (0.44, 0.02, 0.15), (x, 0.775, z - 0.12))
+    M._pieza(nodo, "cube", goma, (0.20, 0.44, 0.44), (x - 0.38, 0.99, z + 0.02))
+    led = M._material((0.0, 0.02, 0.02, 1), emision=(0.2, 1.8, 2.2, 1))
+    M._pieza(nodo, "cube", led, (0.012, 0.36, 0.012), (x - 0.27, 0.99, z - 0.20))
+    pantalla = M._pantalla_plana(M._textura("pc_azotea_directo", _pintar_pc("directo"),
+                                            768, 448, srgb=False),
+                                 MONITOR_PC, 0.62, 0.36,
+                                 (MONITOR_PC.x, MONITOR_PC.y, MONITOR_PC.z - 1.0))
+    pantalla.reparentTo(nodo)
+    pantalla.setPos(MONITOR_PC)
+    _ESTADO["pc"] = pantalla
+
+
+def _pintar_pc(estado):
+    """La pantalla del PC: «directo» (la app de emitir con su chat),
+    «aviso» (entra un privado de Nodo) o «mensaje» (abierto, entero)."""
+    from contenido import RETO_NODO, RETO_NODO_REMATE    # datos, sin graficos
+
+    def pintar(img):
+        d, (w, h) = ImageDraw.Draw(img), img.size
+        claro, tenue, rojo = (236, 236, 242, 255), (150, 152, 166, 255), (226, 58, 58, 255)
+        d.rectangle((0, 0, w, h), fill=(14, 16, 22, 255))
+        d.rectangle((0, 0, w, int(h * 0.11)), fill=(30, 32, 44, 255))
+        d.ellipse((16, h * 0.035, 16 + h * 0.045, h * 0.08), fill=rojo)
+        d.text((30 + h * 0.045, h * 0.057), "EN DIRECTO  ·  @jh777  ·  48 363",
+               font=M._letra(int(h * 0.045), False), fill=claro, anchor="lm")
+        if estado == "directo":
+            filas = (("lunita_07", "holaaa jh"), ("el_pibe_nova", "llegué a tiempo"),
+                     ("valen_r", "qué vista desde ahí"), ("tavo_99", "JH777!!!"),
+                     ("cami.lo", "hoy datos o qué"), ("kevin_ok", "+1"))
+            for k, (autor, texto) in enumerate(filas):
+                y = h * (0.20 + k * 0.12)
+                d.text((24, y), autor, font=M._letra(int(h * 0.042), False),
+                       fill=(224, 164, 42, 255), anchor="lm")
+                d.text((24 + w * 0.30, y), texto, font=M._letra(int(h * 0.042), False),
+                       fill=claro, anchor="lm")
+            return
+        d.rectangle((w * 0.05, h * 0.16, w * 0.95, h * 0.96), fill=(6, 6, 8, 255),
+                    outline=rojo, width=4)
+        d.text((w * 0.09, h * 0.23), "NODO  ·  mensaje privado",
+               font=M._letra(int(h * 0.05)), fill=rojo, anchor="lm")
+        if estado == "aviso":
+            d.text((w / 2, h * 0.58), "1 MENSAJE NUEVO", font=M._letra(int(h * 0.10)),
+                   fill=claro, anchor="mm")
+            d.text((w / 2, h * 0.74), "abrir", font=M._letra(int(h * 0.05), False),
+                   fill=tenue, anchor="mm")
+            return
+        for k, linea in enumerate(textwrap.wrap(RETO_NODO, 50)):
+            d.text((w * 0.09, h * (0.32 + k * 0.068)), linea,
+                   font=M._letra(int(h * 0.044), False), fill=claro, anchor="lm")
+        d.text((w / 2, h * 0.87), RETO_NODO_REMATE, font=M._letra(int(h * 0.075)),
+               fill=rojo, anchor="mm")
+    return pintar
+
+
+def pc(estado):
+    """Cambia lo que enseña el PC del directo (ver _pintar_pc)."""
+    e = _ESTADO.get("pc")
+    if e is not None:
+        e.setTexture(M._textura(f"pc_azotea_{estado}", _pintar_pc(estado), 768, 448,
+                                srgb=False), 1)
 
 
 def caseton(visible):
@@ -230,6 +311,8 @@ def construir(cont):
     M._pieza(cont, "cube", goma, (0.32, 0.2, 0.22), (-5.6, 1.55, -2.6))
     M._pieza(cont, _cilindro(), aro, (0.85, 0.035, 0.85), (-4.9, 1.75, -2.9), giro=0)
     M._pieza(cont, "cube", goma, (0.03, 1.7, 0.03), (-4.9, 0.85, -2.9))
+    # Con el caseton: la camara de la pelea pasa por aqui y lo esconde.
+    _pc(_ESTADO["caseton"], metal, goma)
 
     # guirnaldas de bombillas entre postes, cruzando por detras
     _ESTADO["guirnalda"] = []
@@ -281,7 +364,7 @@ def _luces(cont):
 
 
 def _aro(cont):
-    """El aro de luz es un foco que apunta a donde se planta Santiago:
+    """El aro de luz es un foco que apunta a donde se planta JH777:
     le da de lleno y tira su sombra larga sobre la losa, hacia el pretil."""
     M.luces.foco(cont, "aro_de_luz", (-4.9, 1.75, -2.9),
                  (MARCA_DIRECTO[0] + 3.0, 0.9, MARCA_DIRECTO[1] + 0.6),

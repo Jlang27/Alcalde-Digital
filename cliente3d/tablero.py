@@ -26,6 +26,7 @@ from ursina import Circle, Entity, Text, Texture, camera, color, curve, destroy,
 
 import audio
 import estilo as E
+from juego import apellido
 
 # Donde va cada ficha: columnas por nivel del BFS desde @NovaAlerta (el
 # rumor baja de izquierda a derecha) y, dentro de cada una, cada cual a la
@@ -45,7 +46,7 @@ NOMBRE_CORTO = {"grupo": "Grupo de mamás"}
 # Las tres familias de prueba, cada una con su tinta (el verde se guarda
 # para lo que sale bien).
 TINTA_FAMILIA = {"bots": "LLERAS", "video": "OSPINA", "cuenta": "GAITAN"}
-APELLIDOS = ("Ospina", "Bravo", "Medina", "Ruiz")       # el orden de E.CANDIDATOS
+APELLIDOS = ("De la Estrella", "Pineda", "Medina", "Ruiz")       # el orden de E.CANDIDATOS
 
 # Profundidades (menor z = mas cerca). Todo el tablero queda por detras del
 # velo de las tarjetas (E.Z_VELO): un aviso encima lo tapa sin apagar nada.
@@ -258,7 +259,7 @@ class Tablero:
             quad(ancho, alto, (0, 0), papel)
             nombre = NOMBRE_CORTO.get(v, f["nombre"])
             if f["tipo"] == "vecino":
-                tinta = (E.CANDIDATOS[APELLIDOS.index(f["voto"].split()[-1])]
+                tinta = (E.CANDIDATOS[APELLIDOS.index(apellido(f["voto"]))]
                          if f["voto"] else E.TINTA_TENUE)
                 cx = -ancho / 2 + 0.036
                 pon(Entity(parent=caja, model=Circle(28), color=tinta, scale=0.052,
@@ -271,7 +272,7 @@ class Tablero:
                 pon(Text(text=nombre.upper(), parent=caja, origin=(-0.5, 0),
                          position=(tx, 0.013, -0.01), scale=escala, color=E.TINTA,
                          **E.fuente_titular()))
-                pon(Text(text=f"vota {f['voto'].split()[-1]}", parent=caja,
+                pon(Text(text=f"vota {apellido(f['voto'])}", parent=caja,
                          origin=(-0.5, 0), position=(tx, -0.017, -0.01),
                          scale=0.56 * E.ESCALA_TEXTO, color=E.TINTA_TENUE))
             else:

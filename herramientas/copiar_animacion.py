@@ -206,7 +206,7 @@ def plan():
 #   - hablar/pensar/asentir: los NPCs reaccionan en los dialogos
 #   - idle2/idle3 y sentado2/sentado3: mundo.poner_rutina rota la familia
 #     sola, asi que al anadirlos el cuerpo deja de repetirse sin tocar codigo
-#   - prueba es Daniel Y TODOS LOS VIGILANTES: era el mas pobre de todos
+#   - prueba es Abel Y TODOS LOS VIGILANTES: era el mas pobre de todos
 #     y su carencia se multiplica por tres en el colegio
 LLENAR = {
     "npc4": [("cashier", ["hablar", "pensar", "asentir"]),

@@ -72,12 +72,46 @@ RODILLAS = {"RightArm": (0.25, -1.0, 0.15), "RightForeArm": (0.1, -1.0, 0.4),
             "LeftArm": (-0.25, -1.0, 0.15), "LeftForeArm": (-0.1, -1.0, 0.4),
             "RightUpLeg": (0.12, -1.0, 0.05), "LeftUpLeg": (-0.12, -1.0, 0.05),
             "RightLeg": (0.0, -0.05, -1.0), "LeftLeg": (0.0, -0.05, -1.0)}
+JAB = dict(GUARDIA, LeftArm=(-0.05, 0.1, 1.0), LeftForeArm=(-0.05, 0.1, 1.0))
+CARGA_ALTA = dict(GUARDIA, RightUpLeg=(0.1, -0.7, 0.4), RightLeg=(0.0, -0.6, -0.6),
+                  LeftUpLeg=(-0.15, -1.0, -0.1))
+PATADA_ALTA = dict(GUARDIA, RightUpLeg=(0.0, 0.55, 0.85), RightLeg=(0.0, 0.65, 0.75),
+                   LeftUpLeg=(-0.15, -1.0, -0.15), RightArm=(0.5, -0.6, -0.4),
+                   LeftArm=(-0.4, -0.3, 0.6))
+# Agachado: muslos hacia delante y espinillas atras; el cuerpo baja BAJA_AGACHADO.
+AGACHADO = dict(GUARDIA, RightUpLeg=(0.2, -0.45, 0.9), LeftUpLeg=(-0.2, -0.55, 0.8),
+                RightLeg=(0.0, -1.0, -0.25), LeftLeg=(0.0, -1.0, -0.3))
+JAB_ABAJO = dict(AGACHADO, LeftArm=(-0.05, -0.1, 1.0), LeftForeArm=(-0.05, -0.1, 1.0))
+PUNO_ABAJO = dict(AGACHADO, RightArm=(-0.05, -0.1, 1.0), RightForeArm=(-0.05, -0.1, 1.0))
+BARRIDA = dict(AGACHADO, RightUpLeg=(0.05, -0.3, 1.0), RightLeg=(0.0, -0.2, 1.0),
+               LeftUpLeg=(-0.25, -0.5, 0.75), LeftLeg=(0.0, -1.0, -0.4),
+               RightArm=(0.5, -0.9, -0.1), LeftArm=(-0.5, -0.9, 0.1))
+BLOQUEO_ABAJO = dict(AGACHADO, RightArm=BLOQUEO["RightArm"], RightForeArm=BLOQUEO["RightForeArm"],
+                     LeftArm=BLOQUEO["LeftArm"], LeftForeArm=BLOQUEO["LeftForeArm"])
+# En el aire, rodillas recogidas.
+SALTO = dict(GUARDIA, RightUpLeg=(0.12, -0.25, 0.95), LeftUpLeg=(-0.12, -0.35, 0.9),
+             RightLeg=(0.0, -1.0, -0.15), LeftLeg=(0.0, -1.0, -0.2))
+JAB_AIRE = dict(SALTO, LeftArm=(-0.05, -0.35, 0.95), LeftForeArm=(-0.05, -0.35, 0.95))
+PATADA_AIRE = dict(SALTO, RightUpLeg=(0.0, -0.45, 0.9), RightLeg=(0.0, -0.5, 0.85))
+MARTILLO = dict(SALTO, RightArm=(0.1, -0.25, 1.0), RightForeArm=(0.05, -0.4, 0.9),
+                LeftArm=(-0.1, -0.25, 1.0), LeftForeArm=(-0.05, -0.4, 0.9))
+CARGA_MARTILLO = dict(SALTO, RightArm=(0.2, 1.0, 0.1), RightForeArm=(0.0, 1.0, -0.2),
+                      LeftArm=(-0.2, 1.0, 0.1), LeftForeArm=(0.0, 1.0, -0.2))
 # (pose de carga, pose del golpe) de cada movimiento
-MOVIMIENTOS = {"puno": (CARGA_PUNO, PUNO), "patada": (CARGA_PATADA, PATADA),
+MOVIMIENTOS = {"ligero": (GUARDIA, JAB), "medio": (CARGA_PATADA, PATADA),
+               "fuerte": (CARGA_ALTA, PATADA_ALTA),
+               "ligero_abajo": (AGACHADO, JAB_ABAJO), "medio_abajo": (AGACHADO, PUNO_ABAJO),
+               "fuerte_abajo": (AGACHADO, BARRIDA),
+               "ligero_aire": (SALTO, JAB_AIRE), "medio_aire": (SALTO, PATADA_AIRE),
+               "fuerte_aire": (CARGA_MARTILLO, MARTILLO),
                "desmentido": (CARGA_PUNO, PUNO), "replica": (CARGA_REPLICA, REPLICA),
                "verificar": (GUARDIA, LANZAR), "bulo": (GUARDIA, LANZAR)}
 # Cuanto se inclina el torso (grados) en cada estado: + hacia delante.
-INCLINA = {"atacar": 9.0, "recibir": -16.0, "aturdido": 18.0, "bloquear": 6.0}
+INCLINA = {"atacar": 9.0, "recibir": -16.0, "bloqueado": -6.0, "aturdido": 18.0,
+           "bloquear": 6.0, "mareado": 14.0, "agachado": 14.0, "derribado": -10.0}
+BAJA_AGACHADO = 0.36           # cuanto baja la cadera agachado (m)
+BAJA_BARRIDA = 0.5
+TUMBADO = 82.0                 # grados que se va hacia atras al caer
 
 CADENAS = {"RightArm": ("RightForeArm", "RightShoulder"),
            "RightForeArm": ("RightHand", "RightArm"),
@@ -87,6 +121,13 @@ CADENAS = {"RightArm": ("RightForeArm", "RightShoulder"),
            "LeftUpLeg": ("LeftLeg", "Hips"), "LeftLeg": ("LeftFoot", "LeftUpLeg")}
 ORDEN = ("RightArm", "RightForeArm", "LeftArm", "LeftForeArm",
          "RightUpLeg", "RightLeg", "LeftUpLeg", "LeftLeg")
+
+
+def _agachado(l):
+    """¿Va con las rodillas dobladas? (agachado, cubriendose bajo o un golpe bajo)."""
+    return (l.estado == "agachado"
+            or (l.estado in ("bloquear", "bloqueado") and l.agachado)
+            or (l.estado == "atacar" and (l.mov or "").endswith("_abajo")))
 
 
 def _mezcla(a, b, f):
@@ -106,6 +147,8 @@ class Cuerpo:
         self.columna = None
         self.clip_actual = None
         self.espinilla = 0.0
+        self.baja = 0.0                # lo que baja la cadera (agachado, de rodillas)
+        self.tumbar = 0.0              # grados hacia atras (derribado)
         if not self.usa_clips:
             self._tomar()
 
@@ -188,19 +231,37 @@ class Cuerpo:
         self.actor.setX(l.x)
         self.actor.setH(180.0 - 90.0 * l.mira)
         estado = l.estado
+        # Derribado se va de espaldas al suelo y al levantarse vuelve. Va
+        # rapido al caer y mas lento al subir, que es como se lee.
+        tumbar = TUMBADO if estado == "derribado" else 0.0
+        self.tumbar += (tumbar - self.tumbar) * min(1.0, dt * (10.0 if tumbar else 6.0))
         if self.usa_clips:
+            self.actor.setY(l.y)
+            self.actor.setP(-self.tumbar)
             self._por_clips(l)
             return
         objetivo, rapidez = self._pose(l, reloj)
         f = 1.0 - math.exp(-rapidez * dt)
         self.dirs = {k: _mezcla(self.dirs.get(k, v), v, f) for k, v in objetivo.items()}
         inclina = 30.0 if objetivo is RODILLAS else INCLINA.get(estado, 0.0)
+        if estado == "atacar" and l.mov in ("fuerte", "desmentido", "replica"):
+            inclina = 16.0
         self.inclina += (inclina - self.inclina) * min(1.0, dt * 12)
         # De rodillas, el cuerpo baja lo que mide la espinilla: los muslos
-        # siguen verticales y las espinillas se tumban hacia atras.
-        bajar = self.espinilla if objetivo is RODILLAS else 0.0
-        self.actor.setY(self.actor.getY() + (-bajar - self.actor.getY()) * min(1.0, dt * 6))
+        # siguen verticales y las espinillas se tumban hacia atras. Agachado,
+        # lo que doblan las rodillas.
+        bajar = (self.espinilla if objetivo is RODILLAS else
+                 BAJA_BARRIDA if objetivo is BARRIDA else
+                 BAJA_AGACHADO if _agachado(l) else 0.0)
+        self.baja += (bajar - self.baja) * min(1.0, dt * 14)
+        # El salto lo pone la Pelea (l.y); tumbado, la espalda queda un poco
+        # por encima de la losa.
+        self.actor.setY(l.y - self.baja + 0.12 * math.sin(math.radians(self.tumbar)))
+        # La pose se calcula de pie (las direcciones son del cuerpo, no del
+        # mundo) y luego se tumba el cuerpo entero.
+        self.actor.setP(0)
         self._aplicar(l.mira)
+        self.actor.setP(-self.tumbar)
 
     def _pose(self, l, reloj):
         e = l.estado
@@ -214,13 +275,19 @@ class Cuerpo:
             if fase == "activo" or l.t < l.duracion_mov() - l._datos()[2] * 0.55:
                 return golpe, 400.0
             return GUARDIA, 10.0
-        if e == "bloquear":
-            return BLOQUEO, 25.0
-        if e == "recibir":
+        if e in ("bloquear", "bloqueado"):
+            return (BLOQUEO_ABAJO if l.agachado else BLOQUEO), 25.0
+        if e in ("recibir", "derribado"):
             return RECIBIR, 30.0
+        if e == "agachado":
+            return AGACHADO, 22.0
+        if e == "saltar":
+            return SALTO, 16.0
+        if e == "levantarse":
+            return GUARDIA, 8.0
         if e == "caido" or (e == "aturdido" and l.vida <= 0):
             return RODILLAS, 9.0
-        if e == "aturdido":
+        if e in ("aturdido", "mareado"):
             vaiven = math.sin(reloj * 3.0) * 0.15
             pose = dict(ATURDIDO)
             pose["RightUpLeg"] = (0.15 + vaiven, -1.0, 0.1)
@@ -245,15 +312,19 @@ class Cuerpo:
     def _por_clips(self, l):
         e = l.estado
         if e == "atacar":
-            clip = CLIPS_PELEA.get(l.mov if l.mov in ("puno", "patada") else "lanzar"
-                                   if l.mov in ("verificar", "bulo") else "puno")
+            clip = CLIPS_PELEA["lanzar" if l.mov in ("verificar", "bulo") else
+                               "patada" if l.mov in ("medio", "fuerte", "fuerte_abajo",
+                                                     "medio_aire") else "puno"]
         else:
-            clip = CLIPS_PELEA.get({"quieto": "guardia", "andar": "andar"}.get(e, e))
+            clip = CLIPS_PELEA.get({"quieto": "guardia", "andar": "andar", "agachado": "guardia",
+                                    "saltar": "guardia", "bloqueado": "bloquear",
+                                    "mareado": "aturdido", "derribado": "caido",
+                                    "levantarse": "guardia"}.get(e, e))
         if clip not in self.clips:
             clip = CLIPS_PELEA["guardia"]
         if clip != self.clip_actual:
             self.clip_actual = clip
-            if e in ("quieto", "andar", "aturdido", "bloquear"):
+            if e in ("quieto", "andar", "aturdido", "bloquear", "agachado", "mareado"):
                 self.actor.loop(clip)
             else:
                 self.actor.play(clip)
@@ -431,13 +502,13 @@ def chispa(x, y, tinta, grande=False):
 
 TINTA_SANTI = (150, 124, 206)          # el color del Influencer (COLORES_JUGADOR)
 FRASES_CHAT = {
-    "golpe_santi": ("¡ESO SANTI!", "qué combooo", "dale dale", "NODO ESTÁ CAYENDO"),
-    "golpe_nodo": ("uff", "levántate santi", "nooo", "cúbrete!!"),
+    "golpe_santi": ("¡ESO JH777!", "qué combooo", "dale dale", "NODO ESTÁ CAYENDO"),
+    "golpe_nodo": ("uff", "levántate jh", "nooo", "cúbrete!!"),
     "bulo": ("FRAUDE EN LA ALCALDÍA", "COMPARTAN YA", "el audio es real"),
     "desmentido": ("¡desmentido!", "eso es un dato", "chao bulo"),
     "bloqueo": ("buen bloqueo", "lo leyó", "nada pasa"),
 }
-USUARIOS = ("lunita_07", "valen_r", "cami.la", "juanes_rx", "santi_fan_1", "dani_ela")
+USUARIOS = ("lunita_07", "valen_r", "cami.la", "juanes_rx", "jh_fan_1", "dani_ela")
 BOTS = ("bot_8812", "bot_0217", "nodo_fan", "@vecino_2291")
 
 
@@ -455,7 +526,7 @@ class HudKombat:
         a = self.piezas.append
         tinta_s = color.rgb32(*TINTA_SANTI)
         self.barras = []
-        for lado, nombre, tinta in ((-1, "SANTIAGO LLERAS", tinta_s), (1, "NODO", E.GAITAN)):
+        for lado, nombre, tinta in ((-1, "JUAN HERNÁNDEZ", tinta_s), (1, "NODO", E.GAITAN)):
             x0 = -0.86 if lado < 0 else 0.08
             org = (-0.5, 0.5) if lado < 0 else (0.5, 0.5)
             xn = x0 if lado < 0 else x0 + self.ANCHO
@@ -477,7 +548,7 @@ class HudKombat:
         a(E.banda(0.11, 0.005, (0, 0.358), E.LLERAS))
         self.reloj = E.titular("60", (0, 0.432), 1.8, E.TEXTO, origen=(0, 0.5))
         a(self.reloj)
-        # el medidor de verificacion de Santiago, en tres tramos
+        # el medidor de verificacion de JH777, en tres tramos
         a(E.pequena("VERIFICACIÓN", (-0.86, -0.333), E.RESTREPO, escala=0.7))
         self.medidor = []
         for k in range(3):
@@ -497,8 +568,9 @@ class HudKombat:
         a(E.banda(0.36, 0.22, (0.68, 0.165), E.tinta(150), z=E.Z_ADORNO + 0.01))
         self.combo_txt = E.titular("", (-0.40, 0.24), 1.6, E.LLERAS, origen=(0, 0.5))
         a(self.combo_txt)
-        self.piezas += E.leyenda((("A D", "moverse"), ("S", "abajo"), ("J", "puño"),
-                                  ("K", "patada"), ("L", "bloquear"), ("I", "réplica")),
+        self.piezas += E.leyenda((("A D", "moverse"), ("W", "saltar"), ("S", "agacharse"),
+                                  ("J K L", "ligero · medio · fuerte"),
+                                  ("atrás", "cubrirse"), ("I", "réplica")),
                                  -0.458)
 
     # --- lo que cambia --------------------------------------------------
@@ -527,8 +599,9 @@ class HudKombat:
             self.combo = 0
             self.combo_txt.text = ""
 
-    def golpe_santi(self):
-        self.combo += 1
+    def golpe_santi(self, combo):
+        """combo: los golpes seguidos que lleva Nodo (lo cuenta la Pelea)."""
+        self.combo = combo
         self.t_combo = 1.1
         self.espectadores += random.randint(400, 1400)
         if self.combo >= 2:
@@ -602,7 +675,10 @@ class HudKombat:
 
 TECLAS = {"a": "izquierda", "left arrow": "izquierda", "d": "derecha",
           "right arrow": "derecha", "s": "abajo", "down arrow": "abajo",
-          "j": "puno", "k": "patada", "l": "bloquear", "i": "replica"}
+          "w": "arriba", "up arrow": "arriba", "space": "arriba",
+          "j": "ligero", "k": "medio", "l": "fuerte", "i": "replica"}
+# A que altura salta la chispa segun por donde entra el golpe.
+ALTO_CHISPA = {"bajo": 0.55, "medio": 1.3, "alto": 1.5}
 PRESENTACION = 3.0
 CIERRE = 4.0
 TITULO_FIN = {"desenmascarado": ("¡DESENMASCARADO!", "la red fantasma ya tiene cara", None),
@@ -629,13 +705,13 @@ class Combate:
         self.t_fin = 0.0
         self.congelado = False
         self.vuelo = None
-        self.hud.anuncio("SANTI VS NODO", "si pierdes, transmites su audio contra la Alcaldía",
+        self.hud.anuncio("JH777 VS NODO", "si pierdes, transmites su audio contra la Alcaldía",
                          E.GAITAN)
         audio.musica(audio.MUSICA_PERSECUCION, fundido=1.0, nivel=0.7)
         audio.ambiente(True, audio.AMBIENTE_CIUDAD_ALTO, fundido=1.5, nivel=0.5)
         for _ in range(3):
             self.hud.decir("golpe_santi")
-        # A la linea de pelea (z = 0): Santiago viene de emitir junto al
+        # A la linea de pelea (z = 0): JH777 viene de emitir junto al
         # tripode y Cuerpo solo mueve la x; se quedaba dos metros mas cerca
         # de la camara, enorme y cortado por el borde.
         for actor in (actor_santi, actor_nodo):
@@ -706,6 +782,14 @@ class Combate:
     def _evento(self, ev):
         tipo = ev[0]
         p = self.pelea
+        if tipo == "salto":
+            audio.efecto("silbido", 0.35)
+            return
+        if tipo == "aterriza":
+            if ev[2] == "derribado":
+                audio.efecto("golpe", 0.7)
+                self.camara.golpe(0.5)
+            return
         if tipo == "ataque":
             _t, quien, mov = ev
             audio.efecto("silbido", 0.6)
@@ -714,24 +798,32 @@ class Combate:
                 if self.aviso_sofia:
                     self.hud.cartel(0.30, 0.25, "SOFÍA: ¡BULO, CÚBRETE!", E.LLERAS, 0.7)
         elif tipo == "golpe":
-            _t, quien, mov, daño, bloqueado = ev
-            rival = p.nodo if quien == "Santiago" else p.santi
+            _t, quien, mov, daño, bloqueado, combo, efecto = ev
+            rival = p.nodo if quien == "JH777" else p.santi
             x = rival.x - rival.mira * 0.25
+            nivel = K.GOLPES[mov].nivel if mov in K.GOLPES else "medio"
+            y = rival.y + ALTO_CHISPA[nivel] - (0.3 if rival.agachado and not rival.y else 0.0)
             if bloqueado:
                 audio.efecto("golpe", 0.5)
-                chispa(x, 1.35, E.TEXTO)
+                chispa(x, y, E.TEXTO)
                 self.camara.golpe(0.25)
                 if quien == "Nodo":
                     self.hud.cartel(-0.30, 0.25, "BLOQUEADO", E.TEXTO)
                     self.hud.decir("bloqueo")
                 return
-            grande = mov in ("replica", "desmentido")
-            audio.efecto("estrepito" if grande else "golpe", 1.0)
-            chispa(x, 1.45 if mov != "patada" else 1.2, E.LLERAS if quien == "Santiago"
-                   else E.GAITAN, grande)
-            self.camara.golpe(1.0 if grande else 0.55)
-            if quien == "Santiago":
-                self.hud.golpe_santi()
+            fuerza = K.GOLPES[mov].fuerza if mov in K.GOLPES else 2
+            grande = fuerza >= 3
+            audio.efecto("estrepito" if grande else "golpe", 0.6 + 0.15 * fuerza)
+            chispa(x, y, E.LLERAS if quien == "JH777" else E.GAITAN, grande)
+            self.camara.golpe(0.3 + 0.22 * fuerza)
+            lado = 0.20 if quien == "JH777" else -0.30
+            if efecto == "mareo":
+                self.hud.cartel(lado, 0.18, "¡MAREADO!", E.LLERAS)
+            elif efecto == "derribo" and mov not in ("replica",):
+                self.hud.cartel(lado, 0.10, "¡DERRIBO!", E.GAITAN if quien == "Nodo"
+                                else E.RESTREPO, 0.7)
+            if quien == "JH777":
+                self.hud.golpe_santi(combo)
                 if random.random() < 0.45:
                     self.hud.decir("golpe_santi")
                 if mov == "replica":

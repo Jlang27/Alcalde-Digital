@@ -1,9 +1,9 @@
 """Escenas del capitulo 3, «La primera jugada sucia».
 
 LlegadaCampana (antes del rotulo): el asesor entra en el despacho,
-preocupado, y cita a Daniel arriba, en la sala de juegos del piso 12.
+preocupado, y cita a Abel arriba, en la sala de juegos del piso 12.
 
-SubidaJuegos: Daniel sube en el ascensor, como en las subidas de los
+SubidaJuegos: Abel sube en el ascensor, como en las subidas de los
 juegos de mundo abierto (llamar, entrar, puertas que se cierran sobre el,
 la cabina subiendo con el indicador contando pisos, la campanita y las
 puertas que se abren en otra planta). Arriba, junto a la mesa de billar,
@@ -27,9 +27,9 @@ from escena import EscenaDecision
 # ===================================================================
 
 DANIEL_EN_MARCA = (0.0, 0.0)       # los planos del dia se miden desde aqui
-ASESOR_HABLA = (1.2, -1.5)         # a dos metros de Daniel, entre el y la puerta
+ASESOR_HABLA = (1.2, -1.5)         # a dos metros de Abel, entre el y la puerta
 # Entra por la puerta de la sala de guerra (x = 3,8, z de -3,9 a -2,5):
-# recto hasta pasarla y luego hacia Daniel, sin rozar el marco.
+# recto hasta pasarla y luego hacia Abel, sin rozar el marco.
 CAMINO_ASESOR = ((5.4, -3.2), (3.0, -3.2), ASESOR_HABLA)
 
 
@@ -50,16 +50,16 @@ def _por_camino(camino, f):
 
 
 PLANOS_LLEGADA = (
-    # Daniel de espaldas, frente al ventanal: el mitin y la ciudad.
+    # Abel de espaldas, frente al ventanal: el mitin y la ciudad.
     ("ventanal", 4.0, Vec3(0.9, 1.75, -2.4), Vec3(0.7, 1.72, -1.9),
      Vec3(-0.2, 1.45, 6.0), Vec3(-0.2, 1.4, 6.0), 50),
     # Se abre la puerta: entra el asesor, con prisa.
     ("puerta", 3.2, Vec3(-1.6, 1.6, 0.9), Vec3(-1.45, 1.6, 0.75),
      Vec3(3.4, 1.2, -3.0), Vec3(1.8, 1.25, -2.0), 52),
-    # Por encima del hombro de Daniel: habla el asesor.
+    # Por encima del hombro de Abel: habla el asesor.
     ("asesor", 3.0, Vec3(-0.95, 1.68, 0.25), Vec3(-0.85, 1.67, 0.15),
      Vec3(1.2, 1.55, -1.5), Vec3(1.2, 1.55, -1.5), 40),
-    # Contraplano: Daniel, con la ciudad detras.
+    # Contraplano: Abel, con la ciudad detras.
     ("daniel", 2.4, Vec3(2.25, 1.7, -1.75), Vec3(2.15, 1.69, -1.65),
      Vec3(0.0, 1.55, 0.0), Vec3(0.0, 1.55, 0.0), 38),
     ("asesor_2", 7.4, Vec3(-0.85, 1.67, 0.15), Vec3(-0.7, 1.66, 0.02),
@@ -67,7 +67,7 @@ PLANOS_LLEGADA = (
     ("daniel_2", 2.2, Vec3(2.15, 1.69, -1.65), Vec3(2.05, 1.68, -1.55),
      Vec3(0.0, 1.57, 0.0), Vec3(0.0, 1.57, 0.0), 34),
     # Desde la libreria, a la altura de los ojos (mirando hacia abajo las
-    # paredes se inclinaban): Daniel a un lado y el asesor que se va.
+    # paredes se inclinaban): Abel a un lado y el asesor que se va.
     ("sale", 5.0, Vec3(-2.8, 1.62, -1.0), Vec3(-2.6, 1.62, -1.1),
      Vec3(2.6, 1.35, -2.4), Vec3(3.4, 1.35, -2.8), 50),
 )
@@ -184,7 +184,7 @@ class LlegadaCampana(EscenaDecision):
         self.negro.animate_color(color.rgba(0, 0, 0, 1), duration=0.3)
 
     def cerrar(self):
-        """Daniel vuelve a su marca, de cara a la camara del rotulo, y el
+        """Abel vuelve a su marca, de cara a la camara del rotulo, y el
         asesor a su ronda, que el cliente retoma donde la dejo."""
         super().cerrar()
         self.actor.setPos(DANIEL_EN_MARCA[0], 0, DANIEL_EN_MARCA[1])
@@ -215,7 +215,7 @@ def _v(x, y, z):
 
 
 PLANOS_SUBIDA = (
-    # Por detras de Daniel, algo a su derecha: las puertas delante de el.
+    # Por detras de Abel, algo a su derecha: las puertas delante de el.
     ("llama", 2.4, _v(-0.55, 1.75, -11.45), _v(-0.65, 1.72, -11.7),
      _v(-1.3, 1.25, -14.6), _v(-1.3, 1.25, -14.6), 52),
     # Entra en la cabina y se da la vuelta.
@@ -228,17 +228,17 @@ PLANOS_SUBIDA = (
     # va con la cabina: _durante le suma su altura).
     ("sube", 4.2, _v(-1.92, 1.85, -14.72), _v(-1.88, 1.82, -14.76),
      _v(-1.15, 1.5, -15.55), _v(-1.15, 1.5, -15.55), 58),
-    # Arriba, desde la sala: campanita, puertas y Daniel que sale.
+    # Arriba, desde la sala: campanita, puertas y Abel que sale.
     ("llega", 2.8, _v(0.8, YJ + 1.6, -11.6), _v(0.6, YJ + 1.6, -11.9),
      _v(-1.3, YJ + 1.25, -14.8), _v(-1.3, YJ + 1.25, -14.8), 52),
     # La sala de juegos: la mesa bajo la lampara y el asesor esperando.
     ("sala", 3.6, _v(-3.4, YJ + 2.3, -13.4), _v(-3.0, YJ + 2.05, -12.4),
      _v(TX, YJ + 0.9, TZ), _v(TX, YJ + 0.95, TZ), 56),
-    # El asesor por encima del hombro de Daniel, con la mesa en medio.
-    # (camara medio metro al lado de Daniel: justo detras su cabeza tapaba al asesor)
+    # El asesor por encima del hombro de Abel, con la mesa en medio.
+    # (camara medio metro al lado de Abel: justo detras su cabeza tapaba al asesor)
     ("asesor", 7.2, _v(TX - 1.52, YJ + 1.75, TZ - 2.11), _v(TX - 1.45, YJ + 1.73, TZ - 2.0),
      _v(TX + 1.55, YJ + 1.55, TZ + 0.35), _v(TX + 1.55, YJ + 1.55, TZ + 0.35), 40),
-    # Contraplano: Daniel.
+    # Contraplano: Abel.
     ("daniel", 2.6, _v(TX + 2.2, YJ + 1.7, TZ + 1.0), _v(TX + 2.1, YJ + 1.69, TZ + 0.9),
      _v(TX - 1.0, YJ + 1.55, TZ - 1.25), _v(TX - 1.0, YJ + 1.55, TZ - 1.25), 36),
     # El expediente cae sobre el paño y el asesor pone las condiciones.

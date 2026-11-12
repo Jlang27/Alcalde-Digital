@@ -73,7 +73,7 @@ DIALOGO = (
     (0.6, "prota", "Rector, en Civitas dicen que van a cerrar el colegio.", 3.4),
     (4.3, "rector", "No tenemos ninguna orden de cierre. Nadie nos ha "
                     "notificado nada.", 3.4),
-    (8.0, "rector", "Lo único que hay es una propuesta del equipo de Ospina. "
+    (8.0, "rector", "Lo único que hay es una propuesta del equipo de De la Estrella. "
                     "Y está en el archivo.", 3.2),
 )
 

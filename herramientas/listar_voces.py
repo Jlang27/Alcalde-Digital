@@ -168,7 +168,7 @@ def main():
         "\nLas líneas del protagonista llevan su nombre en el archivo "
         "porque **quien protagoniza cada día cambia con los turnos**. "
         "Están puestas con el personaje que manda el guion "
-        "(cap. 2 Valeria, cap. 3 Daniel, cap. 4 Santiago); si ese día "
+        "(cap. 2 Valeria, cap. 3 Abel, cap. 4 JH777); si ese día "
         "juega otro, esa línea va muda, que es mejor que una voz que no "
         "es la suya.\n")
 

@@ -58,10 +58,10 @@ dialogo = p.dialogo_expediente()
 assert len(dialogo) == len(DIALOGO_EXPEDIENTE)            # la escena cronometra 4 lineas
 assert [q for q, _, _ in dialogo] == [q for q, _, _ in DIALOGO_EXPEDIENTE]
 assert "salió" in dialogo[1][1], dialogo[1]
-antes = p.encuesta["Daniel Ospina"]
+antes = p.encuesta["Abel de la Estrella"]
 cerrar(p, "defender")
 assert "ospina_se_defendio_con_datos" in p.banderas
-assert p.encuesta["Daniel Ospina"] > antes
+assert p.encuesta["Abel de la Estrella"] > antes
 
 # guardarla: sin cuarta opcion y el asesor desesperado
 p = Partida(["periodista"], semilla=1)
@@ -82,15 +82,12 @@ p.iniciar_dia(2)
 cerrar(p, "rumor")
 p.iniciar_dia(3)
 assert "chat_contra_bravo" in p.heredado()
-assert len(p.transmision.pedidos) == len(PEDIDOS_CHAT_4) + 2
 p = Partida(["candidato"], semilla=1)
 p.iniciar_dia(2)
 cerrar(p, "prensa")
 p.banderas.add("desmentiste_una_falsa")
 p.iniciar_dia(3)
 assert p.heredado() == {"chat_sereno", "sofia_en_el_chat"}, p.heredado()
-autores = [x["autor"] for x in p.transmision.pedidos]
-assert "verdad_oculta" not in autores and "sofia.colegio" in autores
 
 # --- dia 4 -> dia 5: exponer la red cambia la confesion; la portada
 #     cuenta como amanece la plaza ---

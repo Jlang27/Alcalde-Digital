@@ -4,7 +4,7 @@
 
 Escribe:
   assets/audio/ambiente_ciudad_alto.ogg   capítulo 3, la oficina del piso 8
-  assets/audio/ambiente_estudio.ogg       capítulo 4, el estudio de Santiago
+  assets/audio/ambiente_estudio.ogg       capítulo 4, el estudio de JH777
 
 POR QUÉ. Hasta ahora la oficina y el estudio sonaban con `ambiente.ogg`,
 que es la avenida a pie de acera de la intro: los mismos carros pasando

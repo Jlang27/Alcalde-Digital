@@ -1,6 +1,6 @@
 """Escenario: el final del capitulo 2 por la puerta.
 
-Agarra la propuesta de Ospina en el archivo restringido y llega a la
+Agarra la propuesta de De la Estrella en el archivo restringido y llega a la
 salida: fuera, bajo la lluvia, vibra el telefono con el mensaje anonimo y
 se decide con 1 (publicar) o 2 (guardar). Comprueba que la decision la
 toma la Partida, que el dia se cierra y que la partida lo recuerda.

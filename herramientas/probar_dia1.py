@@ -90,8 +90,8 @@ assert recorto and efectos == {"desinformacion": -5, "confianza": 3, "conflictos
 # el expediente: lo que se supo hablando y mirando
 assert {"ospina_remodelar", "ospina_plata", "ruiz_acta", "medina_calla"} <= p.expediente
 assert "sabe_ruiz_acta" in p.banderas
-sabidos, faltan = p.expediente_de("Hugo Bravo")
-assert sabidos == [] and faltan == 2                  # Bravo solo cae decidiendo
+sabidos, faltan = p.expediente_de("Juan Pineda")
+assert sabidos == [] and faltan == 2                  # Pineda solo cae decidiendo
 
 # repetir una pista no hace nada
 assert not p.descubrir("perfil")[0]
@@ -123,7 +123,7 @@ t.elegir("ignorar")
 t.elegir("i_result")
 assert "llegaste_tarde" in t.banderas
 
-# --- la encuesta: compartir hunde a Ospina; desmentir temprano lo protege ---
+# --- la encuesta: compartir hunde a De la Estrella; desmentir temprano lo protege ---
 def jugar(camino, rondas=0, pistas=()):
     x = Partida(["ciudadano"], semilla=5)
     x.iniciar_dia(0)
@@ -137,7 +137,7 @@ def jugar(camino, rondas=0, pistas=()):
 compartio = jugar(["compartir", "c_result"])
 pct = compartio.porcentajes()
 assert sum(pct.values()) == 100
-assert compartio.encuesta["Daniel Ospina"] < 25 < compartio.encuesta["Hugo Bravo"] + 3
+assert compartio.encuesta["Abel de la Estrella"] < 25 < compartio.encuesta["Juan Pineda"] + 3
 assert {"ana", "luis"} <= set(compartio.desenlace_red["creyentes"])   # tus contactos
 assert compartio.desenlace_red["protegidos"] == []
 
@@ -146,15 +146,15 @@ temprano = jugar(["verificar", "d_resultado", "v_desmentir"],
 temprano_tarde = jugar(["verificar", "d_resultado", "v_desmentir"], rondas=6,
                        pistas=("rafa_saludo", "rafa_alboroto", "sofia_video", "foto"))
 assert len(temprano.desenlace_red["protegidos"]) > len(temprano_tarde.desenlace_red["protegidos"])
-assert temprano.encuesta["Daniel Ospina"] > temprano_tarde.encuesta["Daniel Ospina"]
-assert temprano.encuesta["Daniel Ospina"] > compartio.encuesta["Daniel Ospina"]
+assert temprano.encuesta["Abel de la Estrella"] > temprano_tarde.encuesta["Abel de la Estrella"]
+assert temprano.encuesta["Abel de la Estrella"] > compartio.encuesta["Abel de la Estrella"]
 assert compartio.resultado_eleccion()[0][2] == max(compartio.porcentajes().values())
 
-# rastrear revela a Bravo, y el dia siguiente lo recuerda
+# rastrear revela a Pineda, y el dia siguiente lo recuerda
 rastreo = jugar(["d_rastreo"], pistas=("rafa_saludo", "hernan_saludo", "hernan_quien",
                                        "perfil", "cuenta"))
 assert "bravo_nova" in rastreo.expediente
-assert rastreo.encuesta["Hugo Bravo"] < 22
+assert rastreo.encuesta["Juan Pineda"] < 22
 rastreo.iniciar_dia(1)
 assert rastreo.arbol_decision.buscar("b_nova") is not None    # memoria entre dias
 assert "bravo_nova" in rastreo.expediente                     # el expediente dura

@@ -41,7 +41,6 @@ from contenido import (
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
     OPCIONES_QUE_PROTEGEN, PERSONAJE_DEL_DIA, DUENO_PERSONAJE, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO, DIA_PLAZA, TENSION_PLAZA,
     RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, DIFICULTAD_NODO, TACO_DANIEL, DIFICULTAD_ASESOR,
-    RELLENO_CHAT_4,
     OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2, OBJETIVOS_CAPITULO_2,
     SALIDA_CAPITULO_2,
     construir_arbol_habilidades, construir_arbol_decision, construir_arbol_capitulo_2,
@@ -49,11 +48,10 @@ from contenido import (
     RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION, EVENTOS_PERSECUCION,
     aplicar_habilidades, aplicar_banderas,
     HERENCIAS, TITULARES, TEXTO_ESTADO_PLAZA,
-    dialogo_expediente, dialogo_captura, pedidos_chat_4,
+    dialogo_expediente, dialogo_captura,
 )
 from sigilo import Sigilo, VELOCIDAD as VELOCIDAD_RONDA, AVISOS_MAXIMOS
 from kombat import Pelea
-from transmision import Transmision
 from billar import Partida8
 from ritmo import Duelo
 from persecucion import Persecucion
@@ -66,9 +64,6 @@ ARBOL_DEL_CAPITULO = {DIA_SIGILO: construir_arbol_capitulo_2,
                       DIA_PLAZA: construir_arbol_capitulo_5}
 # Lo que la herencia del dia 1 le hace a la ronda del colegio.
 RONDA_REFORZADA = 1.25         # los vigilantes andan un 25 % mas rapido
-# Lo que mueve en los indicadores llevar bien (o mal) el chat del directo.
-EFECTOS_CHAT = {True: {"desinformacion": -4, "confianza": 4},
-                False: {"desinformacion": 6, "confianza": -3}}
 RASGOS = ["rigor", "empatia", "alcance", "impulso"]
 
 # Segundos que tiene el protagonista para decidir, y los que tiene quien
@@ -98,12 +93,12 @@ PESO_INDICADORES = 0.05
 # Cinco dias hasta la eleccion: un capitulo por dia, todos jugables.
 DIAS_PARTIDA = 5
 
-# El orden es el de las tintas (estilo.CANDIDATOS): Ospina azul, Bravo rojo,
+# El orden es el de las tintas (estilo.CANDIDATOS): De la Estrella azul, Pineda rojo,
 # Medina amarillo, Ruiz verde. Cada uno conserva su color en toda pantalla.
 CANDIDATOS = [
-    ("Daniel Ospina", "Campaña de obras para el barrio",
+    ("Abel de la Estrella", "Campaña de obras para el barrio",
      {"bienestar": 1.0, "convivencia": 0.8, "info_verificada": 0.6}),
-    ("Hugo Bravo", "Campaña que vive del escándalo y el rumor",
+    ("Juan Pineda", "Campaña que vive del escándalo y el rumor",
      {"desinformacion": 1.3, "conflictos": 1.1, "confianza": -0.9}),
     ("Juan Medina", "Campaña centrada en la convivencia del barrio",
      {"convivencia": 1.2, "bienestar": 1.0, "conflictos": -1.0}),
@@ -114,6 +109,13 @@ NOMBRES_CANDIDATOS = [c[0] for c in CANDIDATOS]
 
 # Color de cada jugador, para distinguirlos en pantalla
 COLORES_JUGADOR = [(79, 179, 169), (216, 138, 74), (150, 124, 206), (198, 96, 120)]
+
+
+def apellido(nombre):
+    """«Abel de la Estrella» -> «De la Estrella», «Juan Pineda» -> «Pineda».
+    La ultima palabra sola no vale: el apellido puede ser compuesto."""
+    resto = nombre.split(maxsplit=1)[-1]
+    return resto[:1].upper() + resto[1:]
 
 
 def en_lista(nombres):
@@ -287,7 +289,6 @@ class Partida:
         self.sigilo = None
         # El dia 4 son dos cosas seguidas: primero el directo (el chat que
         # se modera) y, cuando Nodo lanza su reto por privado, la pelea.
-        self.transmision = None       # el chat del directo del dia 4
         self.kombat = None            # la pelea en directo del dia 4 (kombat.py)
         self.billar = None            # la partida con el asesor del dia 3 (billar.py)
         self.estado_plaza = None      # "pacifica" o "caotica", el dia 5
@@ -354,7 +355,7 @@ class Partida:
     @property
     def nombre_protagonista(self):
         """Como se llama quien protagoniza hoy: el personaje del capitulo,
-        no el del jugador (el Alcalde interpreta a Daniel el dia 3)."""
+        no el del jugador (el Alcalde interpreta a Abel el dia 3)."""
         return ROLES[self.personaje].get("personaje", ROLES[self.personaje]["nombre"])
 
     def secundarios_de(self, dia):
@@ -439,8 +440,6 @@ class Partida:
         # Nodo llega como lo dejaron los dias anteriores (contenido.HERENCIAS).
         dificultad = next((DIFICULTAD_NODO[h] for h in heredado if h in DIFICULTAD_NODO), 1.0)
         self.kombat = Pelea(dificultad) if indice == DIA_ESTUDIO else None
-        self.transmision = (Transmision(RELLENO_CHAT_4, pedidos_chat_4(heredado))
-                            if indice == DIA_ESTUDIO else None)
         # Y el billar del asesor, segun lo que paso con la propuesta el dia 2.
         taco = next((TACO_DANIEL[h] for h in heredado if h in TACO_DANIEL), None)
         pulso = next((DIFICULTAD_ASESOR[h] for h in heredado if h in DIFICULTAD_ASESOR), 1.0)
@@ -515,14 +514,6 @@ class Partida:
         if self.sigilo is not None and self.sigilo.escapo:
             self.banderas_del_dia.append("sacaste_la_propuesta")
             self.banderas.add("sacaste_la_propuesta")
-        # El directo deja memoria de como se llevo el chat, aparte de lo
-        # que pase luego en la pelea.
-        if self.transmision is not None and self.transmision.terminada:
-            bien = self.transmision.bien_llevado()
-            bandera = "cuidaste_tu_chat" if bien else "tu_chat_se_desbordo"
-            self.banderas_del_dia.append(bandera)
-            self.banderas.add(bandera)
-            self._aplicar_efectos(EFECTOS_CHAT[bien])
 
         self._cerrar_red()
         self._mover_encuesta()
@@ -588,12 +579,12 @@ class Partida:
                 "manana": manana, "dia": siguiente}
 
     def dialogo_expediente(self):
-        """Lo que le dice el asesor a Daniel en la mesa, con la caida real
+        """Lo que le dice el asesor a Abel en la mesa, con la caida real
         de la encuesta (o el guion, si el capitulo se juega suelto)."""
         caida = None
         if self.dias_completados >= self.dia_actual:      # hubo dias antes
-            antes = self.porcentajes(ENCUESTA_INICIAL)["Daniel Ospina"]
-            caida = antes - self.porcentajes()["Daniel Ospina"]
+            antes = self.porcentajes(ENCUESTA_INICIAL)["Abel de la Estrella"]
+            caida = antes - self.porcentajes()["Abel de la Estrella"]
         return dialogo_expediente(caida, self.heredado())
 
     def dialogo_captura(self):
@@ -1049,14 +1040,14 @@ class Partida:
             perdidos = {}
             for v in self.desenlace_red["creyentes"]:
                 d = self.red.datos[v]
-                if d["voto"] == "Daniel Ospina":
+                if d["voto"] == "Abel de la Estrella":
                     perdidos[v] = d["peso"]
             if perdidos:
                 total = sum(perdidos.values())
                 quien = en_lista(self.nombres(perdidos))
                 verbo = "se creyó" if len(perdidos) == 1 else "se creyeron"
-                mover("Daniel Ospina", -total, f"{quien} {verbo} el rumor")
-                mover("Hugo Bravo", total / 2, "El escándalo le sirve")
+                mover("Abel de la Estrella", -total, f"{quien} {verbo} el rumor")
+                mover("Juan Pineda", total / 2, "El escándalo le sirve")
         # 2. lo que movieron los nodos que recorriste
         for nodo in self.arbol_decision.camino:
             for candidato, delta in VOTOS_POR_NODO.get(nodo.id, {}).items():

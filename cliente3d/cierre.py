@@ -32,6 +32,7 @@ from ursina import Entity, Mesh, Text, Circle, camera, color, curve, time
 
 import audio
 import estilo as E
+from juego import apellido
 
 # Profundidades dentro de la pagina (menor z = mas cerca). Texto a z 0.
 Z_PAPEL = 0.100
@@ -1132,7 +1133,7 @@ def encuesta(datos, animado=True):
     lider = max(candidatos, key=lambda c: c["pct"])
     acento = lider["tinta"]
     fondo(pg, datos["dia"], acento)
-    cabecera(pg, f"INTENCIÓN DE VOTO · {lider['nombre'].split()[-1].upper()}",
+    cabecera(pg, f"INTENCIÓN DE VOTO · {apellido(lider['nombre']).upper()}",
              datos["titular"], lider["pct"], datos["chips"], acento,
              datos["arriba"])
 
@@ -1164,7 +1165,7 @@ def encuesta(datos, animado=True):
         pg.brotar(f, t)
         pg.brotar(texto(pg, ficha, (x + 0.016 + ancho_f / 2, y - 0.011), 0.42,
                         E.PAPEL, origen=(0, 0), gruesa=True), t + 0.02)
-        quien = texto(pg, candidato.split()[-1].upper(),
+        quien = texto(pg, apellido(candidato).upper(),
                       (x + 0.030 + ancho_f, y - 0.001), 0.34, tinta,
                       gruesa=True)
         pg.aparecer(quien, t + 0.05, dx=0.02)

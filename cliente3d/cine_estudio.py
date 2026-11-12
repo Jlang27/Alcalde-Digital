@@ -1,6 +1,6 @@
 """Escena del capitulo 4, «La oferta»: en mitad del directo le llega a
-Santiago un privado cifrado. Se descifra en el monitor, ofrece dinero
-por publicar un montaje contra Bravo, Santiago pregunta si es falso y
+JH777 un privado cifrado. Se descifra en el monitor, ofrece dinero
+por publicar un montaje contra Pineda, JH777 pregunta si es falso y
 le contestan que da igual. Decide con 1, 2 o 3.
 
 El monitor de los privados (mundo.monitor_privado) va contando lo que
@@ -17,7 +17,7 @@ import mundo
 from escena import EscenaDecision
 
 MONITOR = Vec3(*mundo.MONITOR_PRIVADO)
-CARA = Vec3(0.0, 1.62, 0.0)        # Santiago, de pie en su marca
+CARA = Vec3(0.0, 1.62, 0.0)        # JH777, de pie en su marca
 PLANOS_OFERTA = (
     # Por encima de su hombro izquierdo: el privado entra en el monitor.
     ("aviso", 3.2, Vec3(0.52, 1.78, 0.55), Vec3(0.56, 1.66, 0.3),
@@ -32,7 +32,7 @@ PLANOS_OFERTA = (
     ("respuesta", 4.0, Vec3(0.36, 1.5, 0.12), Vec3(0.4, 1.47, -0.02),
      MONITOR, MONITOR, 40),
     # De perfil, desde fuera de la consola (de frente lo tapaba el monitor
-    # del chat), con el neon al fondo y Santiago a la derecha: se decide.
+    # del chat), con el neon al fondo y JH777 a la derecha: se decide.
     ("decide", 14.0, Vec3(-2.0, 1.62, -0.25), Vec3(-1.8, 1.6, -0.2),
      Vec3(0.0, 1.42, 0.35), Vec3(0.0, 1.42, 0.32), 48),
 )

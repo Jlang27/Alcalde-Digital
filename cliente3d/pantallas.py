@@ -428,6 +428,7 @@ class DueloRitmo:
     LADO = 0.088
     GIRO = (-90, 180, 0, 90)                  # izquierda, abajo, arriba, derecha
     TINTAS = (E.OSPINA, E.GAITAN, E.LLERAS, E.RESTREPO)
+    LETRAS = ("D", "F", "J", "K")             # juego3d.TECLAS_DUELO
     ANCHO_BARRA = 0.9
 
     def __init__(self, textura, rival="TAVO, EL DEL RUMOR"):
@@ -443,8 +444,19 @@ class DueloRitmo:
                 m = self._flecha(x, self.Y_MARCA, c, E.luz(70), z=0.02)
                 self.marcas[quien].append(m)
                 a(m)
-        a(E.pequena("MATEO", (self.X_MATEO[0] - 0.04, self.Y_MARCA + 0.085), E.OSPINA,
-                    escala=0.6))
+        # La tecla de cada carril, encima de su marca: las notas suben desde
+        # abajo y se quitan al juzgarse, asi que ahi arriba no tapan nada.
+        # El nombre de Mateo se va al costado para dejarles sitio.
+        self.teclas = []
+        for c, (x, letra) in enumerate(zip(self.X_MATEO, self.LETRAS)):
+            y = self.Y_MARCA + 0.082
+            caja = E.banda(0.058, 0.052, (x, y), E.tinta(215), z=0.03)
+            filo = E.banda(0.058, 0.005, (x, y - 0.026), self.TINTAS[c], z=0.025)
+            t = E.titular(letra, (x, y + 0.002), 1.1, E.TEXTO, origen=(0, 0))
+            self.teclas.append((caja, t))
+            self.piezas += [caja, filo, t]
+        a(E.pequena("MATEO", (self.X_MATEO[0] - 0.07, self.Y_MARCA + 0.012), E.OSPINA,
+                    escala=0.6, origen=(0.5, 0.5)))
         a(E.pequena(rival, (self.X_RIVAL[-1] + 0.04, self.Y_MARCA + 0.085), E.GAITAN,
                     escala=0.6, origen=(0.5, 0.5)))
         self.ronda = E.pequena("", (0, 0.462), E.TEXTO, escala=0.62, origen=(0, 0.5))
@@ -517,6 +529,17 @@ class DueloRitmo:
         marca.scale = self.LADO * 1.3
         marca.animate_scale(self.LADO, duration=0.12)
         marca.animate_color(E.luz(70), duration=0.25)
+
+    def pulsada(self, carril):
+        """La tecla se enciende al pulsarla, acierte o no: se ve que entro."""
+        caja, t = self.teclas[carril]
+        for p in (caja, t):
+            for s in list(getattr(p, "animations", [])):
+                s.kill()
+        caja.color = self.TINTAS[carril]
+        caja.animate_color(E.tinta(215), duration=0.18)
+        t.scale = 1.1 * 0.85
+        t.animate_scale(1.1, duration=0.12)
 
     def acierto(self, carril, nombre):
         self._quitar(carril, "mateo")
@@ -675,7 +698,7 @@ class PersecucionHUD:
 
 
 class Directo:
-    """El directo de Santiago (capitulo 4): la interfaz de su plataforma
+    """El directo de JH777 (capitulo 4): la interfaz de su plataforma
     encima del plano de la camara del tripode.
 
     Arriba, EN VIVO, los espectadores y la confianza de la comunidad; a
@@ -712,7 +735,7 @@ class Directo:
         self.piezas += E.degradado_vertical(0.5, 0.26, alfa=165)
         a(E.banda(0.062, 0.062, (-0.828, 0.428), E.LLERAS))
         a(E.etiqueta("SL", (-0.828, 0.428), 0.86, E.NOCHE, origen=(0, 0)))
-        a(E.etiqueta("@santilleras", (-0.788, 0.448), 0.86, E.TEXTO))
+        a(E.etiqueta("@jh777", (-0.788, 0.448), 0.86, E.TEXTO))
         a(E.pequena("Charlando  ·  Ciudad Nova", (-0.788, 0.414),
                     E.TEXTO_TENUE, escala=0.54))
         # Pildora EN VIVO con su punto, y los espectadores al lado.

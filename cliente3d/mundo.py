@@ -395,8 +395,8 @@ PANTALLAS_CIUDAD = (
 # avenida (+x): (apellido, tinta en LINEAL, z). Las tintas son las de
 # estilo.py pasadas a lineal, porque esto es material y no interfaz.
 CARTELES = (
-    ("OSPINA",   (0.012, 0.115, 0.390), -38.0),
-    ("GAITÁN",   (0.546, 0.044, 0.033), -33.0),
+    ("DE LA ESTRELLA",   (0.012, 0.115, 0.390), -38.0),
+    ("PINEDA",   (0.546, 0.044, 0.033), -33.0),
     ("LLERAS",   (0.745, 0.372, 0.023), -28.0),
     ("RESTREPO", (0.048, 0.275, 0.093), -23.0),
 )
@@ -415,9 +415,9 @@ PANCARTA = (EDIFICIO_PANTALLA[0] - 0.05, 42.0, 53.0, 6.0, 22.0)
 # lado = hacia donde mira la pared: +1 a +x, -1 a -x.
 MURALES = (
     # Mas pequeño que la pared: a pie de calle tapaba medio plano.
-    ("GAITÁN", (0.546, 0.044, 0.033), MURO_MURAL_DER[0] - 0.05,
+    ("PINEDA", (0.546, 0.044, 0.033), MURO_MURAL_DER[0] - 0.05,
      12.0, 25.0, 3.5, 8.5, -1),
-    ("OSPINA", (0.012, 0.115, 0.390), MURO_MURAL_IZQ[1] + 0.05,
+    ("DE LA ESTRELLA", (0.012, 0.115, 0.390), MURO_MURAL_IZQ[1] + 0.05,
      2.0, 24.0, 3.0, 15.0, 1),
 )
 
@@ -1832,7 +1832,7 @@ def _obra_colegio():
     _archivador(o, "x", XA_OESTE + 0.1, 1, 20.0, 20.9)
     for a in (10.0, 10.9, 11.8, 12.7):
         _archivador(o, "x", XA_ESTE - 0.1, -1, a, a + 0.85)
-    # El de la propuesta de Ospina: pegado al estante del medio, bajo la
+    # El de la propuesta de De la Estrella: pegado al estante del medio, bajo la
     # lampara y junto a la ronda (contenido.OBJETOS_CAPITULO_2).
     _archivador(o, "x", 21.5, 1, 18.5, 19.4)
     # Y el de la parte 1, en el general: contra el estante largo, a un
@@ -2302,7 +2302,7 @@ PLANOS_RECTORIA = {
 # ===================================================================
 
 # Piso 8 de un edificio sobre el arranque de la avenida de la intro. La
-# oficina se queda en el origen (la marca de Daniel, en su despacho) y es
+# oficina se queda en el origen (la marca de Abel, en su despacho) y es
 # la CIUDAD la que se monta debajo, girada y desplazada: asi los planos
 # fijos y las colisiones siguen midiendose desde la marca, como en los
 # demas escenarios. Los ventanales estan en z = CZ_VENTANAL y miran a +z.
@@ -2323,7 +2323,7 @@ MUROS_CAMPANA = (
     # voluntarios | servicios: recepcion, cocineta e impresion
     ("z", Z_SERVICIOS, CX0, CX1, ((1.0, 2.6), (9.6, 11.0), (17.0, 18.4))),
     ("x", X_DESPACHO, Z_SALAS, CZ_VENTANAL, ((-3.9, -2.5),)),
-    # dos puertas: la de Daniel y la de la ronda del asesor
+    # dos puertas: la de Abel y la de la ronda del asesor
     ("x", X_CONFERENCIAS, Z_SALAS, CZ_VENTANAL, ((-3.9, -2.5), (0.8, 2.4))),
     ("x", X_RECEPCION, CZ_FONDO, Z_SERVICIOS, ()),
     ("x", X_COCINETA, CZ_FONDO, Z_SERVICIOS, ()),
@@ -2338,7 +2338,7 @@ PLACAS_CAMPANA = (
     ("IMPRESIÓN", "z", Z_SERVICIOS + 0.1, 1, 17.7),
 )
 
-# Donde cae la marca de Daniel dentro de la ciudad de la intro, y cuanto
+# Donde cae la marca de Abel dentro de la ciudad de la intro, y cuanto
 # se gira la ciudad: los ventanales quedan mirando al mitin, con la
 # avenida, la pantalla gigante, las torres y el sol de frente. La oficina
 # queda ENCIMA de la avenida: puesta sobre la fila de edificios de la
@@ -2350,7 +2350,7 @@ GIRO_CIUDAD = -12.0
 # vueltas en su oficina, la sala de conferencias.
 RUTA_ASESOR = [(15.6, 1.6), (20.4, 1.6)]
 
-# --- El piso 12: la sala de juegos donde el asesor reta a Daniel ---
+# --- El piso 12: la sala de juegos donde el asesor reta a Abel ---
 # En la misma obra, cuatro pisos mas arriba y en la vertical de la
 # recepcion: el ascensor sube de verdad por su hueco y la ciudad de
 # debajo es la misma, vista desde mas alto. Sin colisiones: alli arriba
@@ -2372,7 +2372,7 @@ CREMA = (0.95, 0.85, 0.55)
 ROJO_TITULAR = (0.95, 0.20, 0.15)
 AZUL_OSPINA = (0.35, 0.60, 1.00)
 # La encuesta del muro de pantallas, en el orden de juego.CANDIDATOS. Es
-# la caida que cuenta el capitulo: Ospina pierde 10 puntos por el rumor.
+# la caida que cuenta el capitulo: De la Estrella pierde 10 puntos por el rumor.
 ENCUESTA_PANTALLA = (28, 34, 21, 17)
 
 
@@ -2404,7 +2404,7 @@ def _obra_campana():
     o.caja("baldosa", CX0, X_COCINETA, 0, 0.007, CZ_FONDO, Z_SERVICIOS)
 
     # ================= DESPACHO DE DANIEL =================
-    # El escritorio de espaldas al ventanal: Daniel trabaja con la ciudad
+    # El escritorio de espaldas al ventanal: Abel trabaja con la ciudad
     # detras, que es el fondo de todos los planos de decision.
     o.caja("alfombra_azul", -2.6, 2.2, 0, 0.012, -3.4, 0.9)
     o.caja("madera_oscura", -1.6, 1.2, 0, 0.74, 1.7, 2.5, bloquea=True)
@@ -2425,7 +2425,7 @@ def _obra_campana():
     o.pared("tela_azul", "z", zs, 1, -3.9, -1.5, 0.45, 0.9, 0, 0.2)
     o.caja("madera_oscura", -3.4, -2.0, 0, 0.42, -3.1, -2.5, bloquea=True)
     o.pared("afiche_ospina", "z", zs, 1, 0.9, 3.3, 1.1, 2.7, 0, 0.02)
-    o.letrero("OSPINA", "z", zs, 1, 2.1, 2.2, 0.36, BLANCO)
+    o.letrero("DE LA ESTRELLA", "z", zs, 1, 2.1, 2.2, 0.36, BLANCO)
     o.letrero("ALCALDE", "z", zs, 1, 2.1, 1.6, 0.18, CREMA)
     _planta(o, -3.8, 4.4)
 
@@ -2439,7 +2439,7 @@ def _obra_campana():
     # El texto va delante de pantallas y barras (que llegan a 6 cm del
     # muro): pegado a ellas parpadea. Este muro se mira hacia -z, asi que
     # la x crece hacia la IZQUIERDA del que mira: lo que se lee primero
-    # (la ultima hora, la barra de Ospina) va en la x mas alta.
+    # (la ultima hora, la barra de De la Estrella) va en la x mas alta.
     frente = zs + 0.035
     o.pared("banner_rojo", "z", zs, 1, 9.7, 12.15, 2.4, 2.75, 0.05, 0.055)
     o.letrero("ÚLTIMA HORA", "z", frente + 0.01, 1, 10.92, 2.57, 0.12, BLANCO)
@@ -2447,21 +2447,21 @@ def _obra_campana():
     o.letrero("#CierreDeColegios", "z", frente, 1, 10.92, 1.35, 0.1, ROJO_TITULAR)
     o.letrero("tendencia en Civitas", "z", frente, 1, 10.92, 1.15, 0.06, BLANCO)
     o.letrero("INTENCIÓN DE VOTO", "z", frente, 1, 8.32, 2.55, 0.1, BLANCO)
-    from juego import NOMBRES_CANDIDATOS
+    from juego import NOMBRES_CANDIDATOS, apellido
     barras = ("barra_azul", "barra_roja", "barra_amarilla", "barra_verde")
     for i, (nombre, votos, barra) in enumerate(zip(NOMBRES_CANDIDATOS,
                                                    ENCUESTA_PANTALLA, barras)):
         a = 7.45 + (3 - i) * 0.5
         o.pared(barra, "z", zs, 1, a, a + 0.34, 1.12, 1.12 + votos / 30.0,
                 0.05, 0.06)
-        o.letrero(nombre.split()[-1].upper(), "z", frente, 1, a + 0.17, 1.02,
+        o.letrero(apellido(nombre).upper(), "z", frente, 1, a + 0.17, 1.02,
                   0.045, BLANCO)
         o.letrero(f"{votos} %", "z", frente, 1, a + 0.17,
                   1.18 + votos / 30.0, 0.05, BLANCO)
     o.letrero("−10", "z", frente, 1, 9.12, 2.25, 0.11, ROJO_TITULAR)
     o.letrero("CIVITAS", "z", frente, 1, 5.72, 2.55, 0.1, AZUL_OSPINA)
     o.letrero("40 000 compartidos", "z", frente, 1, 5.72, 2.2, 0.07, BLANCO)
-    o.letrero("«Ospina quiere cerrar", "z", frente, 1, 5.72, 1.45, 0.06, BLANCO)
+    o.letrero("«De la Estrella quiere cerrar", "z", frente, 1, 5.72, 1.45, 0.06, BLANCO)
     o.letrero("el colegio del barrio»", "z", frente, 1, 5.72, 1.32, 0.06, BLANCO)
     # La mesa de luz con los distritos, cada uno en la tinta de quien lo
     # gana hoy: despues del rumor manda el rojo.
@@ -2512,7 +2512,7 @@ def _obra_campana():
     zb = Z_SERVICIOS + 0.1
     for a in (4.2, 6.6):
         o.pared("afiche_ospina", "z", zb, 1, a, a + 1.6, 1.1, 2.4, 0, 0.02)
-        o.letrero("OSPINA", "z", zb, 1, a + 0.8, 1.95, 0.22, BLANCO)
+        o.letrero("DE LA ESTRELLA", "z", zb, 1, a + 0.8, 1.95, 0.22, BLANCO)
         o.letrero("Un colegio mejor", "z", zb, 1, a + 0.8, 1.5, 0.08, CREMA)
     o.caja("plastico_azul", 22.0, 22.45, 0, 1.1, -5.4, -4.95, bloquea=True)
     o.caja("agua", 22.07, 22.38, 1.1, 1.5, -5.33, -5.02)
@@ -2526,7 +2526,7 @@ def _obra_campana():
             o.pared("marco_metal", "z", zr, 1, a - 0.08, a + 1.28, 0, 2.3, 0, 0.05)
         else:
             # El que funciona: marco de jambas y dintel. La placa entera de
-            # los otros tapaba el hueco y Daniel entraba atravesandola.
+            # los otros tapaba el hueco y Abel entraba atravesandola.
             for b0, b1 in ((a - 0.08, a), (a + 1.2, a + 1.28)):
                 o.pared("marco_metal", "z", zr, 1, b0, b1, 0, 2.3, 0, 0.05)
             o.pared("marco_metal", "z", zr, 1, a - 0.08, a + 1.28, 2.2, 2.3, 0, 0.05)
@@ -2709,7 +2709,7 @@ MATERIALES_CAMPANA = {
     "nevera": ((0.55, 0.56, 0.58), 0.3, 0.6, None),
     "impresora": ((0.20, 0.21, 0.23), 0.5, 0.2, None),
     "panel_calido": ((0.6, 0.6, 0.6), 0.5, 0, (1.5, 1.35, 1.1)),
-    # la sala de juegos del piso 12: paño azul tinta Ospina bajo la luz ambar
+    # la sala de juegos del piso 12: paño azul tinta De la Estrella bajo la luz ambar
     "parquet": ((0.15, 0.075, 0.035), 0.5, 0, None),
     "muro_juegos": ((0.10, 0.085, 0.08), 0.85, 0, None),
     "madera_billar": ((0.11, 0.045, 0.02), 0.4, 0, None),
@@ -2856,7 +2856,7 @@ def _fundir(origen, destino, copias_z=(0.0,)):
 
 def _luces_campana(mundo):
     """Seis luces: el sol bajo y el cielo de la ciudad (girados con ella),
-    un ambiente de oficina y tres puntos: la lampara de Daniel, el muro de
+    un ambiente de oficina y tres puntos: la lampara de Abel, el muro de
     pantallas y la mesa de conferencias."""
     ambiente = mundo.attachNewNode(AmbientLight("ambiente"))
     ambiente.node().setColor((0.085, 0.082, 0.080, 1))
@@ -2885,7 +2885,7 @@ def _luces_campana(mundo):
     puntos += [dict(plafon, pos=(x, y, -8.0)) for x in (0.6, 6.6, 12.6, 18.6)]
     puntos += [dict(plafon, pos=(x, y, -13.0)) for x in (3.4, 10.6, 18.0)]
     puntos += [
-        # la lampara del escritorio de Daniel: baja, calida y cerrada
+        # la lampara del escritorio de Abel: baja, calida y cerrada
         {"pos": (1.0, 1.75, 2.25), "color": (4.6, 3.0, 1.4), "apertura": 120,
          "alcance": 6.0, "caida": 0.30},
         # el muro de pantallas de la sala de guerra: azul, de lado
@@ -3038,7 +3038,7 @@ PLANOS_CAMPANA = {
 #  ESCENARIO 6: EL ESTUDIO DE SANTIAGO (capitulo 4, «La oferta»)
 # ===================================================================
 
-# Un estudio de streaming de noche. La marca (Santiago de pie en la
+# Un estudio de streaming de noche. La marca (JH777 de pie en la
 # consola) queda en el origen mirando a -z, hacia la camara del directo;
 # detras de el, en z = SZ_DECORADO, el fondo que ven sus seguidores:
 # espuma acustica, neon y estantes. Neon magenta y cian contra el aro de
@@ -3054,7 +3054,7 @@ MUROS_ESTUDIO = (
 )
 CONSOLA = (-1.15, 1.15, -0.95, -0.4)          # x0, x1, z0, z1
 ALTO_CONSOLA = 1.0                             # de pie, como en los directos largos
-# Los dos monitores de la consola, mirando a Santiago: (x, y, z) del centro
+# Los dos monitores de la consola, mirando a JH777: (x, y, z) del centro
 # de la imagen. El de su izquierda (+x) lleva los privados; el otro, el chat.
 MONITOR_PRIVADO = (0.62, 1.31, -0.715)
 MONITOR_CHAT = (-0.62, 1.31, -0.715)
@@ -3082,7 +3082,7 @@ def _obra_estudio():
 
     # ================= EL FONDO DEL DIRECTO =================
     zd = SZ_DECORADO - g                 # cara de dentro del muro del fondo
-    # Espuma acustica en damero, justo detras de la cabeza de Santiago, y
+    # Espuma acustica en damero, justo detras de la cabeza de JH777, y
     # mas a los lados, que es lo que se ve en el plano general.
     for x0, x1, n in ((-0.75, 0.75, 6), (-4.6, -2.6, 8), (2.6, 4.6, 8)):
         lado = (x1 - x0) / n
@@ -3091,7 +3091,7 @@ def _obra_estudio():
                 a, yy = x0 + i * lado, 0.85 + k * 0.25
                 mat = "espuma_b" if (i + k) % 2 else "espuma_a"
                 o.pared(mat, "z", zd, -1, a + 0.01, a + lado - 0.01, yy, yy + 0.24, 0, 0.06)
-    # Neon: dos barras magenta que enmarcan a Santiago y una cian encima.
+    # Neon: dos barras magenta que enmarcan a JH777 y una cian encima.
     for a in (-0.97, 0.92):
         o.pared("neon_magenta", "z", zd, -1, a, a + 0.05, 0.6, 2.3, 0, 0.04)
     o.pared("neon_cian", "z", zd, -1, -2.6, 2.6, 2.48, 2.52, 0, 0.04)
@@ -3099,7 +3099,7 @@ def _obra_estudio():
         o.pared("neon_cian", "z", zd, -1, a, a + 0.05, 0.4, 2.48, 0, 0.04)
     # El nombre del canal, con su halo.
     o.pared("neon_halo", "z", zd, -1, -1.0, 1.0, 2.1, 2.38, 0, 0.02)
-    o.letrero("SANTI LLERAS", "z", zd - 0.03, -1, 0.0, 2.24, 0.15, MAGENTA)
+    o.letrero("JH777", "z", zd - 0.03, -1, 0.0, 2.24, 0.15, MAGENTA)
     # Estanteria de la izquierda (de la camara): figuras de coleccion.
     for yy in (1.0, 1.45, 1.9):
         o.pared("madera_oscura", "z", zd, -1, -1.78, -1.1, yy - 0.03, yy, 0, 0.26)
@@ -3259,7 +3259,7 @@ def _pantalla_plana(textura, centro, ancho, alto, mira):
 def _pantallas_estudio():
     g = GROSOR_MURO / 2
     chat = _textura("chat_directo", _pintar_chat, 512, 1024, srgb=False)
-    # Los monitores miran recto a +z, como su marco: girados hacia Santiago
+    # Los monitores miran recto a +z, como su marco: girados hacia JH777
     # media imagen se metia dentro de la caja.
     def de_frente(punto):
         return (punto[0], punto[1], punto[2] + 1.0)
@@ -3283,7 +3283,7 @@ def _pantallas_estudio():
 
 
 def monitor_privado(estado):
-    """Lo que enseña el monitor de los privados de Santiago: bandeja,
+    """Lo que enseña el monitor de los privados de JH777: bandeja,
     cifrado, claro, respuesta, aceptado, bloqueado o rastreo."""
     e = _ACTUAL.get("monitor_privado")
     if e is not None:
@@ -3381,7 +3381,7 @@ def _recortar(d, frase, letra, ancho):
 
 def _burbuja(d, texto, y, derecha, fondo, tinta, w):
     """Un mensaje del privado: burbuja a la izquierda (el remitente) o a la
-    derecha (Santiago). Devuelve donde acaba."""
+    derecha (JH777). Devuelve donde acaba."""
     letra = _letra(19, False)
     lineas = textwrap.wrap(texto, 34)
     alto = 14 + 25 * len(lineas)
@@ -3411,7 +3411,7 @@ def _pintar_privado(estado):
         gris, blanco = (44, 40, 62, 255), (236, 232, 242, 255)
         if estado == "bandeja":
             y = 60
-            for autor, texto in (("lunita_07", "santi te amo, saludame en el directo"),
+            for autor, texto in (("lunita_07", "jh te amo, saludame en el directo"),
                                  ("Kola Nova", "Recuerda mencionarnos al empezar."),
                                  ("dagoberto", "¿haces colaboración el viernes?")):
                 d.text((20, y), autor, font=_letra(16), fill=(*TINTAS_CHAT[1], 255))
@@ -4649,10 +4649,10 @@ def mover_actor(actor, x, z, rumbo, andando, corriendo=False, velocidad=None):
 
 
 def asesor(mundo):
-    """El asesor de Daniel (capitulo 3), que va y viene preocupado.
+    """El asesor de Abel (capitulo 3), que va y viene preocupado.
 
     Lleva el modelo del ciudadano (jersey oscuro y camisa): el del Alcalde
-    resulto ser el mismo hombre de traje que el de prueba, que es Daniel,
+    resulto ser el mismo hombre de traje que el de prueba, que es Abel,
     y en el plano y contraplano de la mesa se leian como gemelos. Sin luces
     propias, como cualquier NPC.
     """
@@ -4955,11 +4955,11 @@ def _propuesta(mundo, x, y, z, parte=1):
 
 
 def expediente(mundo):
-    """El expediente sobre Bravo que el asesor deja en la mesa (capitulo
+    """El expediente sobre Pineda que el asesor deja en la mesa (capitulo
     3). Devuelve su nodo, para que la escena lo baje hasta la mesa."""
     nodo = mundo.attachNewNode("expediente")
     _carpeta(nodo, 0, 0, 0, "carpeta_expediente",
-             _pintar_carpeta("CAMPAÑA OSPINA", "EXPEDIENTE", "Hugo Bravo · sin verificar", "",
+             _pintar_carpeta("CAMPAÑA OSPINA", "EXPEDIENTE", "Juan Pineda · sin verificar", "",
                              (195, 59, 51)))
     _ACTUAL["expediente"] = nodo
     return nodo
@@ -4979,7 +4979,7 @@ def _caja_requisados(mundo, x0, y0, z0):
 _OBJETOS = {"canicas": _canicas, "despertador": _despertador, "petardo": _petardo,
             "propuesta_1": lambda m, x, y, z: _propuesta(m, x, y, z, 1),
             "propuesta_2": lambda m, x, y, z: _propuesta(m, x, y, z, 2)}
-# El destello de cada uno; el objetivo, en el azul de Ospina para que se distinga.
+# El destello de cada uno; el objetivo, en el azul de De la Estrella para que se distinga.
 BRILLOS = {"propuesta_1": (0.55, 0.78, 1.0), "propuesta_2": (0.55, 0.78, 1.0)}
 
 
@@ -5243,16 +5243,16 @@ FIGURANTES = {
     # npc3 NO entra aqui: es un obrero con chaleco reflectante y casco.
     # Plantado en una oficina se lee como un chiste. Vale para la calle
     # de la intro, que es donde ya sale.
-    # La recepcion (mostrador en x 3,0-6,6 con el afiche de Ospina detras,
-    # y los dos ascensores a su izquierda) estaba vacia: Daniel entra por
+    # La recepcion (mostrador en x 3,0-6,6 con el afiche de De la Estrella detras,
+    # y los dos ascensores a su izquierda) estaba vacia: Abel entra por
     # ahi a la sala de juegos y cruzaba un mostrador sin nadie. El hueco
     # libre detras del mostrador va de z -13,9 a la pared del fondo, y el
     # de delante es la franja de z -12,3 a -11,7 (medido con
     # banco_pruebas/depuracion/recepcion.py).
     # Quien atiende es npc1, que viste de oficina. El del cajero va al
     # lado PUBLICO del mostrador, como alguien que entro de la calle: su
-    # camiseta es roja, la tinta de Bravo, y detras del mostrador —con el
-    # afiche azul de Ospina a su espalda— se leia como una equivocacion.
+    # camiseta es roja, la tinta de Pineda, y detras del mostrador —con el
+    # afiche azul de De la Estrella a su espalda— se leia como una equivocacion.
     # Repetir npc1 aqui no hace gemelos: la recepcion esta detras del
     # tabique (z -11,6) y nunca sale en el mismo cuadro que la sala.
     # H=180 es «de cara a la sala» (+z), medido en depuracion/calibrar_h.py.
@@ -5268,7 +5268,7 @@ FIGURANTES = {
     },
     # El estudio tambien estaba vacio. Dos personas fuera de camara: la
     # que lleva la mesa y la que espera. Apartadas del paso central, que
-    # es por donde Santiago va a la consola.
+    # es por donde JH777 va a la consola.
     "estudio": {
         "tecnico": ("npc2", (-3.3, 0.0, -0.6), 90.0, "idle"),
         "produccion": ("npc4", (3.4, 0.0, 0.2), -90.0, "idle"),

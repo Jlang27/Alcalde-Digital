@@ -5,14 +5,20 @@ canta una frase de dos compases y Mateo la contesta con la misma figura.
 Cuatro carriles (izquierda, abajo, arriba, derecha); cada nota de Mateo se
 juzga por lo cerca de su tiempo que se pulsa:
 
-    PERFECT  100 puntos   dentro de 45 ms
-    GOOD      50          dentro de 90 ms
-    BAD       10          dentro de 140 ms
+    PERFECT  100 puntos   dentro de 60 ms
+    GOOD      50          dentro de 110 ms
+    BAD       10          dentro de 160 ms
     MISS       0          fuera, o sin pulsar
 
-Los puntos se multiplican por el combo (x1 a x4). La precision pondera
-cada juicio (1, 0,75, 0,4, 0) y decide el resultado: mas de 85 % victoria
-perfecta, de 65 a 85 % victoria parcial, menos derrota. La barra entre
+Las ventanas son las de un juego de ritmo de feria, no las de uno de
+competicion: el teclado, la pantalla y el sonido ya meten su retraso, y
+con 45 ms casi nadie sacaba PERFECT. Los puntos se multiplican por el
+combo (x1 a x4). La precision pondera cada juicio (1, 0,9, 0,6, 0) y
+decide el resultado: desde 85 % victoria perfecta, desde 60 % parcial,
+menos derrota. Antes un GOOD pesaba 0,75: tocarlo TODO en GOOD, sin un
+solo fallo, daba solo victoria parcial. Ahora fallar unas pocas notas
+(o ir algo descompasado) sigue dando la perfecta; la derrota es fallar
+de verdad. La barra entre
 Mateo y el rival sube con los aciertos y baja con los fallos.
 
 La partitura se genera con semilla fija: herramientas/componer_ritmo.py
@@ -28,8 +34,8 @@ import random
 
 CARRILES = ("izquierda", "abajo", "arriba", "derecha")
 # (juicio, ventana en segundos, puntos, peso en la precision)
-JUICIOS = (("PERFECT", 0.045, 100, 1.0), ("GOOD", 0.090, 50, 0.75),
-           ("BAD", 0.140, 10, 0.4))
+JUICIOS = (("PERFECT", 0.060, 100, 1.0), ("GOOD", 0.110, 50, 0.9),
+           ("BAD", 0.160, 10, 0.6))
 MISS = ("MISS", None, 0, 0.0)
 # Las tres rondas: nombre, pulsos por minuto, compases (4/4), lo que se
 # mete por frase y la probabilidad de corcheas y de acordes de dos notas.
@@ -39,7 +45,7 @@ RONDAS = (
     {"nombre": "LA CONVIVENCIA", "bpm": 140, "compases": 12, "corcheas": 0.55, "dobles": 0.18},
 )
 ENTRADA = 1                # un compas de cuenta atras antes de la primera nota
-PERFECTA, PARCIAL = 0.85, 0.65
+PERFECTA, PARCIAL = 0.85, 0.60
 # La barra: arranca en el medio, sube al acertar y baja al fallar.
 BARRA_ACIERTO, BARRA_FALLO = 0.025, 0.06
 
@@ -157,7 +163,7 @@ class Duelo:
     def resultado(self):
         """"perfecta", "parcial" o "derrota", por la precision total."""
         p = self.precision()
-        return "perfecta" if p > PERFECTA else "parcial" if p >= PARCIAL else "derrota"
+        return "perfecta" if p >= PERFECTA else "parcial" if p >= PARCIAL else "derrota"
 
 
 def _pruebas():
@@ -201,6 +207,27 @@ def _pruebas():
         d.actualizar(duracion(RONDAS[i]))
         assert d.ronda_terminada(duracion(RONDAS[i]))
     assert d.resultado() == "perfecta" and d.multiplicador == 4 and d.barra == 1.0
+
+    # La nota justa: todo en GOOD sin fallar, o perfecto con unos pocos
+    # fallos, es la perfecta; fallar un tercio, parcial; la mitad, derrota.
+    def tocar(fallos_cada=0, error=0.0):
+        d = Duelo()
+        k = 0
+        for i in range(len(RONDAS)):
+            d.empezar(i)
+            for t, c in list(d.notas):
+                d.actualizar(t)
+                k += 1
+                if fallos_cada and k % fallos_cada == 0:
+                    continue
+                d.pulsar(c, t + error)
+            d.actualizar(duracion(RONDAS[i]))
+        return d
+    assert tocar(error=0.08).resultado() == "perfecta"          # todo GOOD
+    total = tocar().juzgadas
+    assert tocar(fallos_cada=total // 3).resultado() == "perfecta"   # 3 fallos
+    assert tocar(fallos_cada=3).resultado() == "parcial"
+    assert tocar(fallos_cada=2).resultado() == "derrota"
 
     # Sin tocar nada: derrota.
     d = Duelo()

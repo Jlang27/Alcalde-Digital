@@ -1,13 +1,13 @@
 """Escenario: el comando de campana del capitulo 3 («La primera jugada sucia»).
 
-Entra por el menu de Capitulos, comprueba que juega Daniel Ospina en la
+Entra por el menu de Capitulos, comprueba que juega Abel de la Estrella en la
 oficina del piso 8, que el asesor y el trafico de la ciudad se mueven, y
 saca capturas de cada sala y de la vista por los ventanales. Luego mira
 con E las encuestas y el mapa, sube en el ascensor a la sala de juegos
 (una captura por plano de la subida y del reto del asesor) y juega la
 partida de billar con un bot: el que usan las pruebas de billar.py, con
 capturas del saque, la guia, las bolas rodando, la primera falta, el
-turno del asesor y el resultado. Con «pierde», Daniel solo comete faltas
+turno del asesor y el resultado. Con «pierde», Abel solo comete faltas
 y se comprueba que el asesor publica el rumor.
 
     .venv/bin/python herramientas/banco_pruebas/campana.py [pierde]
@@ -47,7 +47,7 @@ tecla("down arrow", 0.3)
 tecla("down arrow", 0.3)
 assert J.cl.capitulo_sel == 2
 tecla("enter", 0.5)
-# La llegada: el asesor entra preocupado y cita a Daniel en su oficina.
+# La llegada: el asesor entra preocupado y cita a Abel en su oficina.
 assert hasta_estado("cinematica", 20), estado()
 from cine_campana import PLANOS_LLEGADA, DURACION_LLEGADA
 inicio, marcas = 0.0, []
@@ -78,7 +78,7 @@ assert hasta_estado("rotulo", 5), estado()
 assert J.cl.actor.getPos().length() < 0.01 and abs(J.cl.actor.getH()) < 0.01, (
     J.cl.actor.getPos(), J.cl.actor.getH())
 p = J.cl.partida
-assert p.dia_actual == 2 and p.nombre_protagonista == "Daniel Ospina", (
+assert p.dia_actual == 2 and p.nombre_protagonista == "Abel de la Estrella", (
     p.dia_actual, p.nombre_protagonista)
 assert J.mundo._ACTUAL["nombre"] == "campana"
 foto("campana_rotulo")

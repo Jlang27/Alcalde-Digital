@@ -862,10 +862,12 @@ def _pintar_cartel(i):
         d.rectangle((0, h * 0.72, w, h), fill=(242, 239, 231, 255))
         d.text((w / 2, h * 0.12), "ALCALDÍA DE CIUDAD NOVA", font=M._letra(int(h * 0.045)),
                fill=(242, 239, 231, 255), anchor="mm")
-        nombre_pila, apellido = nombre.split()
+        nombre_pila, apellido = nombre.split(maxsplit=1)    # «de la Estrella» va entero
         d.text((w / 2, h * 0.33), nombre_pila.upper(), font=M._letra(int(h * 0.09)),
                fill=(242, 239, 231, 255), anchor="mm")
-        d.text((w / 2, h * 0.50), apellido.upper(), font=M._letra(int(h * 0.15)),
+        # un apellido largo encoge para caber en el ancho del cartel
+        alto = h * 0.15 * min(1.0, 7.0 / len(apellido))
+        d.text((w / 2, h * 0.50), apellido.upper(), font=M._letra(int(alto)),
                fill=(242, 239, 231, 255), anchor="mm")
         d.text((w / 2, h * 0.84), lema, font=M._letra(int(h * 0.06), False),
                fill=(*tinta, 255), anchor="mm")
@@ -953,7 +955,7 @@ def _carteles(nodo):
         _lamina(nodo, tex[k % 4], (x + 0.12, 2.6, z), 0.62, 0.9, (x + 5.0, 2.6, z))
     for k, z in enumerate((-26.0, -14.0, 2.0, 22.0, 34.0)):
         _lamina(nodo, tex[(k + 1) % 4], (30.95, 3.3, z), 0.8, 1.15, (20.0, 3.3, z))
-    # Las dos lonas de Ospina a los lados de la tarima: el mitin es suyo.
+    # Las dos lonas de De la Estrella a los lados de la tarima: el mitin es suyo.
     for xs in (-10.6, 10.6):
         _lamina(nodo, tex[0], (xs, 5.6, 38.3), 1.8, 2.6, (xs, 5.6, 0.0))
 

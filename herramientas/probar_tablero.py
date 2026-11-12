@@ -69,13 +69,13 @@ d = p.desenlace_red
 assert sorted(d["creyentes"]) == ["cajero", "pedro"], d
 assert sorted(d["protegidos"]) == ["ana", "caro", "hernan", "jorge", "lina", "luis"]
 assert "convenciste_vecinos" in p.banderas
-con_tablero = p.encuesta["Daniel Ospina"]
+con_tablero = p.encuesta["Abel de la Estrella"]
 
 # sin tablero, ignorar deja correr el rumor hasta el final
 p = nueva()
 cerrar(p, "ignorar")
 assert len(p.desenlace_red["creyentes"]) == 8 and not p.desenlace_red["protegidos"]
-assert p.encuesta["Daniel Ospina"] < con_tablero
+assert p.encuesta["Abel de la Estrella"] < con_tablero
 
 # --- la prueba equivocada gasta la jugada y el rumor avanza igual ---
 p = nueva("hernan_saludo", "foto")

@@ -13,7 +13,7 @@ Controles (los de los billares de movil, pasados a raton y teclado):
   - Las flechas mueven el punto donde el taco toca la blanca (efecto).
   - Con bola en mano la blanca sigue al raton y un clic la deja.
 La guia: hasta la bola que toca, el circulo de la bola fantasma y por
-donde salen las dos; su largo lo da el taco de Daniel.
+donde salen las dos; su largo lo da el taco de Abel.
 """
 
 import math
@@ -41,7 +41,7 @@ PIENSA = 0.75               # lo que «estudia la mesa» el asesor antes de apun
 GIRA = 0.6                  # lo que tarda en llevar el taco a su angulo
 CARGA = 0.45                # y en echarlo atras
 CIERRE = 3.2                # segundos con el resultado en pantalla
-QUIEN = {"daniel": "DANIEL OSPINA", "asesor": "EL ASESOR"}
+QUIEN = {"daniel": "ABEL DE LA ESTRELLA", "asesor": "EL ASESOR"}
 
 
 def tinta_de(n):

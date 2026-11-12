@@ -15,7 +15,7 @@ import banco
 import plaza
 import ritmo
 
-NOMBRE_TECLA = ("left arrow", "down arrow", "up arrow", "right arrow")
+NOMBRE_TECLA = ("d", "f", "j", "k")
 
 arrancar()
 tecla("down arrow", 0.2)
