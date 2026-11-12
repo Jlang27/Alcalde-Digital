@@ -24,6 +24,7 @@ from ursina import (Ursina, Entity, Text, Button, Func, Texture, Vec3,
 
 import ajustes as A
 import audio
+import azotea
 import cierre
 import cine_campana
 import kombat_cliente
@@ -40,7 +41,8 @@ from contenido import INDICADORES_META, PERSONAJE_DEL_DIA, DUENO_PERSONAJE
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
                        HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
-                       MENSAJE_ANONIMO, DIA_CAMPANA, PUNTOS_CAPITULO_3,
+                       MENSAJE_ANONIMO, DIA_CAMPANA, DIA_ESTUDIO,
+                       PUNTOS_CAPITULO_3, PUNTOS_CAPITULO_4, RETO_NODO,
                        TEXTO_MAPA_DISTRITOS,
                        DIALOGO_ASESOR_PREOCUPADO, DIA_PLAZA, ZONA_DUELO_PLAZA,
                        LETRAS_RITMO, TEXTO_DUELO, FINAL_DUELO, TEXTO_SOSPECHOSO,
@@ -51,6 +53,8 @@ from juego import (CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, en_lista)
 import sigilo
 from sigilo import Vigilante
+# El directo del dia 4: 1 responde y 2 borra lo que pide atencion.
+from transmision import RESPONDER, BORRAR
 
 DURACION_CARGA = 2.8
 
@@ -113,6 +117,7 @@ class Cliente:
         self.ronda_asesor = None      # su ida y vuelta (sigilo.Vigilante)
         self.ritmo = None             # la del duelo musical (dia 5, pacifica)
         self.rival = None             # el musico que canta el rumor
+        self.directo = None           # pantallas.Directo: el chat del dia 4
         self.kombat = None            # kombat_cliente.Combate del dia 4
         self.billar = None            # billar_cliente.Billar del dia 3
         self.nodo = None              # su rival: el Actor de Nodo
@@ -1188,11 +1193,6 @@ def cerrar_rotulo():
         return
     cl.rotulo.cerrar()
     cl.rotulo = None
-    # El dia 4 no tiene telefono ni paseo: del rotulo, al reto y a pelear.
-    if cl.partida.kombat is not None:
-        abrir_aviso_papel("NOVA KOMBAT", "«Si pierdes, transmites mi audio»",
-                          TEXTO_KOMBAT, empezar_kombat)
-        return
     abrir_contexto()
 
 
@@ -1631,9 +1631,85 @@ FIN_KOMBAT = {
 }
 
 
+def abrir_directo():
+    """E en el tripode: Santiago se planta en su marca y emite.
+
+    La camara se pone donde la suya, asi que lo que ve el jugador es lo
+    que ven sus seguidores. El chat lo lleva la Transmision de la
+    Partida; aqui solo se pinta y se le pasan las teclas 1 y 2.
+    """
+    cerrar_libre()
+    cl.estado = "directo"
+    fundido = pantallas.Fundido()
+    x, z = azotea.MARCA_DIRECTO
+    cl.actor.setPos(x, 0, z)
+    # De cara al tripode, que esta a su -x. El rumbo se pone como en todo
+    # el proyecto: H = 180 - atan2(dx, dz), o sea -x son 270 grados (con
+    # 90 le grababa la espalda, y eso se vio en la captura).
+    cl.actor.setH(270.0)
+    animar("hablar")
+    mundo.plano_directo()
+    fundido.desvanecer(0.45, retraso=0.1)
+    cl.directo = pantallas.Directo()
+    audio.efecto("confirmar")
+
+
+def directo_paso(dt):
+    t = cl.partida.transmision
+    for evento, m in t.actualizar(dt):
+        if evento == "chat":
+            cl.directo.chat(m)
+        elif evento == "pedido":
+            cl.directo.chat(m)
+            audio.efecto("toque")
+        elif evento == "escapado":
+            cl.directo.explicar(m["por_que"], False)
+            audio.efecto("tiempo_agotado")
+        elif evento == "privado":
+            abrir_reto()
+            return
+    cl.directo.poner(t.espectadores, t.confianza, t.atendiendo, t.plazo(),
+                     len(t.cola))
+
+
+def atender_chat(accion):
+    """1 responde y 2 borra el mensaje que pide atencion."""
+    p = cl.partida.transmision.atender(accion)
+    if p is None:
+        return
+    cl.directo.explicar(p["por_que"], p["acierto"])
+    audio.efecto("hecho" if p["acierto"] else "volver")
+    if p["acierto"] and accion == RESPONDER:
+        mundo.reaccionar(cl.actor, "asentir")
+
+
+def cerrar_directo():
+    if cl.directo is not None:
+        cl.directo.cerrar()
+        cl.directo = None
+
+
+def abrir_reto():
+    """El privado de Nodo al acabar el chat: de ahi sale la pelea.
+
+    Es el hilo que faltaba. Antes la pelea entraba nada mas el rotulo y
+    no se entendia por que de pronto habia que pelear con alguien.
+    """
+    cerrar_directo()
+    audio.efecto("vibracion")
+    abrir_aviso_papel("MENSAJE PRIVADO  ·  NODO",
+                      "«O me ganas, o lo suelto»", RETO_NODO, abrir_reglas_kombat)
+
+
+def abrir_reglas_kombat():
+    abrir_aviso_papel("NOVA KOMBAT", "Un asalto, sesenta segundos",
+                      TEXTO_KOMBAT, empezar_kombat)
+
+
 def empezar_kombat():
     """Santiago y Nodo a la azotea; la camara, de lado (2.5D)."""
     cl.estado = "kombat"
+    cerrar_directo()               # por si se llega sin pasar por el reto
     fundido = pantallas.Fundido()
     for e in cl.hud:
         e.enabled = False
@@ -2075,7 +2151,8 @@ def terminar_escena():
 
 
 # Lo que se mira con E en cada capitulo con puntos (oficina y estudio).
-PUNTOS_DEL_DIA = {DIA_CAMPANA: PUNTOS_CAPITULO_3}
+PUNTOS_DEL_DIA = {DIA_CAMPANA: PUNTOS_CAPITULO_3,
+                  DIA_ESTUDIO: PUNTOS_CAPITULO_4}
 # Y en la plaza, segun el estado: la pista del duelo, o el de la mochila.
 PUNTOS_PLAZA = {
     "pacifica": {"duelo": {"verbo": "aceptar el duelo musical",
@@ -2124,6 +2201,9 @@ def mirar_punto(punto):
         return
     if punto == "sospechoso":
         empezar_persecucion()
+        return
+    if punto == "directo":
+        abrir_directo()
         return
     p = cl.partida
     if punto == "encuestas":
@@ -3172,6 +3252,10 @@ def update():
         duelo_paso(time.dt)
         return
 
+    if cl.estado == "directo" and cl.directo is not None:
+        directo_paso(time.dt)
+        return
+
     if cl.estado == "kombat" and cl.kombat is not None:
         if cl.kombat.actualizar(time.dt):
             terminar_kombat()
@@ -3423,6 +3507,13 @@ def input(tecla):
         # Sin pausa, como la pelea: Esc solo suelta la potencia cargada.
         if cl.billar is not None:
             cl.billar.tecla(tecla)
+        return
+
+    elif cl.estado == "directo":
+        # Como el directo de antes: no se pausa. 1 responde y 2 borra lo
+        # que pide atencion.
+        if tecla in ("1", "2"):
+            atender_chat(RESPONDER if tecla == "1" else BORRAR)
         return
 
     elif cl.estado == "kombat":

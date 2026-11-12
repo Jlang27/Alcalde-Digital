@@ -867,6 +867,14 @@ PUNTOS_CAPITULO_3 = {
     # el ascensor de la recepcion sube a la sala de juegos (piso 12)
     "ascensor": {"verbo": "subir a la sala de juegos", "zona": (-2.4, -0.2, -14.4, -12.4)},
 }
+# Lo que Nodo le escribe por privado cuando se acaba el chat. Es el hilo
+# que faltaba: antes la pelea aparecia de la nada, nada mas el rotulo.
+RETO_NODO = (
+    "Tengo un audio tuyo. Bueno, «tuyo»: suena a ti diciendo que la "
+    "Alcaldía prepara un fraude en el conteo. Lo suelto esta noche en "
+    "cien mil pantallas… salvo que me ganes delante de todas. Nova "
+    "Kombat, un asalto, aquí y ahora. Tú tienes datos; yo tengo bulos. "
+    "Veamos qué corre más.")
 TEXTO_MAPA_DISTRITOS = (
     "Desde el rumor del colegio, Bravo te gana los distritos del sur, los "
     "del Colegio Técnico Nova. Si no reaccionas, el mapa se tiñe de rojo "
@@ -941,11 +949,14 @@ PEDIDOS_CHAT_4 = (
     {"autor": "sorteo_civitas", "tipo": "estafa",
      "texto": "¡Ganaste un celular! Manda tus datos y tu clave para reclamarlo."},
 )
-# Lo que se mira con E en el estudio (zonas en el plano de mundo.py). La
-# consola no tiene aviso: empieza el directo.
+# Lo que se mira con E el dia 4 (zonas en el plano de mundo.py). El dia
+# ya no pasa en el estudio sino en la AZOTEA: con E en el tripode
+# Santiago se pone a emitir, y de ahi sale el reto de Nodo.
+# La zona es generosa a proposito (el tripode esta en x -5,6 y el aro de
+# luz en -4,9): es lo unico que hay que hacer ahi arriba y buscarlo a
+# tientas no divierte a nadie.
 PUNTOS_CAPITULO_4 = {
-    "consola": {"verbo": "empezar el directo", "zona": (-1.3, 1.3, -0.35, 1.1)},
-    "patrocinadores": {"verbo": "mirar los patrocinadores", "zona": (3.5, 4.8, -3.6, -0.9)},
+    "directo": {"verbo": "empezar el directo", "zona": (-6.3, -3.4, -3.9, -1.8)},
 }
 TEXTO_PATROCINADORES = (
     "Kola Nova, TecnoBarrio y Moto Ya pagan el estudio, las luces y medio "

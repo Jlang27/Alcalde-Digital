@@ -52,6 +52,22 @@ PLANOS_AZOTEA = {
     "DOS":     (Vec3(1.6, 1.7, -4.4), 1.2, 10.0),
 }
 
+# Donde se planta Santiago para emitir y desde donde le graba su propia
+# camara: la del tripode. Es el plano que sale en pantalla mientras hace
+# el directo, antes de que Nodo le lance el reto.
+MARCA_DIRECTO = (-4.15, -2.85)
+PLANO_DIRECTO = (Vec3(-5.55, 1.50, -2.55), Vec3(-4.15, 1.42, -2.85), 46)
+
+# Lo que estorba al andar (x0, x1, z0, z1). La azotea no tenia ninguno:
+# se cruzaba el tanque de agua y el tripode como si fueran humo. El
+# pretil no hace falta, lo cierran los limites de la losa.
+BLOQUEOS = (
+    (-6.50, -4.90, 1.60, 3.20),      # el tanque de agua sobre sus patas
+    (4.80, 6.00, 0.60, 3.20),        # las dos maquinas de aire
+    (-5.95, -5.25, -2.95, -2.25),    # el tripode de la camara
+    (-5.15, -4.65, -3.15, -2.65),    # el pie del aro de luz
+)
+
 _ESTADO = {"reloj": 0.0, "guirnalda": [], "neon": None}
 
 
@@ -175,6 +191,8 @@ def _luces(cont):
     sol = cont.attachNewNode(DirectionalLight("sol"))
     sol.node().setColor((1.15, 0.62, 0.36, 1))
     sol.setHpr(200 + M.GIRO_CIUDAD, -12, 0)
+    if M.SOMBRAS:
+        M._sombra_de_sol(sol, centro=(0.0, 1.0, 0.0), ancho=30.0)
     M._encender(cont, sol)
     cielo = cont.attachNewNode(DirectionalLight("cielo"))
     cielo.node().setColor((0.26, 0.32, 0.55, 1))

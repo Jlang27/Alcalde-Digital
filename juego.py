@@ -40,6 +40,7 @@ from contenido import (
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
     OPCIONES_QUE_PROTEGEN, PERSONAJE_DEL_DIA, DUENO_PERSONAJE, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO, DIA_PLAZA, TENSION_PLAZA,
     RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, DIFICULTAD_NODO, TACO_DANIEL, DIFICULTAD_ASESOR,
+    RELLENO_CHAT_4,
     OBJETOS_CAPITULO_2, ZONAS_SEGURAS_CAPITULO_2, OBJETIVOS_CAPITULO_2,
     SALIDA_CAPITULO_2,
     construir_arbol_habilidades, construir_arbol_decision, construir_arbol_capitulo_2,
@@ -47,10 +48,11 @@ from contenido import (
     RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION, EVENTOS_PERSECUCION,
     aplicar_habilidades, aplicar_banderas,
     HERENCIAS, TITULARES, TEXTO_ESTADO_PLAZA,
-    dialogo_expediente, dialogo_captura,
+    dialogo_expediente, dialogo_captura, pedidos_chat_4,
 )
 from sigilo import Sigilo, VELOCIDAD as VELOCIDAD_RONDA, AVISOS_MAXIMOS
 from kombat import Pelea
+from transmision import Transmision
 from billar import Partida8
 from ritmo import Duelo
 from persecucion import Persecucion
@@ -63,6 +65,9 @@ ARBOL_DEL_CAPITULO = {DIA_SIGILO: construir_arbol_capitulo_2,
                       DIA_PLAZA: construir_arbol_capitulo_5}
 # Lo que la herencia del dia 1 le hace a la ronda del colegio.
 RONDA_REFORZADA = 1.25         # los vigilantes andan un 25 % mas rapido
+# Lo que mueve en los indicadores llevar bien (o mal) el chat del directo.
+EFECTOS_CHAT = {True: {"desinformacion": -4, "confianza": 4},
+                False: {"desinformacion": 6, "confianza": -3}}
 RASGOS = ["rigor", "empatia", "alcance", "impulso"]
 
 # Segundos que tiene el protagonista para decidir, y los que tiene quien
@@ -277,6 +282,9 @@ class Partida:
 
         # --- sigilo del dia 2: la ronda de vigilantes del colegio ---
         self.sigilo = None
+        # El dia 4 son dos cosas seguidas: primero el directo (el chat que
+        # se modera) y, cuando Nodo lanza su reto por privado, la pelea.
+        self.transmision = None       # el chat del directo del dia 4
         self.kombat = None            # la pelea en directo del dia 4 (kombat.py)
         self.billar = None            # la partida con el asesor del dia 3 (billar.py)
         self.estado_plaza = None      # "pacifica" o "caotica", el dia 5
@@ -428,6 +436,8 @@ class Partida:
         # Nodo llega como lo dejaron los dias anteriores (contenido.HERENCIAS).
         dificultad = next((DIFICULTAD_NODO[h] for h in heredado if h in DIFICULTAD_NODO), 1.0)
         self.kombat = Pelea(dificultad) if indice == DIA_ESTUDIO else None
+        self.transmision = (Transmision(RELLENO_CHAT_4, pedidos_chat_4(heredado))
+                            if indice == DIA_ESTUDIO else None)
         # Y el billar del asesor, segun lo que paso con la propuesta el dia 2.
         taco = next((TACO_DANIEL[h] for h in heredado if h in TACO_DANIEL), None)
         pulso = next((DIFICULTAD_ASESOR[h] for h in heredado if h in DIFICULTAD_ASESOR), 1.0)
@@ -502,6 +512,14 @@ class Partida:
         if self.sigilo is not None and self.sigilo.escapo:
             self.banderas_del_dia.append("sacaste_la_propuesta")
             self.banderas.add("sacaste_la_propuesta")
+        # El directo deja memoria de como se llevo el chat, aparte de lo
+        # que pase luego en la pelea.
+        if self.transmision is not None and self.transmision.terminada:
+            bien = self.transmision.bien_llevado()
+            bandera = "cuidaste_tu_chat" if bien else "tu_chat_se_desbordo"
+            self.banderas_del_dia.append(bandera)
+            self.banderas.add(bandera)
+            self._aplicar_efectos(EFECTOS_CHAT[bien])
 
         self._cerrar_red()
         self._mover_encuesta()

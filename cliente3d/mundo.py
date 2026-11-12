@@ -6,7 +6,7 @@ import textwrap
 import simplepbr
 from direct.actor.Actor import Actor
 from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
-                          NodePath,
+                          NodePath, CardMaker,
                           Geom, GeomLines, GeomNode, GeomVertexData,
                           GeomVertexFormat, GeomVertexWriter, LColor, Material,
                           PNMImage, PointLight, SamplerState, ShaderAttrib,
@@ -171,6 +171,26 @@ def _cafeteria(mundo):
         if extra is not None:
             mat.setEmission(LColor(*extra))
     return modelo
+
+
+# Sombras de la luz principal de cada escenario (rediseño visual). Por
+# ahora se encienden con ALCALDE_SOMBRAS=1, para comparar el antes y el
+# despues con la misma camara; seran una opcion del menu de graficos.
+# Solo proyecta UNA luz por escenario, la direccional que hace de sol o
+# de luna: simplepbr no da sombra a las luces de punto.
+SOMBRAS = os.environ.get("ALCALDE_SOMBRAS") == "1"
+MAPA_SOMBRA = int(os.environ.get("ALCALDE_MAPA_SOMBRA", "4096"))
+
+
+def _sombra_de_sol(sol, centro, ancho):
+    """El sol proyecta sombra sobre una caja de `ancho` metros alrededor
+    de `centro`. La luz direccional de Panda mira por una lente
+    ortografica: hay que decirle que trozo del mundo cubre."""
+    sol.node().setShadowCaster(True, MAPA_SOMBRA, MAPA_SOMBRA)
+    lente = sol.node().getLens()
+    lente.setFilmSize(ancho, ancho)
+    lente.setNearFar(-ancho * 1.5, ancho * 1.5)
+    sol.setPos(*centro)
 
 
 def _luces_cafeteria(mundo):
@@ -1181,6 +1201,8 @@ def _luces_ciudad(mundo):
     sol = mundo.attachNewNode(DirectionalLight("sol"))
     sol.node().setColor((1.30, 0.80, 0.45, 1))
     sol.setHpr(200, -14, 0)
+    if SOMBRAS:
+        _sombra_de_sol(sol, centro=(0.0, 0.0, 60.0), ancho=150.0)
     _encender(mundo, sol)
 
     cielo = mundo.attachNewNode(DirectionalLight("cielo"))
@@ -2213,6 +2235,9 @@ def _luces_rectoria(mundo):
     luna = mundo.attachNewNode(DirectionalLight("luna"))
     luna.node().setColor((*LUNA, 1))
     luna.setHpr(160, -35, 0)
+    if SOMBRAS:
+        _sombra_de_sol(luna, centro=((XA_OESTE + XA_ESTE) / 2, 1.5,
+                                     (Z_SUR + Z_NORTE) / 2), ancho=62.0)
     _encender(mundo, luna)
 
     for nombre, pos, col, att in (
@@ -2810,6 +2835,8 @@ def _luces_campana(mundo):
     sol = mundo.attachNewNode(DirectionalLight("sol"))
     sol.node().setColor((1.30, 0.80, 0.45, 1))
     sol.setHpr(200 + GIRO_CIUDAD, -14, 0)
+    if SOMBRAS:
+        _sombra_de_sol(sol, centro=(9.0, 1.5, -4.5), ancho=34.0)
     _encender(mundo, sol)
 
     cielo = mundo.attachNewNode(DirectionalLight("cielo"))
@@ -3223,8 +3250,16 @@ def monitor_privado(estado):
 
 
 def plano_directo():
-    """La camara se pone donde el tripode: lo que ven los seguidores."""
-    pos, mira, fov = PLANO_DIRECTO
+    """La camara se pone donde el tripode: lo que ven los seguidores.
+
+    Cada sitio tiene el suyo: el estudio graba de frente a la consola y
+    la azotea, desde el tripode de la izquierda.
+    """
+    if _ACTUAL["nombre"] == "azotea":
+        import azotea                    # azotea.py importa este modulo
+        pos, mira, fov = azotea.PLANO_DIRECTO
+    else:
+        pos, mira, fov = PLANO_DIRECTO
     camera.fov = fov
     camera.position = pos
     mirar(mira)
@@ -3661,6 +3696,7 @@ def muros():
 # cafeteria (el .glb) mide 2,5 m; colegio y oficina, 3,2.
 TECHOS = {"rectoria": ALTO_COLEGIO - 0.25, "campana": ALTO_CAMPANA - 0.25,
           "plaza_central": 9.0,                     # al aire libre
+          "azotea": 9.0,                            # tambien
           "estudio": ALTO_ESTUDIO - 0.25}
 
 
@@ -3703,6 +3739,9 @@ def bloqueos():
     if _ACTUAL["nombre"] == "plaza_central":
         import plaza                     # cambian con el estado de la plaza
         return plaza.bloqueos()
+    if _ACTUAL["nombre"] == "azotea":
+        import azotea                    # azotea.py importa este modulo
+        return azotea.BLOQUEOS
     return BLOQUEOS.get(_ACTUAL["nombre"], ())
 
 
@@ -3756,6 +3795,46 @@ def cambiar_escenario(mundo, escenario):
     _montar(mundo, escenario)
 
 
+def _pintar_contacto(img):
+    """Un disco negro que se deshace hacia el borde."""
+    w, h = img.size
+    px = img.load()
+    for y in range(h):
+        for x in range(w):
+            d = math.hypot((x - w / 2) / (w / 2), (y - h / 2) / (h / 2))
+            f = max(0.0, 1.0 - d)
+            px[x, y] = (0, 0, 0, int(255 * 0.62 * f * f * (3 - 2 * f)))
+
+
+def sombra_de_contacto(actor, radio=0.46):
+    """Una mancha oscura bajo los pies: lo que pega a alguien al suelo.
+
+    Sin ella los personajes flotan, y era lo primero que cantaba al
+    comparar con cualquier juego grande. La sombra del sol no la
+    sustituye: dentro de una sala no llega, y de lejos el mapa de sombras
+    no tiene resolucion para un zapato. Es el truco de toda la vida (y
+    el que usan los grandes por debajo de sus sombras de verdad).
+    """
+    if not SOMBRAS:
+        return None
+    hoja = CardMaker("contacto")
+    hoja.setFrame(-1, 1, -1, 1)
+    nodo = actor.attachNewNode(hoja.generate())
+    # Sin girar: aqui la altura es Y, asi que el plano XZ en el que
+    # CardMaker hace la hoja YA es el suelo. Girada 90 quedaba de canto
+    # y no se veia (se comprobo en captura).
+    esc = actor.getSx() or 1.0
+    nodo.setScale(radio / esc)
+    nodo.setY(0.02 / esc)                       # un dedo sobre el suelo
+    nodo.setTexture(_textura("sombra_contacto", _pintar_contacto, 128, 128))
+    nodo.setTransparency(TransparencyAttrib.MAlpha)
+    nodo.setTwoSided(True)
+    nodo.setDepthWrite(False)
+    nodo.setBin("fixed", 5)                     # tras el suelo, antes que la gente
+    nodo.setLightOff(1)
+    return nodo
+
+
 def protagonista(mundo, rol=None):
     """Carga al personaje que juega, con su clave y su contraluz.
 
@@ -3767,6 +3846,7 @@ def protagonista(mundo, rol=None):
     actor.reparentTo(mundo)
     mezclar(actor)
     _luz_de_personaje(mundo, actor)
+    sombra_de_contacto(actor)
     return actor
 
 
@@ -3786,7 +3866,7 @@ def crear(escenario="cafeteria", rol=None):
     # personajes en pantalla. Nuestros esqueletos (~68 huesos) caben en las
     # 100 matrices del shader.
     _RENDER["tuberia"] = simplepbr.init(render_node=mundo, msaa_samples=4,
-                                        max_lights=8, enable_shadows=False,
+                                        max_lights=8, enable_shadows=SOMBRAS,
                                         use_hardware_skinning=True)
     brillo(0.0)
     return mundo, actor
@@ -4324,6 +4404,7 @@ def npc(mundo, nombre, posicion=(0.0, 0.0, 0.0), mirando=0.0,
         actor.mirada["mueve_cuerpo"] = animacion != "sentado"
     # Y si hay mas de un clip de su familia, que rote entre ellos.
     poner_rutina(actor, animacion)
+    sombra_de_contacto(actor)
     return actor
 
 
@@ -5019,10 +5100,28 @@ FIGURANTES = {
     # npc3 NO entra aqui: es un obrero con chaleco reflectante y casco.
     # Plantado en una oficina se lee como un chiste. Vale para la calle
     # de la intro, que es donde ya sale.
+    # La recepcion (mostrador en x 3,0-6,6 con el afiche de Ospina detras,
+    # y los dos ascensores a su izquierda) estaba vacia: Daniel entra por
+    # ahi a la sala de juegos y cruzaba un mostrador sin nadie. El hueco
+    # libre detras del mostrador va de z -13,9 a la pared del fondo, y el
+    # de delante es la franja de z -12,3 a -11,7 (medido con
+    # banco_pruebas/depuracion/recepcion.py).
+    # Quien atiende es npc1, que viste de oficina. El del cajero va al
+    # lado PUBLICO del mostrador, como alguien que entro de la calle: su
+    # camiseta es roja, la tinta de Bravo, y detras del mostrador —con el
+    # afiche azul de Ospina a su espalda— se leia como una equivocacion.
+    # Repetir npc1 aqui no hace gemelos: la recepcion esta detras del
+    # tabique (z -11,6) y nunca sale en el mismo cuadro que la sala.
+    # H=180 es «de cara a la sala» (+z), medido en depuracion/calibrar_h.py.
     "campana": {
         "analista": ("npc4", (5.0, 0.0, -7.4), 180.0, "idle"),
         "becario": ("npc2", (9.5, 0.0, -5.1), 135.0, "idle"),
         "prensa": ("npc1", (-1.5, 0.0, 2.9), 90.0, "idle"),
+        "recepcion": ("npc1", (4.6, 0.0, -13.85), 180.0, "idle"),
+        # Pegado al mostrador y mirandolo (H=0 es -z), no en medio: el
+        # unico paso a la recepcion es el hueco de x 1,45 a 2,20 y ahi
+        # plantado estrechaba la puerta.
+        "visita": ("cashier", (4.5, 0.0, -12.1), 0.0, "idle"),
     },
     # El estudio tambien estaba vacio. Dos personas fuera de camara: la
     # que lleva la mesa y la que espera. Apartadas del paso central, que
