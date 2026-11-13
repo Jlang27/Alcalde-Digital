@@ -5,7 +5,10 @@ Este proceso hostea y es el protagonista; lanza un segundo cliente
 pasan por la sala (nombre, hostear/unirse, capitulo, «listo») y juegan el
 minijuego del capitulo pedido, cada uno con su bot:
 
-    .venv/bin/python herramientas/banco_pruebas/red_partida.py [kombat|billar|duelo]
+    .venv/bin/python herramientas/banco_pruebas/red_partida.py [rumor|kombat|billar|duelo]
+
+  rumor   capitulo 1: el invitado riega el rumor vecino a vecino con los
+          envios que le da el reloj del anfitrion; avisar a un contacto lo frena
 
   kombat  capitulo 4: el invitado lleva a Nodo y gana a un JH777 quieto
   billar  capitulo 3: el invitado tira por el asesor
@@ -26,7 +29,7 @@ from banco import J
 import versus
 
 MODO = sys.argv[1] if len(sys.argv) > 1 else "kombat"
-CAPITULO = {"kombat": 3, "billar": 2, "duelo": 4}[MODO]
+CAPITULO = {"rumor": 0, "kombat": 3, "billar": 2, "duelo": 4}[MODO]
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -71,7 +74,8 @@ try:
     assert lob.vista["puestos"][0]["listo"]
     for _ in range(CAPITULO):
         tecla("right arrow", 0.2)
-    assert lob.sala.capitulo == CAPITULO and not lob.vista["puestos"][0]["listo"]
+    assert lob.sala.capitulo == CAPITULO
+    assert CAPITULO == 0 or not lob.vista["puestos"][0]["listo"]
     tecla("r", 0.3)                       # los roles se cambian los dos a la vez...
     assert [p["rol"] for p in lob.vista["puestos"]] == ["desinformador", "protagonista"]
     tecla("r", 0.3)                       # ...y vuelven
@@ -86,7 +90,7 @@ try:
     assert s.protagonista and s.rival == "Luis" and s.capitulo == CAPITULO
 
     # --- el capitulo: hasta el juego libre y, de ahi, al minijuego ---
-    espera(lambda: estado() in ("rotulo", "cinematica"), 40, "el capitulo")
+    espera(lambda: estado() in ("rotulo", "cinematica", "intro"), 40, "el capitulo")
     for _ in range(40):
         if estado() == "libre":
             break
@@ -97,7 +101,41 @@ try:
     azar = random.Random(5)
     pasar(3.0)                            # el invitado lee su tarjeta de espera
 
-    if MODO == "kombat":
+    if MODO == "rumor":
+        from juego import ENVIOS_POR_JUGADA
+        assert p.rumor_manual and {"cajero", "hernan"} <= set(p.creyentes())
+        assert len(p.creyentes()) <= 3, "llevo mas de lo que su unico envio permite"
+        # el primer envio lo tiene de salida: llega sin que yo haga nada mas
+        espera(lambda: len(p.creyentes()) == 3, 40, "la primera entrega del invitado")
+        foto("red_rumor_anfitrion_aviso")
+        quieto = len(p.creyentes())
+        pasar(3.0)
+        assert len(p.creyentes()) == quieto, "el rumor avanza sin envios"
+        p.minutos = 30                    # media mañana investigando: tres envios mas
+        espera(lambda: len(p.creyentes()) >= 6 or p.envios() == 0, 60, "que gaste sus envios")
+        assert p.envios() == 0 and len(p.creyentes()) >= 4, (p.envios(), p.creyentes())
+        # al tablero: llega lo que el llevo, y avisar a un contacto se lo cierra
+        tecla("enter", 0.3)
+        tecla("left arrow", 0.1); tecla("enter", 0.6)
+        assert estado() == "aviso_papel", estado()
+        tecla("enter", 0.5)
+        t = J.cl.tablero
+        assert t is not None and set(p.creyentes()) <= p.tablero["alcanzados"]
+        libres = [c for c in ("ana", "luis") if c not in p.tablero["alcanzados"]]
+        assert libres, "ya no queda ningun contacto por avisar"
+        pasar(1.0)
+        foto("red_rumor_anfitrion_tablero")
+        assert p.avisar_contacto(libres[0]) is not None and p.envios() == ENVIOS_POR_JUGADA
+        t.refrescar(p.estado_tablero(), *J.opciones_publicas())
+        espera(lambda: p.envios() == 0 or not p.destinos_rumor(), 60, "sus envios del tablero")
+        pasar(1.0)
+        foto("red_rumor_anfitrion_tablero_despues")
+        assert libres[0] not in p.tablero["alcanzados"], "le llego al avisado"
+        tecla("space", 0.4)
+        tecla("2", 0.8)                   # Ignorar: se cierra el dia
+        print("anfitrion: rumor · lo creen", len(p.creyentes()), "de", len(p.vecinos()),
+              "· avisado", libres[0])
+    elif MODO == "kombat":
         J.empezar_kombat()
         pelea = p.kombat
         pasar(0.5)
@@ -168,6 +206,7 @@ try:
     assert J.cl.dia_cerrado, estado()
     pasar(1.5)
     foto(f"red_{MODO}_anfitrion_cierre")
+    pasar(2.5)                            # el invitado lee como quedo el dia
     assert J.cl.sesion is not None and J.cl.sesion.enlace.vivo, "se cayo el enlace"
     ida = J.cl.sesion.enlace.ida_y_vuelta
     print("anfitrion: ida y vuelta", None if ida is None else round(ida, 1), "ms")

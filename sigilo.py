@@ -48,6 +48,16 @@ VELOCIDAD = 1.1            # paso de ronda, mas lento que el tuyo
 ESPERA = 1.8               # parada en cada punto de la ronda
 BARRIDO = 45.0             # en la parada barre con la linterna a cada lado
 AGARRE = 1.2               # a cuanto hay que estar de algo para agarrarlo (E)
+# En red el vigilante es el segundo jugador: UNO solo, que va por donde
+# quiere. Ve mas lejos y mas ancho que los de ronda, pero anda mas lento
+# que la periodista (y no corre): tiene que leer por donde va, no cazarla
+# a la carrera. Un ruido fuerte (canicas, despertador, petardo) le apaga
+# la linterna unos segundos: es lo que tiene ella para pasar.
+ALCANCE_HUMANO = 9.0
+ALCANCE_AGACHADO_HUMANO = 5.0
+MEDIO_ANGULO_HUMANO = 34.0
+PASO_HUMANO = 0.78         # su velocidad, como fraccion del andar de ella
+DESLUMBRE = 3.5            # segundos sin linterna tras un ruido fuerte
 
 
 def _entrada(p, q, rect):
@@ -181,6 +191,18 @@ class Vigilante:
         self.camino = []
         self.buscar = 0.0
         self.corriendo = False
+        # Lo que cambia si lo lleva una persona (Sigilo.poner_humano).
+        self.humano = False
+        self.alcance, self.alcance_agachado = ALCANCE, ALCANCE_AGACHADO
+        self.medio_angulo = MEDIO_ANGULO
+        self.ciego = 0.0              # segundos con la linterna apagada
+        self.pista = None             # (x, z) de lo ultimo que oyo
+        self.vuelve = False           # tras un aviso: a su puesto
+
+    def mandar(self, x, z, rumbo, andando):
+        """Donde lo tiene su jugador (solo si es humano)."""
+        if self.humano and not self.vuelve:
+            self.x, self.z, self.rumbo, self.andando = x, z, rumbo, andando
 
     def _hacia(self, p):
         return math.degrees(math.atan2(p[0] - self.x, p[1] - self.z))
@@ -194,9 +216,15 @@ class Vigilante:
         self.hacia_ruido = (x, z)
         self.atento = max(self.atento, segundos)
 
-    def oir(self, x, z, segundos):
+    def oir(self, x, z, segundos, fuerte=False):
         """Oyo algo en (x, z). Con plano corre hasta alli y busca; sin el
-        (o si no hay por donde llegar), se gira a mirar."""
+        (o si no hay por donde llegar), se gira a mirar. fuerte: un objeto
+        (no unos pasos); a una persona le apaga la linterna un momento."""
+        if self.humano:
+            self.pista = (x, z)       # su jugador decide si va
+            if fuerte:
+                self.ciego = max(self.ciego, DESLUMBRE)
+            return
         if (self.modo == "acude" and self.hacia_ruido is not None
                 and math.hypot(x - self.hacia_ruido[0], z - self.hacia_ruido[1]) < 1.5):
             self.buscar = max(self.buscar, segundos)   # el mismo ruido: ya va
@@ -248,6 +276,9 @@ class Vigilante:
                 self.corriendo = False
 
     def avanzar(self, dt):
+        if self.humano:
+            self.ciego = max(0.0, self.ciego - dt)
+            return                    # lo mueve su jugador (mandar)
         if self.modo is not None:
             self._investigar(dt)
             return
@@ -292,6 +323,11 @@ class Vigilante:
         la suma: no sirve de nada irse lejos de donde te pillo si eso lo
         deja plantado en el pasillo al que te llevan.
         """
+        if self.humano:
+            self.x, self.z = self.ruta[0]
+            self.vuelve = True        # su cliente lo lleva alli y lo confirma
+            return
+
         def lejania(p):
             return min(math.hypot(p[0] - x, p[1] - z) for x, z in evitar)
 
@@ -312,10 +348,10 @@ class Vigilante:
         dist = math.hypot(dx, dz)
         if dist < CERCA:
             return dist
-        if dist > (ALCANCE_AGACHADO if agachado else ALCANCE):
+        if self.ciego > 0 or dist > (self.alcance_agachado if agachado else self.alcance):
             return None
         mx, mz = self.mira()
-        if (dx * mx + dz * mz) / dist < math.cos(math.radians(MEDIO_ANGULO)):
+        if (dx * mx + dz * mz) / dist < math.cos(math.radians(self.medio_angulo)):
             return None
         if any(_entrada((self.x, self.z), (x, z), r) is not None for r in tapan):
             return None
@@ -329,12 +365,14 @@ class Vigilante:
         """
         # Solo lo que queda al alcance: el colegio son ~1000 rectangulos y
         # el abanico se recalcula en cada fotograma, para cada vigilante.
-        x, z, a = self.x, self.z, ALCANCE
+        # deslumbrado, la linterna apenas alumbra sus pies
+        largo = 0.8 if self.ciego > 0 else self.alcance
+        x, z, a = self.x, self.z, largo
         tapan = [r for r in tapan if r[0] - a < x < r[1] + a and r[2] - a < z < r[3] + a]
         puntos = []
         for i in range(n + 1):
-            a = math.radians(self.rumbo - MEDIO_ANGULO + 2 * MEDIO_ANGULO * i / n)
-            q = (self.x + math.sin(a) * ALCANCE, self.z + math.cos(a) * ALCANCE)
+            a = math.radians(self.rumbo - self.medio_angulo + 2 * self.medio_angulo * i / n)
+            q = (self.x + math.sin(a) * largo, self.z + math.cos(a) * largo)
             t = min((e for r in tapan
                      if (e := _entrada((self.x, self.z), q, r)) is not None),
                     default=1.0)
@@ -386,6 +424,22 @@ class Sigilo:
         # Lo que frena algo lanzado, con su alto: (x0, x1, z0, z1, alto). Sin
         # esto, lo alto de tapan_de_pie cuenta como muro hasta el techo.
         self.obstaculos = []
+
+    def poner_humano(self, puesto=None):
+        """En red: la ronda se va y queda UN vigilante, el del segundo
+        jugador, en su puesto (por defecto, donde empezaba el primero)."""
+        puesto = tuple(puesto or self.vigilantes[0].ruta[0])
+        guardia = Vigilante("guardia", [puesto, puesto])
+        guardia.humano, guardia.andando = True, False
+        guardia.alcance, guardia.alcance_agachado = ALCANCE_HUMANO, ALCANCE_AGACHADO_HUMANO
+        guardia.medio_angulo = MEDIO_ANGULO_HUMANO
+        self.vigilantes = [guardia]
+        return guardia
+
+    @property
+    def humano(self):
+        """El vigilante del segundo jugador, o None."""
+        return next((v for v in self.vigilantes if v.humano), None)
 
     @property
     def expulsada(self):
@@ -588,7 +642,7 @@ class Sigilo:
                 continue
             for v in self.vigilantes:
                 if math.hypot(v.x - r["x"], v.z - r["z"]) < r["radio"]:
-                    v.oir(r["x"], r["z"], r["dura"])
+                    v.oir(r["x"], r["z"], r["dura"], fuerte=True)
             self.sonaron.append(r)
         self.ruidos = pendientes
 

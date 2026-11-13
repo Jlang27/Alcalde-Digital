@@ -9,7 +9,7 @@ from banco import J
 import versus
 
 MODO = sys.argv[1]
-CAPITULO = {"kombat": 3, "billar": 2, "duelo": 4}[MODO]
+CAPITULO = {"rumor": 0, "kombat": 3, "billar": 2, "duelo": 4}[MODO]
 
 
 def espera(cond, tope=30.0, que=""):
@@ -57,10 +57,36 @@ V = versus._V
 espera(lambda: V["dia"] == CAPITULO, 60, "el dia")
 pasar(0.5)
 foto(f"red_{MODO}_invitado_espera")
-assert V["espera"] is not None and V["fase"] == "espera"
+assert MODO == "rumor" or (V["espera"] is not None and V["fase"] == "espera")
 azar = random.Random(9)
 
-if MODO == "kombat":
+if MODO == "rumor":
+    espera(lambda: V["fase"] == "rumor", 90, "el corcho del rumor")
+    t = V["obj"]["rumor"]
+    pasar(1.5)
+    foto("red_rumor_invitado_inicio")
+    assert t.datos["creen"] == 2 and t.datos["jugadas"] == 1 and t.sel in t.datos["destinos"], (
+        t.datos["creen"], t.datos["jugadas"], t.sel)
+    tecla("up arrow", 0.2); tecla("down arrow", 0.2)      # el cursor se mueve por la frontera
+    entregas, fotos, tt = 0, 0, 0.0
+    while V["fase"] == "rumor" and tt < 200:
+        d = t.datos
+        if d["jugadas"] > 0 and d["destinos"] and not d["cerrado"]:
+            if t.sel not in d["destinos"]:
+                t.sel = sorted(d["destinos"])[0]
+            antes = d["creen"]
+            J.input("enter")
+            entregas += 1
+            espera(lambda: t.datos is not d, 10, "la respuesta a mi entrega")
+            if fotos < 2:
+                fotos += 1
+                pasar(0.4)
+                foto(f"red_rumor_invitado_entrega_{fotos}")
+        pasar(0.2)
+        tt += 0.2
+    assert entregas >= 4, entregas
+    print("invitado: regue el rumor ·", entregas, "entregas")
+elif MODO == "kombat":
     espera(lambda: V["fase"] == "kombat", 90, "la pelea")
     combate = V["obj"]["combate"]
     pelea = combate.pelea
@@ -130,8 +156,10 @@ else:
     foto("red_duelo_invitado_resultado")
     print("invitado: duelo, toque", tocadas, "notas ·", d.conteo)
 
-espera(lambda: V["fase"] == "espera" and V["espera"] is not None, 60, "volver a la espera")
-pasar(1.0)
+# (o ya «caida», si el anfitrion colgo antes de que se mirara aqui)
+espera(lambda: V["fase"] in ("espera", "caida") and V["espera"] is not None, 60,
+       "volver a la espera")
+pasar(0.3)
 foto(f"red_{MODO}_invitado_despues")
 espera(lambda: V["fase"] == "caida" or J.cl.sesion is None, 120, "que el anfitrion cuelgue")
 pasar(0.5)

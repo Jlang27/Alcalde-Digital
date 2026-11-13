@@ -296,6 +296,10 @@ class Jugador:
         # camara sube por encima si se mete dentro o tapa a Mateo.
         self.obstaculos_camara = []
         self.alza = 0.0
+        # En red, el vigilante que lleva una persona: anda mas lento que la
+        # periodista y no corre ni se agacha (sigilo.PASO_HUMANO).
+        self.factor = 1.0
+        self.solo_andar = False
         # Y hacia donde lleva W en la persecucion: la ruta justo donde esta
         # Mateo. Con la camara (que mira por delante, para doblar antes) W
         # empujaba en diagonal contra las vallas en las esquinas.
@@ -489,6 +493,8 @@ class Jugador:
                 self.corriendo = ((bool(held_keys["shift"]) or (self.siempre_corre and avance > 0))
                                   and (not self.agachado or self.siempre_corre)
                                   and not self.apuntando) or self.desliz is not None
+                if self.solo_andar:
+                    self.agachado = self.corriendo = False
                 if self.trepa is None:        # trepando lo lleva el impulso
                     self._caminar(avance, lado, dt)
                 self._avanzar_salto(dt)
@@ -762,6 +768,7 @@ class Jugador:
             self.impulso = 0.0
         if self.lento > 0.0:
             velocidad *= FACTOR_LENTO
+        velocidad *= self.factor
         x, _, z = self.actor.getPos()
         paso = velocidad * dt
         # Un eje cada vez: al chocar de lado con un mueble se desliza a lo
@@ -825,7 +832,7 @@ class Jugador:
             return
         self.estado = estado
         nombres = self.actor.getAnimNames()
-        velocidad = VELOCIDAD_DE.get(estado, 0.0)
+        velocidad = VELOCIDAD_DE.get(estado, 0.0) * self.factor
         # Si el modelo no trae ninguno se queda en idle y se desliza. Es
         # visible y a proposito: asi se nota que falta la animacion.
         for clip, ritmo in CLIPS[estado] + (("idle", 1.0),):

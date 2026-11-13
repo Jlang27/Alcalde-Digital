@@ -9,7 +9,7 @@ estado, unas 30 veces por segundo, y lo pinta con el mismo codigo de
 dibujo (red/espejo.py). Una sola simulacion = nada que pueda divergir.
 
 LO QUE HACE EL DESINFORMADOR EN CADA CAPITULO
-    1  riega el rumor por la red de vecinos        (pendiente)
+    1  riega el rumor por la red de vecinos        rumor.TableroRumor
     2  es el vigilante del colegio                 (pendiente)
     3  juega al billar por el asesor               Partida8Remota
     4  es Nodo en Nova Kombat                      PeleaRemota
@@ -127,7 +127,10 @@ def tecla(k):
     if s is None or s.protagonista:
         return False
     fase = _V["fase"]
-    if fase == "kombat":
+    if fase == "rumor":
+        if not k.endswith(" up"):
+            _V["obj"]["rumor"].tecla(k)
+    elif fase == "kombat":
         _V["obj"]["combate"].tecla(k)
     elif fase == "billar":
         _V["obj"]["billar"].tecla(k)
@@ -185,6 +188,7 @@ def _protagonista(dt):
     if p is not _V["partida"]:
         _V["partida"], _V["dia"] = p, None
         p.plaza_forzada = "pacifica"
+        p.rumor_manual = True             # el dia 1 lo riega el otro jugador
     if cl.estado != _V["estado"]:
         _V["estado"] = cl.estado
         e.enviar("hace", estado=cl.estado)
@@ -203,9 +207,38 @@ def _protagonista(dt):
     toca = _V["acumulado"] >= ENVIO
     if toca:
         _V["acumulado"] = 0.0
+    _rumor_servidor(cl, e, mensajes, p, dt)
     _pelea_servidor(cl, e, mensajes, toca)
     _billar_servidor(cl, e, mensajes, toca)
     _duelo_servidor(cl, e, mensajes, p)
+
+
+def _rumor_servidor(cl, e, mensajes, p, dt):
+    """Dia 1: el otro jugador riega el rumor. Aqui se aplican sus entregas
+    (Partida.regar decide si valen) y se le manda la red como va quedando."""
+    if p.red is None or p.dia_actual != 0 or cl.estado in ("carga", "intro"):
+        return
+    rival = _V["sesion"].rival
+    for m in mensajes:
+        if m["t"] != "regar":
+            continue
+        origen = p.regar(m.get("a"))
+        if origen is None:
+            continue
+        nombre = p.red.datos[m["a"]]["nombre"]
+        e.enviar("t_ok", a=m["a"], de=origen)
+        audio.efecto("rumor_llega")
+        _avisar(f"{rival} le llevó el rumor a {nombre}", 3.5)
+        if cl.tablero is not None:
+            cl.tablero.refrescar(p.estado_tablero(), *J.opciones_publicas())
+        elif cl.estado == "libre" and cl.reloj_manana:
+            J.pintar_reloj_manana()       # «ya lo creen N de 8», al momento
+    _V["t_rumor"] = _V.get("t_rumor", 0.0) + dt
+    estado = p.estado_rumor()
+    firma = repr(estado)
+    if firma != _V.get("firma_rumor") or _V["t_rumor"] >= 2.0:
+        _V["firma_rumor"], _V["t_rumor"] = firma, 0.0
+        e.enviar("t_est", **estado)
 
 
 def _escuchar(objeto):
@@ -395,7 +428,9 @@ def _desinformador(dt):
         if hacer is not None:
             hacer(m)
     fase, obj = _V["fase"], _V["obj"]
-    if fase == "kombat":
+    if fase == "rumor":
+        obj["rumor"].actualizar(dt)
+    elif fase == "kombat":
         combate = obj["combate"]
         if (combate.pelea.resultado == "desenmascarado" and combate.mascara is not None
                 and combate.vuelo is None):
@@ -452,6 +487,31 @@ def _llega_fin(m):
     _V["fase"] = "fin"
     _tarjeta("FIN DE LA PARTIDA", f"Gana {lider[0]}",
              f"Con el {lider[1]:.0f} % de los votos. Pulsa Enter para volver al menú.")
+
+
+def _llega_t_est(m):
+    """La red del rumor como va: la primera vez cuelga el corcho."""
+    if _V["dia"] != 0 or _V["fase"] not in ("espera", "rumor"):
+        return
+    m.pop("t", None)
+    obj = _V["obj"]
+    if "rumor" not in obj:
+        import rumor
+        enlace = _V["sesion"].enlace
+        _quitar_tarjeta()
+        obj["rumor"] = rumor.TableroRumor(m, lambda destino: enlace.enviar("regar", a=destino),
+                                          _V["sesion"].rival)
+        _V["fase"] = "rumor"
+    else:
+        obj["rumor"].poner(m)
+
+
+def _llega_t_ok(m):
+    t = _V["obj"].get("rumor")
+    if t is not None:
+        audio.efecto("rumor_llega")
+        nombre = t.datos["fichas"].get(m["a"], {}).get("nombre", "")
+        t.aviso = (f"Hecho: {nombre} ya se lo cree.", E.GAITAN)
 
 
 def _llega_k_ini(_m):
@@ -547,7 +607,7 @@ def _llega_cierra_minijuego(_m):
                  f"{_V['sesion'].rival} está cerrando el día…")
 
 
-_RECIBE = {"dia": _llega_dia, "hace": _llega_hace, "cierre": _llega_cierre, "fin": _llega_fin,
+_RECIBE = {"t_est": _llega_t_est, "t_ok": _llega_t_ok, "dia": _llega_dia, "hace": _llega_hace, "cierre": _llega_cierre, "fin": _llega_fin,
            "k_ini": _llega_k_ini, "k_est": _llega_k_est, "k_fin": _llega_cierra_minijuego,
            "b_ini": _llega_b_ini, "b_est": _llega_b_est, "b_fin": _llega_cierra_minijuego,
            "r_ini": _llega_r_ini, "r_ronda": _llega_r_ronda, "r_fin": _llega_r_fin,
@@ -559,6 +619,8 @@ def _recoger_minijuegos():
     if J is None:
         return
     cl, obj = J.cl, _V.get("obj", {})
+    if "rumor" in obj:
+        obj.pop("rumor").cerrar()
     if "combate" in obj:
         import azotea
         obj.pop("combate").cerrar()
