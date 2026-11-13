@@ -1176,6 +1176,40 @@ FINAL_PERSECUCION = {
 # Las hojas del capitulo 5: (opcion, texto, detalle, corto, hoja), con la
 # hoja (id, texto, efectos, bandera, detalle, corto). Los efectos son los
 # del guion; la victoria parcial, la mitad de la perfecta.
+# ===================================================================
+#  EL FINAL: como queda Ciudad Nova (cine_final.py)
+# ===================================================================
+# Cada final: la plaza de la que parte (plaza.final la viste encima), el
+# rotulo, el titular y lo que se cuenta, y la frase del ganador en la
+# tarima. Lo elige Partida.final().
+FINALES = {
+    "paz": ("pacifica", "CIUDAD NOVA EN PAZ", "Ganó la verdad",
+            "Las decisiones que tomaste aguantaron cinco días de rumores. La "
+            "plaza celebra sin miedo y nadie le grita a nadie.",
+            "Esta victoria es de los que verificaron antes de compartir."),
+    "polarizada": ("pacifica", "UNA CIUDAD PARTIDA EN DOS", "El rumor ganó el duelo",
+                   "La plaza sigue en pie, pero cada mitad mira a la otra como "
+                   "a un enemigo. Nadie rompe nada; nadie se habla.",
+                   "Gobernaré para todos, también para los que no me creen."),
+    "reconstruccion": ("caotica", "NOVA SE LEVANTA", "La verdad, a tiempo",
+                       "La plaza quedó destrozada, pero las pruebas de la mochila "
+                       "llegaron a todos. Los que se peleaban ayer hoy barren "
+                       "juntos.",
+                       "Hoy no gana un candidato: gana una ciudad que se levanta."),
+    "desastre": ("caotica", "CIUDAD NOVA EN RUINAS", "Perdió la ciudad",
+                 "Los bulos corrieron sin freno. La plaza arde, las pantallas "
+                 "repiten mentiras y casi nadie se atreve a salir.",
+                 "Ganamos. Que los demás se acostumbren."),
+}
+# El candidato que el juego defiende: el que gana si se decidió bien.
+CANDIDATO_PROPIO = "Abel de la Estrella"
+
+
+def cargo_electo(nombre):
+    """«alcalde electo» o, para la candidata, «alcaldesa electa»."""
+    return "alcaldesa electa" if nombre == "Elena Ruiz" else "alcalde electo"
+
+
 HOJAS_CAPITULO_5 = {
     "pacifica": (
         ("perfecta", "Victoria perfecta", "Más del 85 % de precisión.", "PERFECTA",

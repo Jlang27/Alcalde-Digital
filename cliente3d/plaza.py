@@ -1205,6 +1205,7 @@ def vivir(dt):
     if not _PLAZA:
         return
     M.seguir_cielo()
+    vivir_final(dt)
     t = _PLAZA["reloj"] = _PLAZA["reloj"] + dt
     caotica = _PLAZA["estado"] == "caotica"
     velocidad = M.CARRERA_RONDA if caotica else M.VELOCIDAD_RONDA
@@ -1514,3 +1515,228 @@ def textura_flecha():
 def suelo(x, z):
     """El alto del piso de la plaza en (x, z): la escalinata de la calle sur."""
     return altura_en(x, z, ESCALERAS_PLAZA)
+
+
+
+# ===================================================================
+#  EL FINAL (cine_final.py): la plaza como queda Ciudad Nova
+# ===================================================================
+# Sobre el estado pacifico o el caotico (contenido.FINALES) se cuelga un
+# nodo con lo propio de cada final, y la LED de la tarima cuenta quien gano.
+TARIMA_GANADOR = (-1.7, 39.6)      # el ganador, junto al atril (detras lo tapaba)
+CONFETI = 160
+
+
+def _lineal(rgb):
+    """De la tinta de la interfaz (sRGB 0-255) al color de un material."""
+    return tuple((c / 255.0) ** 2.2 for c in rgb)
+
+
+def _pintar_final(final, i):
+    """La LED central: el apellido del ganador en su tinta, y la linea del final."""
+    from contenido import cargo_electo
+    from juego import apellido
+    nombre, tinta = NOMBRES_CANDIDATOS[i], TINTAS_CANDIDATOS[i]
+    cargo = cargo_electo(nombre).upper()
+    linea = {"paz": f"{cargo} · GANÓ LA VERDAD",
+             "polarizada": "GANA POR LA MÍNIMA · CIUDAD DIVIDIDA",
+             "reconstruccion": f"{cargo} · NOVA SE LEVANTA",
+             "desastre": f"{cargo} · ENTRE EL HUMO"}[final]
+
+    def pintar(img):
+        d, (w, h) = ImageDraw.Draw(img), img.size
+        for y in range(h):
+            f = 1.15 - 0.55 * y / h
+            d.line((0, y, w, y), fill=tuple(int(c * f * 0.75) for c in tinta) + (255,))
+        d.text((w / 2, h * 0.16), "ELECCIONES CIUDAD NOVA", font=M._letra(int(h * 0.07)),
+               fill=(242, 239, 231, 255), anchor="mm")
+        texto = apellido(nombre).upper()
+        tam = int(h * 0.3)
+        while tam > 10 and d.textlength(texto, font=M._letra(tam)) > w * 0.9:
+            tam -= 2
+        d.text((w / 2, h * 0.47), texto, font=M._letra(tam), fill=(255, 255, 255, 255),
+               anchor="mm")
+        d.text((w / 2, h * 0.74), linea, font=M._letra(int(h * 0.07), False),
+               fill=(242, 239, 231, 255), anchor="mm")
+        d.rectangle((0, h * 0.88, w, h), fill=(10, 10, 14, 255))
+        d.text((8, h * 0.94), ("ESCRUTINIO 100 % · " + nombre.upper() + " · ") * 4,
+               font=M._letra(int(h * 0.05)), fill=tinta + (255,), anchor="lm")
+    return pintar
+
+
+def _publico_final(nodo, grupos, semilla):
+    """Mas gente fundida: grupos = [(x0, x1, z0, z1, m2 por persona, pancartas)].
+    En pancartas, «chaleco» es un voluntario (chaleco naranja y casco)."""
+    azar = random.Random(semilla)
+    extra = {f"pancarta_c{i}": (_lineal(t), 0.7, 0, tuple(c * 0.3 for c in _lineal(t)))
+             for i, t in enumerate(TINTAS_CANDIDATOS)}
+    extra["chaleco"] = ((0.75, 0.20, 0.02), 0.7, 0, (0.25, 0.06, 0.0))
+    extra["casco_obra"] = ((0.70, 0.52, 0.04), 0.5, 0, None)
+    mats = {**MATERIALES, **extra}
+    caras = {n: [] for n in mats}
+    for x0, x1, z0, z1, densidad, pancartas in grupos:
+        for _ in range(int((x1 - x0) * (z1 - z0) / densidad)):
+            x, z = azar.uniform(x0, x1), azar.uniform(z0, z1)
+            p = azar.choice(pancartas)
+            if p == "chaleco":
+                M._muneco(x, z, azar, caras, None)
+                caras["chaleco"].extend(M._caras_caja(x - 0.26, x + 0.26, 1.05, 1.5,
+                                                      z - 0.17, z + 0.17))
+                caras["casco_obra"].extend(M._caras_esfera(x, 1.83, z, 0.15))
+            else:
+                M._muneco(x, z, azar, caras, p)
+    for nombre, lista in caras.items():
+        if lista:
+            base, rug, met, emi = mats[nombre]
+            e = M._pieza_malla(nodo, lista, M._material(
+                (*base, 1), rugosidad=rug, metalico=met,
+                emision=(*emi, 1) if emi else None))
+            e.y = -0.15                    # _muneco pisa la acera de la intro
+
+
+def final(cual, ganador, segundo):
+    """Viste la plaza para el final `cual` (contenido.FINALES) con el
+    candidato `ganador` y el `segundo` (indices en NOMBRES_CANDIDATOS)."""
+    from contenido import FINALES
+    base = FINALES[cual][0]
+    estado(base, forzar=True)
+    nodo = _PLAZA["nodo"].attachNewNode("plaza_final")
+    vivo = {"confeti": [], "banderas": [], "t": 0.0, "humo": []}
+    g, s = f"pancarta_c{ganador}", f"pancarta_c{segundo}"
+    todas = tuple(f"pancarta_c{i}" for i in range(4))
+    # La LED de la tarima: quien gano.
+    tex = M._textura(f"led_final_{cual}_{ganador}", _pintar_final(cual, ganador), 640, 320,
+                     srgb=False)
+    _PLAZA["pantallas"][base][0].setTexture(tex, 1)
+    # La luz que echan las pantallas, del color del ganador (en la caotica
+    # era roja, de las noticias falsas).
+    luces = {l.getName(): l for l in _PLAZA["luces"][base]}
+    if "pantallas" in luces:
+        vivo["pantallas"] = (luces["pantallas"], luces["pantallas"].node().getColor())
+        luces["pantallas"].node().setColor((*(1.6 * c for c in _lineal(TINTAS_CANDIDATOS[ganador])), 1))
+    # Dos banderas grandes del ganador a los lados de la tarima, ondeando.
+    cartel = M._textura(f"cartel_{ganador}", _pintar_cartel(ganador), 300, 420)
+    for x in (-8.5, 8.5):
+        M._pieza(nodo, "cube", M._material((0.3, 0.3, 0.32, 1), 0.4, 0.9), (0.08, 6.5, 0.08),
+                 (x, 3.25, 36.6))
+        b = _lamina(nodo, cartel, (x + (1.1 if x < 0 else -1.1), 5.2, 36.6), 2.1, 2.9,
+                    (x, 5.2, 0.0))
+        vivo["banderas"].append(b)
+    if cual == "paz":
+        _publico_final(nodo, [(-7.0, 7.0, 26.0, 34.5, 1.4, (g, g, None, "pancarta_paz")),
+                              (-14.0, 14.0, 14.0, 21.0, 1.8, (g, None, None))], 61)
+    elif cual == "polarizada":
+        # Dos bandos y una fila de vallas en medio: nadie cruza al otro lado.
+        _publico_final(nodo, [(-14.0, -1.2, 16.0, 34.5, 1.5, (g, g, None)),
+                              (1.2, 14.0, 16.0, 34.5, 1.5, (s, s, "pancarta_negra", None))], 62)
+        t = _Taller()
+        t.caja("truss", -0.04, 0.04, 0.95, 1.05, 13.0, 35.0)
+        t.caja("truss", -0.04, 0.04, 0.25, 0.32, 13.0, 35.0)
+        for z in range(13, 36, 2):
+            t.caja("truss", -0.05, 0.05, 0.0, 1.05, z - 0.05, z + 0.05)
+        t.volcar(nodo)
+    elif cual == "reconstruccion":
+        # Voluntarios por toda la plaza y el publico mezclado: todas las tintas.
+        _publico_final(nodo, [(-7.0, 7.0, 26.0, 34.5, 1.6, todas + (None,)),
+                              (18.0, 24.0, -15.0, -7.0, 2.0, ("chaleco",)),
+                              (35.0, 43.0, 18.0, 26.0, 2.0, ("chaleco",)),
+                              (-18.0, -10.0, -40.0, -32.0, 2.0, ("chaleco",)),
+                              (-8.0, 8.0, -6.0, 2.0, 2.4, ("chaleco", None))], 63)
+        for e in _PLAZA["humo"]:          # los fuegos apagados; queda algo de humo
+            if e.color[0] > 0.5:
+                e.enabled = False
+                vivo["humo"].append(e)
+        luces = {l.getName(): l for l in _PLAZA["luces"]["caotica"]}
+        vivo["sol"] = (luces["sol"].node().getColor(), luces["sol"].getHpr(),
+                       luces["ambiente"].node().getColor())
+        luces["sol"].node().setColor((1.5, 0.82, 0.45, 1))     # amanece
+        luces["sol"].setHpr(205, -10, 0)
+        luces["ambiente"].node().setColor((0.16, 0.12, 0.10, 1))
+        niebla = Fog("niebla_final")
+        niebla.setColor(0.36, 0.24, 0.17)
+        niebla.setExpDensity(0.012)
+        _PLAZA["raiz"].setFog(niebla)
+        # Las pantallas de los lados ya no llaman a la calle.
+        lado = M._textura("led_pacifica_lado", _pintar_pantalla("pacifica", "lado"), 640, 320,
+                          srgb=False)
+        for e in _PLAZA["pantallas"]["caotica"][1:3]:
+            e.setTexture(lado, 1)
+        tex = M._textura("pancarta_levanta", _pintar_pancarta(
+            "NOVA SE LEVANTA · ENTRE TODOS", (242, 239, 231), (62, 143, 86)), 1024, 128)
+        _lamina(nodo, tex, (0.0, 3.4, -28.6), 14.0, 1.75, (0.0, 3.4, 0.0))
+    else:   # desastre: mas fuego y mas humo, y pocos celebrando
+        azar = random.Random(64)
+        for _ in range(9):
+            x, z = azar.uniform(-24, 30), azar.uniform(-30, 30)
+            if abs(x) < 9 and z > 12:
+                continue                  # la pista y la tarima, despejadas
+            for tam in (2.0, 4.0):
+                vivo["humo"].append(M._destello_suelto((x, 1.0, z), tam,
+                                                       (1.0, 0.40, 0.10), 0.9))
+            for k in range(3):
+                vivo["humo"].append(M._destello_suelto(
+                    (x, 3.0 + k * 2.8, z), 5 + k * 2.5, (0.14, 0.13, 0.14), 0.55))
+        _publico_final(nodo, [(-5.0, 5.0, 29.0, 34.5, 3.2, (g, None))], 65)
+    # El confeti, en las tintas del ganador y blanco, sobre la tarima y la
+    # pista. En la ciudad partida y en la de ruinas no hay fiesta.
+    if cual in ("paz", "reconstruccion"):
+        azar = random.Random(66)
+        rgb = tuple(c / 255 for c in TINTAS_CANDIDATOS[ganador])
+        for k in range(CONFETI):
+            col = rgb if k % 3 else (1.0, 0.97, 0.9)
+            e = M.Entity(parent=M.scene, model="quad", scale=(0.07, 0.045),
+                         color=color.Color(*col, 1),
+                         position=(azar.uniform(-11, 11), azar.uniform(1, 12),
+                                   azar.uniform(24, 42)))
+            e.setTwoSided(True)
+            vivo["confeti"].append((e, azar.uniform(0.7, 1.4), azar.uniform(0, 6.28)))
+    _PLAZA["final"] = (nodo, vivo)
+    return nodo
+
+
+def vivir_final(dt):
+    """Confeti que cae girando y banderas que ondean."""
+    fin = _PLAZA.get("final")
+    if fin is None:
+        return
+    vivo = fin[1]
+    t = vivo["t"] = vivo["t"] + dt
+    for e, v, fase in vivo["confeti"]:
+        y = e.y - v * dt
+        e.y = y if y > 0.05 else 12.0
+        e.x += math.sin(t * 2.0 + fase) * 0.4 * dt
+        e.rotation_y = (t * 220 * v + fase * 57) % 360
+        e.rotation_z = math.sin(t * 3 + fase) * 50
+    for k, b in enumerate(vivo["banderas"]):
+        b.rotation_z = math.sin(t * 2.3 + k) * 4
+        b.scale_x = 2.1 * (0.93 + 0.07 * math.sin(t * 3.1 + k * 1.7))
+
+
+def desmontar_final():
+    """Quita lo del final y devuelve la plaza como estaba."""
+    fin = _PLAZA.pop("final", None)
+    if fin is None:
+        return
+    nodo, vivo = fin
+    for e, *_r in vivo["confeti"]:
+        M.destroy(e)
+    for e in vivo["humo"]:
+        if e in _PLAZA.get("humo", ()):
+            e.enabled = True              # los fuegos que se apagaron
+        else:
+            M.destroy(e)                  # los que se encendieron
+    if "pantallas" in vivo:
+        luz, col = vivo["pantallas"]
+        luz.node().setColor(col)
+    # Las LED vuelven a lo suyo.
+    for de, lista in _PLAZA["pantallas"].items():
+        for e, cual in zip(lista, ("central", "lado", "lado", "torre")):
+            e.setTexture(M._textura(f"led_{de}_{cual}", _pintar_pantalla(de, cual), 640, 320,
+                                    srgb=False), 1)
+    if "sol" in vivo:
+        luces = {l.getName(): l for l in _PLAZA["luces"]["caotica"]}
+        col, hpr, amb = vivo["sol"]
+        luces["sol"].node().setColor(col)
+        luces["sol"].setHpr(hpr)
+        luces["ambiente"].node().setColor(amb)
+    nodo.removeNode()

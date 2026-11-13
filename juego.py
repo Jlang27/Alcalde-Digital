@@ -47,7 +47,7 @@ from contenido import (
     construir_arbol_capitulo_3, construir_arbol_capitulo_4, construir_arbol_capitulo_5,
     RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION, EVENTOS_PERSECUCION,
     aplicar_habilidades, aplicar_banderas,
-    HERENCIAS, TITULARES, TEXTO_ESTADO_PLAZA,
+    HERENCIAS, TITULARES, TEXTO_ESTADO_PLAZA, FINALES, CANDIDATO_PROPIO,
     dialogo_expediente, dialogo_captura,
 )
 from sigilo import Sigilo, VELOCIDAD as VELOCIDAD_RONDA, AVISOS_MAXIMOS
@@ -1461,11 +1461,45 @@ class Partida:
 
     def resultado_eleccion(self):
         """El escrutinio es la encuesta del ultimo dia: el final es la suma
-        de lo que pasó cada dia, no una cuenta aparte."""
-        pct = self.porcentajes()
+        de lo que pasó cada dia, no una cuenta aparte. Salvo en el final
+        en paz: si se decidio bien, gana el candidato propio (se cambia su
+        porcentaje por el del primero, para que la suma siga dando 100)."""
+        pct = dict(self.porcentajes())
+        if self.final()["final"] == "paz":
+            primero = max(pct, key=pct.get)
+            pct[primero], pct[CANDIDATO_PROPIO] = pct[CANDIDATO_PROPIO], pct[primero]
         lemas = {n: l for n, l, _ in CANDIDATOS}
         orden = sorted(NOMBRES_CANDIDATOS, key=lambda c: pct[c], reverse=True)
         return [(c, lemas[c], pct[c]) for c in orden]
+
+    def final(self):
+        """Como queda Ciudad Nova (contenido.FINALES) y quien gano.
+
+        Manda lo que paso en la plaza (el ultimo dia); si no decide, lo que
+        se decidio en los cinco:
+          - se recupero la mochila en la persecucion: la ciudad destrozada
+            se une para arreglarse (la verdad llego a tiempo);
+          - el rumor gano el duelo: la ciudad esta bien pero partida;
+          - malas decisiones (o el de la mochila escapo): desastre;
+          - si no: en paz, y gana el candidato propio.
+        """
+        b = self.banderas
+        if "recuperaste_la_mochila" in b:
+            final = "reconstruccion"
+        elif "el_rumor_gano_el_duelo" in b:
+            final = "polarizada"
+        elif self.veredicto()[1] == "mal" or "la_red_sigue_activa" in b:
+            final = "desastre"
+        else:
+            final = "paz"
+        if final == "paz":
+            ganador = CANDIDATO_PROPIO
+        else:
+            pct = self.porcentajes()
+            ganador = max(pct, key=pct.get)
+        plaza, rotulo, titular, texto, frase = FINALES[final]
+        return {"final": final, "ganador": ganador, "plaza": plaza, "rotulo": rotulo,
+                "titular": titular, "texto": texto, "frase": frase}
 
     def tabla_jugadores(self):
         """Los jugadores ordenados por puntuacion individual (seccion 11)."""

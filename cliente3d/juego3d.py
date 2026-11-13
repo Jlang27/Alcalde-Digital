@@ -27,6 +27,7 @@ import audio
 import azotea
 import cierre
 import cine_azotea
+import cine_final
 import cine_campana
 import kombat_cliente
 import lobby
@@ -2268,6 +2269,11 @@ def elegir_en_escena(i):
 
 
 def terminar_escena():
+    if isinstance(cl.escena, cine_final.FinalCiudad):
+        cl.escena.cerrar()
+        cl.escena = None
+        pantalla_final()
+        return
     if isinstance(cl.escena, cine_azotea.RetoAzotea):
         cl.escena.cerrar()
         cl.escena = None
@@ -3246,9 +3252,23 @@ def siguiente_dia():
     cl.pagina = None
     limpiar(cl.diagrama)
     if cl.partida.partida_terminada():
-        pantalla_final()
+        abrir_final()
         return
     iniciar_dia(cl.partida.dia_actual + 1)
+
+
+def abrir_final():
+    """Antes del escrutinio, la ciudad como quedo y el ganador en la tarima
+    (cine_final). Pasa en la Plaza Central, la del ultimo dia."""
+    p = cl.partida
+    datos = p.final()
+    segundo = next(n for n, _l, _p in p.resultado_eleccion() if n != datos["ganador"])
+    if mundo.escenario() != "plaza_central":
+        mundo.cambiar_escenario(cl.mundo, "plaza_central")
+    for e in cl.hud:
+        e.enabled = False
+    cl.estado = "escena"
+    cl.escena = cine_final.FinalCiudad(cl.actor, cl.mundo, datos, segundo)
 
 
 def pantalla_final():
