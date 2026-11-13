@@ -453,6 +453,7 @@ class Tablero:
         a = self.mano.append
         pruebas = self.datos["pruebas"]
         y = -0.330
+        self.renglones_mano = []      # para el cursor del mando (mando.py)
         if not pruebas:
             a(E.etiqueta("No reuniste ninguna prueba esta mañana.", (-0.86, y + 0.012),
                          0.84, _alfa(E.TINTA, 0.85)))
@@ -466,6 +467,7 @@ class Tablero:
                       z=Z_FICHA + 0.004))
             a(E.banda(ancho, 0.104, (x, y), E.PAPEL_SOMBRA if gastada else E.PAPEL,
                       z=Z_FICHA))
+            self.renglones_mano.append(self.mano[-1])
             a(E.banda(ancho, 0.024, (x, y + 0.040), tinta, z=Z_FICHA - 0.004))
             a(E.pequena(rotulo, (x - ancho / 2 + 0.046, y + 0.050),
                         E.TINTA if familia == "bots" else E.PAPEL, escala=0.48))
@@ -581,10 +583,12 @@ class Tablero:
                     E.TINTA_TENUE, escala=0.56))
         a(E.titular("Tu jugada pública", (-0.50, arriba - 0.066), 1.7, E.TINTA))
         y = arriba - 0.168
+        self.renglones_publica = []
         for i, (_id, texto) in enumerate(self.opciones):
             a(E.banda(0.044, 0.044, (-0.478, y - 0.004), E.TINTA, z=E.Z_ADORNO_MODAL))
             a(E.etiqueta(str(i + 1), (-0.478, y - 0.004), 0.90, E.PAPEL, origen=(0, 0)))
             a(E.etiqueta(texto, (-0.435, y + 0.014), 1.05, E.TINTA))
+            self.renglones_publica.append(self.panel[-1])
             y -= 0.062
         if self.ocultas:
             self.panel += E.casilla((-0.478, y - 0.004), E.TINTA_TENUE, lado=0.030,
@@ -595,6 +599,7 @@ class Tablero:
                     E.TINTA_TENUE, escala=0.52))
 
     def cerrar_publica(self):
+        self.renglones_publica = []
         self._borrar(self.panel)
         for e in self.apagados:
             e.enabled = True

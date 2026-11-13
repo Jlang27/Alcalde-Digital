@@ -14,6 +14,8 @@ LO QUE HACE EL DESINFORMADOR EN CADA CAPITULO
     3  juega al billar por el asesor               Partida8Remota
     4  es Nodo en Nova Kombat                      PeleaRemota
     5  canta el bulo en el duelo de la plaza       DueloRed
+       ...o, si la plaza amanece caotica, huye     Jugador + Persecucion (humano)
+       con la mochila y el protagonista lo persigue
 Entre minijuego y minijuego ve una tarjeta de espera con lo que esta
 haciendo el protagonista y lo que le va a tocar.
 
@@ -32,6 +34,7 @@ from ursina import camera, destroy
 import audio
 import billar as B
 import jugador as JG
+import persecucion as PE
 import pantallas
 import sigilo as S
 import estilo as E
@@ -65,11 +68,17 @@ PAPEL = {
         "clic y arrastra hacia abajo (o mantén ESPACIO) para la potencia, flechas para el "
         "efecto. Si ganas, el rumor contra Pineda sale esta noche."),
     3: ("Nova Kombat", "Eres NODO. A y D para moverte, W salta, S te agacha; J, K y L "
-        "son golpe ligero, medio y fuerte. S, A y J lanza un BULO. Cúbrete manteniendo "
-        "la D (atrás). Si le ganas, tu audio sale en su directo."),
+        "son golpe ligero, medio y fuerte. S, A y J lanza un BULO. Mantén U para "
+        "cubrirte. Si le ganas, tu audio sale en su directo."),
     4: ("La plaza", "Cantas el bulo en el duelo. D F J K (o las flechas) cuando TUS "
         "notas lleguen a la marca. Si tocas mejor que él, la plaza se queda con el rumor."),
 }
+# El capitulo 5 con la plaza caotica: no hay duelo, hay persecucion.
+PAPEL_HUIDA = ("Caos en la plaza", "Llevas la mochila repetidora. Estás junto a la tarima: "
+               "cuando Mateo te vea, CORRE. Vas siempre a la carrera por las calles "
+               "cortadas: ESPACIO salta y trepa, C te desliza por debajo, Ctrl te agacha "
+               "(con mando: A, B y el gatillo izquierdo). Chocar te frena. Llega al final "
+               "de la ruta o aguanta hasta que se acabe el tiempo: si te alcanza, te la quita.")
 HACE = {"carga": "se prepara", "intro": "ve la ciudad", "cinematica": "llega al lugar",
         "rotulo": "empieza el día", "contexto": "lee el rumor", "libre": "recorre el lugar",
         "dialogo": "habla con alguien", "escena": "escucha el reto",
@@ -162,9 +171,12 @@ def tecla(k):
         carril = J.TECLAS_DUELO.get(k)
         if carril is not None:
             J.pulsar_duelo(carril)
+    elif fase == "huida" and k in ("space", "c"):
+        g = _V["obj"]["huida"]["jugador"]
+        g.saltar() if k == "space" else g.deslizar()
     elif fase in ("caida", "fin") and k in ("enter", "space", "escape"):
         J.volver_al_menu()
-    elif k == "escape" and fase in ("espera", "sigilo"):
+    elif k == "escape" and fase in ("espera", "sigilo", "huida"):
         if _V.get("salir", -9) > _V["t"] - 3.0:
             J.volver_al_menu()
         else:
@@ -188,6 +200,8 @@ def _caida():
             b.remoto = None
         if p is not None and getattr(p, "duelo", None) is not None:
             p.duelo.rival_humano = False
+        if p is not None and p.persecucion is not None:
+            p.persecucion.poner_humano(False)     # la maquina sigue desde donde iba
         if p is not None:
             p.vigilante_humano = False
             if p.sigilo is not None and p.sigilo.humano is not None:
@@ -253,7 +267,8 @@ def _vuelta():
     _V["caido"] = False
     if s.protagonista:
         _V.update(dia=None, estado=None, cierre=None, kombat=None, billar=None,
-                  duelo=None, ronda=None, sigilo=None, firma_rumor=None, ev=[])
+                  duelo=None, ronda=None, sigilo=None, firma_rumor=None, ev=[],
+                  persecucion=None, sosp=None)
         if _V["partida"] is not None:
             _V["partida"].vigilante_humano = True
         _avisar(f"{s.rival} volvió a la partida", 4.0)
@@ -275,9 +290,9 @@ def _protagonista(dt):
         return
     if p is not _V["partida"]:
         _V["partida"], _V["dia"] = p, None
-        p.plaza_forzada = "pacifica"
         p.rumor_manual = True             # el dia 1 lo riega el otro jugador
         p.vigilante_humano = True         # y el 2 lo vigila
+        p.sospechoso_humano = True        # y en la plaza caotica huye con la mochila
     if cl.estado != _V["estado"]:
         _V["estado"] = cl.estado
         e.enviar("hace", estado=cl.estado)
@@ -301,6 +316,66 @@ def _protagonista(dt):
     _billar_servidor(cl, e, mensajes, toca)
     _duelo_servidor(cl, e, mensajes, p)
     _sigilo_servidor(cl, e, mensajes, p, toca)
+    _persecucion_servidor(cl, e, mensajes, p, toca)
+
+
+# El clip que le toca a cada animacion que llega del otro PC, con la
+# velocidad a la que pisa (para mundo.ritmo_para).
+_PASO_DE_CLIP = {"caminar": JG.VELOCIDAD, "correr": JG.VELOCIDAD_CORRER,
+                 "agachado_caminar": JG.VELOCIDAD_AGACHADO}
+
+
+def poner_clip(actor, clip):
+    """Pone en bucle el clip que lleva ese personaje en el otro PC."""
+    if not clip or clip not in actor.getAnimNames() or actor.getCurrentAnim() == clip:
+        return
+    actor.setPlayRate(J.mundo.ritmo_para(actor, clip, _PASO_DE_CLIP.get(clip, 0.0)), clip)
+    actor.loop(clip)
+
+
+def rival():
+    s = _V.get("sesion")
+    return s.rival if s is not None else ""
+
+
+def sospechoso_remoto():
+    """Donde tiene al de la mochila el otro jugador ({x, y, z, h, clip}), o
+    None si lo lleva la maquina. Lo pregunta juego3d.persecucion_paso."""
+    s = _V.get("sesion")
+    if s is None or not s.protagonista or _V.get("caido"):
+        return None
+    return _V.get("sosp")
+
+
+def _persecucion_servidor(cl, e, mensajes, p, toca):
+    """Dia 5, plaza caotica: el de la mochila es el otro jugador. Corre en su
+    PC y aqui llega donde va (Persecucion.mandar); las reglas de siempre
+    dicen si Mateo lo alcanza, lo pierde o se le acaba el tiempo."""
+    per = p.persecucion
+    if per is None or not p.sospechoso_humano:
+        return
+    if not per.humano and not per.terminada:
+        per.poner_humano()            # el dia ya estaba montado, o volvio a entrar
+    if not per.empezada:
+        return
+    if _V.get("persecucion") is not per:
+        _V["persecucion"], _V["sosp"], _V["fin_per"] = per, None, None
+        e.enviar("p_ini", s=round(per.s, 2), resta=round(per.restante, 1))
+    for m in mensajes:
+        if m["t"] == "p":
+            per.mandar(m["x"], m["z"], m["r"])
+            _V["sosp"] = m
+    if per.terminada:
+        if _V["fin_per"] is None:
+            _V["fin_per"] = per.resultado
+            e.enviar("p_fin", res=per.resultado, motivo=per.motivo)
+        return
+    if toca:
+        a = cl.actor
+        e.enviar("p_est", x=round(a.getX(), 3), y=round(a.getY(), 3), z=round(a.getZ(), 3),
+                 h=round(a.getH(), 1), clip=a.getCurrentAnim(),
+                 resta=round(per.restante, 1), dist=round(per.distancia, 1),
+                 fallos=per.fallos, sm=round(per.s_mateo, 1))
 
 
 def ruidos(lista):
@@ -595,6 +670,8 @@ def _desinformador(dt):
         J.duelo_paso(dt)
     elif fase == "sigilo":
         _sigilo_cliente(dt)
+    elif fase == "huida":
+        _huida_cliente(dt)
 
 
 # --- el vigilante del colegio (capitulo 2) ---
@@ -745,6 +822,143 @@ def _llega_g_fin(m):
                  "en el archivo.")
 
 
+# --- el de la mochila (capitulo 5, plaza caotica) ---
+
+def _llega_p_ini(m):
+    """Mateo me vio: a correr. Monta en este PC lo mismo que tiene el
+    perseguidor (pasillo cerrado, camara de rail, parkour) pero sobre el de
+    la mochila. Una Persecucion local, solo con lo que esta quieto en la
+    ruta, da los avisos («¡SALTA!») y la altura; quien gana lo decide la
+    del protagonista."""
+    from contenido import EVENTOS_PERSECUCION, FASES_PERSECUCION, RUTA_PERSECUCION_PLAZA
+    cl, obj, mundo, plaza = J.cl, _V["obj"], J.mundo, J.plaza
+    if "huida" in obj:
+        return
+    _quitar_tarjeta()
+    sosp = obj.get("sospechoso") or plaza.preparar_sospechoso()
+    obj["sospechoso"] = sosp
+    per = PE.Persecucion(RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION,
+                         [ev for ev in EVENTOS_PERSECUCION if ev["tipo"] in PE.ESTATICOS],
+                         tiempo=1e9)
+    per.poner_humano()
+    per.empezar()
+    x, z, rumbo = per.punto(m["s"])
+    per.mandar(x, z, rumbo)
+    sosp.setPos(x, plaza.suelo(x, z), z)
+    activos = per.activos
+    por_tipo = {t: [(*o["rect"], t) for o in activos if o["tipo"] == t]
+                for t in ("saltar", "trepar", "agacharse", "deslizar", "bloqueo")}
+    g = JG.Jugador(sosp, limites=mundo.limites(),
+                   bloqueos=list(mundo.bloqueos()) + [r[:4] for r in por_tipo["bloqueo"]],
+                   muros=mundo.muros())
+    g.techo, g.fov, g.suelo = mundo.techo(), mundo.lente(), plaza.suelo
+    g.saltables, g.trepables = por_tipo["saltar"], por_tipo["trepar"]
+    g.agachables, g.deslizables = por_tipo["agacharse"], por_tipo["deslizar"]
+    g.obstaculos_camara = plaza.obstaculos_camara(activos)
+    g.con_impulso, g.siempre_corre = True, True
+    g.factor = PE.PASO_SOSPECHOSO             # la mochila pesa
+    g.rumbo = 180.0 - rumbo
+    sosp.setH(g.rumbo)
+    g.yaw = rumbo
+    g.estado = None
+    g._animar("quieto")
+    plaza.cerrar_pasillo()
+    g.pasillo = (lambda px, pz: PE.distancia_a_ruta((px, pz), per.ruta), PE.ANCHO_PASILLO / 2)
+    g.rail = lambda px, pz: per.punto(per.proyectar((px, pz), per.s) + 4.0)[2]
+    g.marcha = lambda px, pz: per.punto(per.proyectar((px, pz), per.s) + 0.8)[2]
+    g.encuadrar()
+    g.activar()
+    hud = pantallas.PersecucionHUD(huye=True)
+    hud.avisar("¡TE VIO! ¡CORRE!", E.GAITAN)
+    audio.efecto("alarma")
+    audio.musica(audio.MUSICA_PERSECUCION, fundido=0.4, nivel=J.NIVEL_FASE[0])
+    obj["huida"] = {"jugador": g, "per": per, "hud": hud, "est": None, "envio": 0.0,
+                    "choque": 0.0, "resta": m.get("resta", PE.TIEMPO), "fase": 1}
+    _V["fase"] = "huida"
+
+
+def _huida_cliente(dt):
+    h = _V["obj"]["huida"]
+    g, per, hud, plaza = h["jugador"], h["per"], h["hud"], J.plaza
+    actor = g.actor
+    g.paso(dt)
+    g.seguir(dt)
+    x, z = actor.getX(), actor.getZ()
+    # el hueco entre las plataformas, como al perseguidor: al fondo y de vuelta
+    h["choque"] = max(0.0, h["choque"] - dt)
+    for ob in per.activos:
+        x0, x1, z0, z1 = ob["rect"]
+        if (ob["tipo"] == "brecha" and x0 < x < x1 and z0 < z < z1
+                and g.salto is None and g.trepa is None):
+            actor.setPos(x, plaza.suelo(x, z0 - 2.5), z0 - 2.5)
+            hud.avisar("¡AL HUECO!", E.GAITAN, 0.8)
+            if h["choque"] <= 0.0:
+                h["choque"] = J.REPETIR_CHOQUE
+                g.golpe()
+                hud.golpe()
+                audio.efecto("golpe")
+    # estrellarse a la carrera lo frena: es lo que le regala metros a Mateo
+    if g.choque is not None and g.corriendo and h["choque"] <= 0.0:
+        h["choque"] = J.REPETIR_CHOQUE
+        g.golpe()
+        hud.golpe()
+        audio.efecto("golpe")
+    g.choque = None
+    x, z, rumbo = actor.getX(), actor.getZ(), 180.0 - actor.getH()
+    per.mandar(x, z, rumbo)
+    for evento, dato in per.actualizar(dt, x, z, saltando=g.en_el_aire() or g.trepa is not None):
+        if evento == "fase":
+            hud.avisar(f"FASE {dato} · {per.fases[dato - 1][1]}", E.LLERAS, 1.4)
+            audio.musica(audio.MUSICA_PERSECUCION, nivel=J.NIVEL_FASE[dato - 1])
+    h["envio"] += dt
+    if h["envio"] >= ENVIO:
+        h["envio"] = 0.0
+        _V["sesion"].enlace.enviar("p", x=round(x, 3), y=round(actor.getY(), 3), z=round(z, 3),
+                                   r=round(rumbo, 1), h=round(actor.getH(), 1),
+                                   clip=actor.getCurrentAnim())
+    est = h["est"]
+    dist = est["dist"] if est else PE.VENTAJA_HUMANO
+    resta = est["resta"] if est else h["resta"]
+    cerca = max(0.0, min(1.0, (dist - PE.ALCANCE) / (PE.LEJOS - PE.ALCANCE)))
+    hud.poner(resta, dist, cerca, ((est["sm"] if est else 0.0) / per.largo, per.s / per.largo),
+              per.fases[per.fase - 1][1],
+              "¡Lo tienes encima!" if dist < 5.0 else
+              f"Que {_V['sesion'].rival} no te alcance: llega al final de la ruta",
+              per.proximo_aviso())
+
+
+def _llega_p_est(m):
+    h = _V["obj"].get("huida")
+    if h is None or _V["fase"] != "huida":
+        return
+    h["est"] = m
+    a = J.cl.actor                    # Mateo, que viene detras
+    a.setPos(m["x"], m["y"], m["z"])
+    a.setH(m["h"])
+    poner_clip(a, m.get("clip"))
+
+
+def _llega_p_fin(m):
+    _recoger_minijuegos()
+    _quitar_aviso()
+    if _V["fase"] in ("fin", "caida"):
+        return
+    _V["fase"] = "espera"
+    rival = _V["sesion"].rival
+    if m["res"] == "capturado":
+        audio.efecto("tiempo_agotado")
+        _tarjeta("TE ATRAPÓ", "Mochila recuperada",
+                 f"{rival} te alcanzó y te quitó la mochila repetidora. Ahora te va a "
+                 "preguntar quién está detrás…")
+    else:
+        audio.efecto("sello")
+        motivo = {"meta": "Llegaste al final de la ruta y te perdiste entre la gente.",
+                  "lejos": f"Dejaste atrás a {rival}: ya no te ve.",
+                  "golpes": f"{rival} se estrelló demasiadas veces y te perdió.",
+                  "tiempo": "Se acabó el tiempo y sigues con la mochila."}.get(m.get("motivo"), "")
+        _tarjeta("ESCAPASTE", "El bulo sigue en las pantallas", motivo)
+
+
 # --- lo que llega del protagonista ---
 
 def _llega_dia(m):
@@ -761,6 +975,10 @@ def _llega_dia(m):
     audio.musica(audio.MUSICA_TENSION, fundido=2.0, nivel=0.3)
     _V["dia"], _V["fase"] = m["indice"], "espera"
     titulo, papel = PAPEL.get(m["indice"], ("", ""))
+    if m.get("plaza") == "caotica":
+        # La plaza se desbordo: el de la mochila, junto a la tarima, soy yo.
+        _V["obj"]["sospechoso"] = J.plaza.preparar_sospechoso()
+        titulo, papel = PAPEL_HUIDA
     _tarjeta(f"CAPÍTULO {m['indice'] + 1}  ·  TÚ ERES EL DESINFORMADOR", titulo, papel)
 
 
@@ -918,7 +1136,8 @@ _RECIBE = {"t_est": _llega_t_est, "t_ok": _llega_t_ok, "dia": _llega_dia, "hace"
            "b_ini": _llega_b_ini, "b_est": _llega_b_est, "b_fin": _llega_cierra_minijuego,
            "r_ini": _llega_r_ini, "r_ronda": _llega_r_ronda, "r_fin": _llega_r_fin,
            "r_cierra": _llega_cierra_minijuego,
-           "g_ini": _llega_g_ini, "g_est": _llega_g_est, "g_fin": _llega_g_fin}
+           "g_ini": _llega_g_ini, "g_est": _llega_g_est, "g_fin": _llega_g_fin,
+           "p_ini": _llega_p_ini, "p_est": _llega_p_est, "p_fin": _llega_p_fin}
 
 
 def _recoger_minijuegos():
@@ -933,6 +1152,12 @@ def _recoger_minijuegos():
         obj.pop("combate").cerrar()
         J.mundo.retirar_luchador(obj.pop("nodo"))
         azotea.caseton(True)
+    if "huida" in obj:
+        h = obj.pop("huida")
+        h["jugador"].desactivar()
+        h["hud"].cerrar()
+        audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.35)
+    obj.pop("sospechoso", None)
     if "guardia" in obj:
         gd = obj.pop("guardia")
         gd["jugador"].desactivar()

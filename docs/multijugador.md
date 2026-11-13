@@ -33,7 +33,8 @@ sigue contra la máquina y el desinformador vuelve al menú.
 | 2 | mismo objetivo y misma velocidad; ve un poco menos (niebla 0,048) y el plano se destapa al andar (`minimapa.con_niebla`) | **el vigilante** (`Sigilo.poner_humano`): linterna más larga y ancha (`ALCANCE_HUMANO`, `MEDIO_ANGULO_HUMANO`), niebla 0,014, pero anda al 78 % (`PASO_HUMANO`) y nunca corre; ve en el plano lo que oye; un petardo cerca lo deslumbra (`DESLUMBRE`); tras un aviso vuelve a su puesto |
 | 3 | billar contra el otro | juega por el asesor (`Partida8Remota`) |
 | 4 | JH777 | Nodo (`PeleaRemota`, `Pelea.nodo_humano`) |
-| 5 | Mateo en el duelo | las notas del rival (`ritmo.DueloRival`); la plaza va siempre pacífica en red |
+| 5 (plaza pacífica) | Mateo en el duelo | las notas del rival (`ritmo.DueloRival`) |
+| 5 (plaza caótica) | persigue al de la mochila y lo atrapa con E en cuanto lo alcanza | **lleva la mochila y huye** con el mismo parkour (`Persecucion.poner_humano`): 10 m de ventaja, un 5 % más lento; gana si llega al final de la ruta, lo deja atrás o se acaba el tiempo |
 
 Prueba con dos clientes de verdad (necesita GPU):
 `herramientas/banco_pruebas/red_partida.py [rumor|colegio|billar|kombat|duelo]`.

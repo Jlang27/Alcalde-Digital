@@ -184,6 +184,7 @@ class EscenaDecision:
         primera = arriba - 0.108
         c = self._papel(arriba, SUELO_HOJA, self.PREGUNTA.upper())
         a = self.panel.append
+        self.renglones = []           # para el cursor del mando (mando.py)
         for k, (id_opcion, texto, detalle) in enumerate(self.opciones):
             y = primera - k * paso
             ancho = self._tecla_papel(str(k + 1), -0.835, y - 0.004, c)
@@ -191,6 +192,7 @@ class EscenaDecision:
             tinta = self._en_papel(self.TINTAS.get(id_opcion, E.TINTA))
             a(E.banda(0.006, 0.072, (x - 0.010, y - 0.004), tinta, padre=c))
             a(E.etiqueta(texto.upper(), (x, y + 0.020), 1.05, tinta, padre=c))
+            self.renglones.append(self.panel[-1])
             a(E.pequena(detalle, (x, y - 0.018), E.TINTA_TENUE, escala=0.58,
                         padre=c))
 

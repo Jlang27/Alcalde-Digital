@@ -136,6 +136,10 @@ class Luchador:
         self.conecto = False          # ...y fue un golpe limpio
         self.andar = 0                # -1, 0, +1 relativo a donde mira
         self.agachado = False         # mantiene abajo
+        # Mantiene el boton de cubrirse. Antes solo se cubria «manteniendo
+        # atras», que nadie descubria solo y en mando no hay «atras» comodo:
+        # ahora hay un boton (U / gatillo izquierdo) y atras sigue valiendo.
+        self.guardia = False
         self.aturde = 0.0
         self.enfriar = {}             # proyectil -> segundos hasta poder repetir
         self.golpes_dados = 0
@@ -160,8 +164,8 @@ class Luchador:
 
     @property
     def cubre(self):
-        """Mantiene atras en el suelo y puede cubrirse."""
-        return self.andar < 0 and not self.en_aire and self.estado in (
+        """Mantiene atras (o el boton de cubrirse) en el suelo y puede cubrirse."""
+        return (self.andar < 0 or self.guardia) and not self.en_aire and self.estado in (
             "quieto", "andar", "agachado", "bloquear", "bloqueado")
 
     def fase(self):
@@ -335,6 +339,9 @@ class Pelea:
             return None
         if self.fase != "pelea":
             return None
+        if tecla == "cubrir":
+            s.guardia = True
+            return None
         rel = self._relativa(tecla, s)
         self.buffer.append((rel, self.t))
         if tecla in ("izquierda", "derecha"):
@@ -365,6 +372,9 @@ class Pelea:
         lanza uno. En el remate esta aturdido: no puede hacer nada."""
         n = self.nodo
         if not self.nodo_humano or self.fase != "pelea":
+            return None
+        if tecla == "cubrir":
+            n.guardia = True
             return None
         rel = self._relativa(tecla, n)
         self.buffer_nodo.append((rel, self.t))
@@ -402,6 +412,8 @@ class Pelea:
                 s.andar = 0
         elif tecla == "abajo":
             s.agachado = False
+        elif tecla == "cubrir":
+            s.guardia = False
 
     # ---------------------------------------------------------------
     #  ordenes (las usan el jugador y la IA)
@@ -545,7 +557,9 @@ class Pelea:
             if l.t >= LEVANTAR:
                 l.estado, l.t = "quieto", 0.0
         if l.libre and not l.en_aire:
-            if l.cubre and self._amenaza(l):
+            # Con el boton se cubre siempre (se planta y se ve en guardia);
+            # manteniendo atras, solo si de verdad le viene algo encima.
+            if l.cubre and (l.guardia or self._amenaza(l)):
                 l.estado = "bloquear"
             elif l.agachado:
                 l.estado = "agachado"
@@ -841,6 +855,24 @@ if __name__ == "__main__":
     assert abs(recibe("medio", True) - (VIDA - 6.5 * CHIP)) < 0.01
     assert recibe("medio_abajo", False) == VIDA - 5.5           # de pie no para lo bajo
     assert abs(recibe("medio_abajo", True) - (VIDA - 5.5 * CHIP)) < 0.01
+
+    # el boton de cubrirse: para lo medio sin mantener atras, y planta
+    q = _quieta()
+    q.nodo.guardia = True
+    _paso(q, 0.05)
+    assert q.nodo.estado == "bloquear", q.nodo.estado
+    q.ordenar(q.santi, "medio")
+    _paso(q, 0.25)
+    assert abs(q.nodo.vida - (VIDA - 6.5 * CHIP)) < 0.01, q.nodo.vida
+    p = _quieta()
+    p.pulsar("cubrir")
+    p.pulsar("derecha")
+    x0 = p.santi.x
+    _paso(p, 0.4)
+    assert p.santi.estado == "bloquear" and p.santi.x == x0, "en guardia no se anda"
+    p.soltar("cubrir")
+    _paso(p, 0.2)
+    assert p.santi.estado == "andar" and p.santi.x > x0
 
     # machacar ligero no es infinito: el escalado y el empuje lo cortan
     p = _quieta()

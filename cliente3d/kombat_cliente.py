@@ -570,7 +570,7 @@ class HudKombat:
         a(self.combo_txt)
         self.piezas += E.leyenda((("A D", "moverse"), ("W", "saltar"), ("S", "agacharse"),
                                   ("J K L", "ligero · medio · fuerte"),
-                                  ("atrás", "cubrirse"), ("I", "réplica")),
+                                  ("U", "cubrirse"), ("I", "réplica")),
                                  -0.458)
 
     # --- lo que cambia --------------------------------------------------
@@ -676,7 +676,9 @@ class HudKombat:
 TECLAS = {"a": "izquierda", "left arrow": "izquierda", "d": "derecha",
           "right arrow": "derecha", "s": "abajo", "down arrow": "abajo",
           "w": "arriba", "up arrow": "arriba", "space": "arriba",
-          "j": "ligero", "k": "medio", "l": "fuerte", "i": "replica"}
+          "j": "ligero", "k": "medio", "l": "fuerte", "i": "replica",
+          # cubrirse: U, al lado de los golpes (o Shift, con la otra mano)
+          "u": "cubrir", "shift": "cubrir", "left shift": "cubrir"}
 # A que altura salta la chispa segun por donde entra el golpe.
 ALTO_CHISPA = {"bajo": 0.55, "medio": 1.3, "alto": 1.5}
 PRESENTACION = 3.0

@@ -23,8 +23,9 @@ ESCENARIOS = (
     ("plaza_persecucion.py", "escapa"), ("sombras.py",), ("pausa.py",),
     # voces.py fuera: prueba audio.hay_voz y banco.VOCES_PEDIDAS, que nunca
     # llegaron al repo (las voces grabadas estan sin hacer).
-    ("red_partida.py", "rumor"), ("red_partida.py", "colegio"),
+    ("mando.py",), ("minijuegos.py",), ("red_partida.py", "rumor"), ("red_partida.py", "colegio"),
     ("red_partida.py", "billar"), ("red_partida.py", "kombat"), ("red_partida.py", "duelo"),
+    ("red_partida.py", "persecucion"),
 )
 # (ruta desde la raiz, con -I): reglas puras, sin ventana
 REGLAS = (

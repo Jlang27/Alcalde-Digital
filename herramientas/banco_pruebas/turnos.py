@@ -3,7 +3,7 @@ en una interrupcion, devolverlo y el dia 2 con el otro protagonista."""
 from banco import *
 
 arrancar()
-J.cl.menu.mover(3); pasar(0.3)
+J.cl.menu.mover(J.cl.menu.opciones.index("Cómo se juega")); pasar(0.3)
 assert J.cl.menu.opciones[J.cl.menu.seleccion] == "Cómo se juega"
 tecla("enter", 1.6); foto("como_jugar")
 tecla("escape", 1.0)

@@ -312,6 +312,8 @@ class Partida:
         # En red: en el colegio, en vez de la ronda, UN vigilante que lleva
         # el segundo jugador (sigilo.Sigilo.poner_humano).
         self.vigilante_humano = False
+        # Y en la plaza caotica, al de la mochila (Persecucion.poner_humano).
+        self.sospechoso_humano = False
         self.billar = None            # la partida con el asesor del dia 3 (billar.py)
         self.estado_plaza = None      # "pacifica" o "caotica", el dia 5
         self.duelo = None             # el minijuego de la pacifica (ritmo.py)
@@ -473,6 +475,8 @@ class Partida:
         self.persecucion = (Persecucion(RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION,
                                         EVENTOS_PERSECUCION)
                             if indice == DIA_PLAZA and caotica else None)
+        if self.persecucion is not None and self.sospechoso_humano:
+            self.persecucion.poner_humano()
         # El reloj del dia se fija antes de repartir: las cartas se
         # programan contra el, no contra el de serie.
         self.tiempo_total = (self.publicacion.get("tiempo", TIEMPO_ESCENA)
@@ -618,8 +622,8 @@ class Partida:
         """La plaza del capitulo 5 es la que dejaron los dias anteriores:
         si la desinformacion y los conflictos subieron, se desborda."""
         if getattr(self, "plaza_forzada", None):
-            # En red el capitulo 5 es siempre el duelo (los dos cantan): la
-            # persecucion es de un solo jugador.
+            # (para pruebas y para elegir ruta a mano; en red ya no se fuerza:
+            # el duelo y la persecucion se juegan los dos entre dos personas)
             return self.plaza_forzada
         tension = self.indicadores["desinformacion"] + self.indicadores["conflictos"]
         return "caotica" if tension > TENSION_PLAZA else "pacifica"

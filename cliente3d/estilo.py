@@ -398,6 +398,13 @@ def tecla(nombre, etiqueta, x, y, padre=None, escala=0.95, z=None):
     Devuelve (piezas, ancho_ocupado) para poder encadenar varias.
     """
     padre = padre or camera.ui
+    # Con mando enchufado, el boton que hace eso (mando.etiqueta): una
+    # leyenda que dice «E» no le sirve a quien tiene el mando en la mano.
+    try:
+        import mando
+        nombre = mando.etiqueta(nombre) or nombre
+    except Exception:
+        pass
     # z explicita para poder poner la leyenda DELANTE de un velo, que es
     # lo que hace falta en una confirmacion a pantalla completa.
     z = Z_ADORNO if z is None else z

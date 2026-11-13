@@ -15,6 +15,8 @@ minijuego del capitulo pedido, cada uno con su bot:
   kombat  capitulo 4: el invitado lleva a Nodo y gana a un JH777 quieto
   billar  capitulo 3: el invitado tira por el asesor
   duelo   capitulo 5: el invitado toca las notas del rival
+  persecucion  capitulo 5 con la plaza caotica: el invitado lleva la mochila
+          y huye corriendo; el anfitrion lo alcanza y lo atrapa
 
 Se comprueba que el estado llega igual a los dos lados, que las teclas del
 invitado mandan en la simulacion del anfitrion y que el dia se cierra.
@@ -31,7 +33,8 @@ from banco import J
 import versus
 
 MODO = sys.argv[1] if len(sys.argv) > 1 else "kombat"
-CAPITULO = {"rumor": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4}[MODO]
+CAPITULO = {"rumor": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4,
+            "persecucion": 4}[MODO]
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -47,6 +50,10 @@ def espera(cond, tope=30.0, que=""):
         t += 0.1
     assert cond(), f"no llego: {que}"
 
+
+if MODO == "persecucion":
+    import juego
+    juego.Partida._estado_plaza = lambda self: "caotica"   # sin jugar cuatro dias
 
 arrancar()
 J.A.VALORES["nombre"] = ""
@@ -99,7 +106,7 @@ try:
         tecla("enter", 0.7)
     assert estado() == "libre", estado()
     p = J.cl.partida
-    assert p.dia_actual == CAPITULO and p.plaza_forzada == "pacifica"
+    assert p.dia_actual == CAPITULO and p.sospechoso_humano
     azar = random.Random(5)
     pasar(3.0)                            # el invitado lee su tarjeta de espera
 
@@ -212,6 +219,31 @@ try:
             tecla("enter", 0.5)
         tecla("2", 1.2)
         print("anfitrion: colegio · avisos", s.avisos, "· escapo", s.escapo)
+    elif MODO == "persecucion":
+        import math
+        import persecucion as PE
+        per = p.persecucion
+        assert p.estado_plaza == "caotica" and per is not None and p.duelo is None
+        J.empezar_persecucion()
+        pasar(0.3)
+        assert per.humano and per.empezada, "al de la mochila lo sigue llevando la maquina"
+        s0 = per.s
+        assert abs(s0 - PE.VENTAJA_HUMANO) < 3.0, s0
+        espera(lambda: per.s > s0 + 6.0, 40, "que el de la mochila corra")
+        pasar(frames=2)
+        sosp = J.cl.sospechoso
+        assert math.hypot(sosp.getX() - per.sx, sosp.getZ() - per.sz) < 0.6, "no se dibuja donde va"
+        assert sosp.getCurrentAnim() in ("correr", "caminar"), sosp.getCurrentAnim()
+        foto("red_persecucion_anfitrion_huye")
+        # a una persona se la atrapa en cuanto se la alcanza, en cualquier fase
+        assert per.fase < len(per.fases)
+        J.cl.actor.setPos(per.sx, J.plaza.suelo(per.sx, per.sz), per.sz)
+        pasar(frames=2)
+        tecla("e", 0.6)
+        assert per.resultado == "capturado", (per.resultado, per.distancia)
+        pasar(1.0)
+        foto("red_persecucion_anfitrion_captura")
+        print(f"anfitrion: persecucion · atrapado a los {per.s:.0f} m de ruta")
     elif MODO == "kombat":
         J.empezar_kombat()
         pelea = p.kombat

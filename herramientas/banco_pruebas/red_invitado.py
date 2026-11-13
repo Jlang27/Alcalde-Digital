@@ -9,7 +9,8 @@ from banco import J
 import versus
 
 MODO = sys.argv[1]
-CAPITULO = {"rumor": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4}[MODO]
+CAPITULO = {"rumor": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4,
+            "persecucion": 4}[MODO]
 
 
 def espera(cond, tope=30.0, que=""):
@@ -117,6 +118,28 @@ elif MODO == "colegio":
     pasar(0.5)
     foto("red_colegio_invitado_escapo")
     print("invitado: vigile el colegio · avisos", gd["avisos"])
+elif MODO == "persecucion":
+    import math
+    from ursina import held_keys
+    assert V["obj"].get("sospechoso") is not None, "no estoy junto a la tarima con la mochila"
+    assert V["espera"] is not None
+    espera(lambda: V["fase"] == "huida", 120, "que me vea")
+    h = V["obj"]["huida"]
+    g = h["jugador"]
+    x0, z0 = g.actor.getX(), g.actor.getZ()
+    pasar(0.3)
+    foto("red_persecucion_invitado_salida")
+    held_keys["w"] = 1
+    pasar(1.2)
+    assert g.corriendo, "el de la mochila no corre"
+    foto("red_persecucion_invitado_corre")
+    espera(lambda: V["fase"] != "huida", 60, "que me atrape")
+    held_keys["w"] = 0
+    recorrido = math.hypot(g.actor.getX() - x0, g.actor.getZ() - z0)
+    assert recorrido > 4.0, recorrido
+    pasar(0.5)
+    foto("red_persecucion_invitado_atrapado")
+    print(f"invitado: hui {recorrido:.0f} m con la mochila")
 elif MODO == "kombat":
     espera(lambda: V["fase"] == "kombat", 90, "la pelea")
     combate = V["obj"]["combate"]

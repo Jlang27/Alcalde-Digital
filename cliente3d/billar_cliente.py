@@ -524,6 +524,12 @@ class Billar:
         elif k in ("right mouse down", "escape"):
             self.arrastre = self.cargando = None
             self.potencia = 0.0
+        elif k == "space" and p.bola_en_mano and not getattr(self, "_colocada", False):
+            # con mando: la blanca se mueve con el stick y la A la deja
+            b = p.mesa.bolas[0]
+            if p.colocar_blanca(b.x, b.y):
+                audio.efecto("taco", 0.3)
+                self._colocada = True
         elif k == "space":
             self.cargando = 0.0
         elif k == "space up" and self.cargando is not None:
@@ -587,6 +593,11 @@ class Billar:
     def _turno_daniel(self, dt):
         p = self.p
         pos = self._raton_en_mesa()
+        sx, sy = held_keys["gamepad left stick x"], held_keys["gamepad left stick y"]
+        if p.bola_en_mano and abs(sx) + abs(sy) > 0.25:
+            # El stick del mando lleva la blanca (el raton sigue valiendo).
+            b = p.mesa.bolas[0]
+            pos = (b.x + sx * 0.9 * dt, b.y + sy * 0.9 * dt)
         if p.bola_en_mano and self.disparo is None and self.arrastre is None \
                 and not getattr(self, "_colocada", False):
             # la blanca sigue al raton hasta el clic
@@ -600,7 +611,9 @@ class Billar:
                 self.vista.mano.enabled = True
                 self.vista.mano.position = self.vista.mundo_de(b.x, b.y)
                 self.vista.mano.y = self.vista.y - B.R + 0.004
-            self.hud.decir("BOLA EN MANO: mueve la blanca y haz clic para dejarla")
+            import mando
+            self.hud.decir("BOLA EN MANO: mueve la blanca y " + (
+                "pulsa A para dejarla" if mando.hay() else "haz clic para dejarla"))
             return
         self.vista.mano.enabled = False
         # apuntar: el taco sigue al raton cuando se mueve; A/D y la rueda afinan

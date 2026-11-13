@@ -47,6 +47,13 @@ RADIO_CRUCE = 0.8
 # (la policia cierra las calles a los lados). Nadie sale de el.
 ANCHO_PASILLO = 6.4
 VENTAJA = 7.0              # metros de ruta que te saca al echar a correr
+# En red, al de la mochila lo lleva el otro jugador (poner_humano): corre el
+# con sus teclas, asi que ni el panico ni el cansancio de la maquina valen.
+# Sale con mas ventaja pero la mochila le pesa: va un poco mas lento que
+# Mateo a la carrera, y quien se estrella menos gana la distancia.
+VENTAJA_HUMANO = 10.0
+PASO_SOSPECHOSO = 0.95
+META = 1.5                 # a estos metros del final de la ruta, se escapo
 ESTATICOS = ("saltar", "trepar", "agacharse", "deslizar", "bloqueo", "brecha")
 ACCION = {"saltar": "¡SALTA!", "trepar": "¡TREPA!", "agacharse": "¡AGÁCHATE!",
           "deslizar": "¡DESLÍZATE!", "bloqueo": "¡CAMBIA DE LADO!", "brecha": "¡SALTA!",
@@ -108,6 +115,7 @@ class Persecucion:
         self.aturdido = 0.0
         self.fallos = 0
         self.acorralado = False
+        self.humano = False              # al sospechoso lo lleva una persona
         self.resultado = None            # "capturado" o "escapo"
         self.motivo = None               # por que se escapo
         self.empezada = False
@@ -153,8 +161,19 @@ class Persecucion:
         """Te vio: echa a correr, con VENTAJA metros. Mateo sale del
         principio del pasillo (salida())."""
         self.empezada = True
-        self.s = min(self.largo, VENTAJA)
+        self.s = min(self.largo, VENTAJA_HUMANO if self.humano else VENTAJA)
         self.sx, self.sz, self.rumbo = self.punto(self.s)
+
+    def poner_humano(self, si=True):
+        """En red: el sospechoso es el segundo jugador (o deja de serlo si
+        se desconecta: la maquina sigue desde donde iba)."""
+        self.humano = si
+
+    def mandar(self, x, z, rumbo):
+        """Donde tiene al sospechoso su jugador (solo si es humano)."""
+        if self.humano and self.empezada and not self.terminada:
+            self.s = self.proyectar((x, z), self.s)
+            self.sx, self.sz, self.rumbo = x, z, rumbo
 
     def salida(self):
         """(x, z, rumbo) donde arranca Mateo: el principio de la ruta."""
@@ -201,7 +220,12 @@ class Persecucion:
         if fase != self.fase:
             self.fase = fase
             eventos.append(("fase", fase))
-        if not self.acorralado:
+        if self.humano:
+            # No se le mueve: llega por mandar(). Si alcanza el final de la
+            # ruta, se perdio entre la gente.
+            if self.s >= self.largo - META:
+                self._escapar("meta", eventos)
+        elif not self.acorralado:
             velocidad = CANSADO if fase == len(self.fases) else VELOCIDAD
             if self.distancia < CERCA:
                 velocidad += PANICO
@@ -266,7 +290,9 @@ class Persecucion:
     def al_alcance(self, mx, mz):
         """Solo se le puede atrapar en la ultima fase (agotado) o acorralado:
         antes se zafa aunque lo tengas encima."""
-        return (not self.terminada and (self.acorralado or self.fase == len(self.fases))
+        # (a una persona se la atrapa en cuanto se la alcanza, en cualquier fase)
+        return (not self.terminada
+                and (self.humano or self.acorralado or self.fase == len(self.fases))
                 and math.dist((mx, mz), (self.sx, self.sz)) <= ALCANCE)
 
     def recuperar(self, mx, mz):
@@ -405,5 +431,40 @@ def _pruebas():
     print("persecucion: todo bien")
 
 
+def _pruebas_humano():
+    """El sospechoso lo lleva una persona: no corre solo, se le atrapa en
+    cualquier fase y se escapa al llegar al final."""
+    ruta = ((0.0, 0.0), (0.0, 40.0), (40.0, 40.0))
+    p = Persecucion(ruta, ((0, "UNO"), (1, "DOS")), ())
+    p.poner_humano()
+    p.empezar()
+    assert p.s == VENTAJA_HUMANO
+    p.actualizar(1.0, 0.0, 0.0)
+    assert p.s == VENTAJA_HUMANO, "el sospechoso humano se movio solo"
+    p.mandar(0.5, 15.0, 0.0)
+    p.actualizar(0.1, 0.0, 5.0)
+    assert abs(p.s - 15.0) < 0.01 and (p.sx, p.sz) == (0.5, 15.0) and abs(p.distancia - 10.01) < 0.1
+    assert not p.recuperar(0.0, 5.0), "lo atrapo a 10 m"
+    assert p.fase == 1 and p.recuperar(0.0, 13.0) and p.resultado == "capturado"
+    # llega al final: se escapa
+    p = Persecucion(ruta, ((0, "UNO"), (1, "DOS")), ())
+    p.poner_humano()
+    p.empezar()
+    for z in (20.0, 30.0, 40.0):
+        p.mandar(0.0, z, 0.0)
+    for x in (15.0, 30.0, 39.5):
+        p.mandar(x, 40.0, 90.0)
+    assert ("escapo", "meta") in p.actualizar(0.1, 0.0, 20.0) and p.motivo == "meta"
+    # se desconecta: la maquina sigue desde donde iba
+    p = Persecucion(ruta, ((0, "UNO"), (1, "DOS")), ())
+    p.poner_humano()
+    p.empezar()
+    p.mandar(0.0, 20.0, 0.0)
+    p.poner_humano(False)
+    p.actualizar(1.0, 0.0, 15.0)
+    assert p.s > 20.0
+
+
 if __name__ == "__main__":
+    _pruebas_humano()
     _pruebas()

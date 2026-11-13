@@ -373,13 +373,19 @@ PISTAS_CAPITULO_1 = [
      "texto": "Sofía dice que el video está cortado. Hay que preguntarle.",
      "abre": (), "aristas": [], "revela": ("ruiz_acta",)},
     # ---- Sofia: sin lo de Rafa, esquiva el tema ----
+    # Es la otra puerta a la rama de don Hernan: ella discutio con las mamas
+    # del grupo, asi que sabe por quien paso. Antes sus charlas no
+    # descubrian nada del tablero (solo «Sofia -> Canal del Concejo», que no
+    # son fichas) y sin hablar con don Hernan media red quedaba boca abajo.
     {"id": "sofia_saludo", "npc": "sofia", "padre": None, "costo": 0,
      "pregunta": "Hola, Sofía. ¿Qué opinas de lo de De la Estrella?",
      "respuesta": ("Estoy esperando la reunión de padres de las 8:30. La organiza Medina.",
                    "Y fíjate: Medina no ha dicho ni una palabra del video. A ella le",
-                   "conviene que De la Estrella caiga. No, no quiero hablar más del video hoy."),
-     "texto": "Sofía no quiere hablar del video, pero se queja de que Medina calla.",
-     "abre": (), "aristas": [], "revela": ("medina_calla",)},
+                   "conviene que De la Estrella caiga. Mira a don Hernán: le llegó por el",
+                   "grupo de mamás y ya lo anda reenviando. No quiero hablar más del video hoy."),
+     "texto": "Sofía no quiere hablar del video; dice que Medina calla y que don Hernán "
+              "lo reenvía desde el grupo de mamás.",
+     "abre": (), "aristas": [("hernan", "grupo")], "revela": ("medina_calla",)},
     {"id": "sofia_video", "npc": "sofia", "padre": "rafa_alboroto", "costo": 0,
      "pregunta": "Don Rafa dice que tú sabes que el video está cortado.",
      "respuesta": ("Sí. Vi el video entero anoche, en el canal del concejo.",
@@ -389,6 +395,16 @@ PISTAS_CAPITULO_1 = [
      "abre": ("verificar",), "aristas": [("sofia", "concejo")],
      "prueba": ("video", "Sofía vio el video completo: es remodelar"),
      "revela": ("ospina_remodelar",)},
+    {"id": "sofia_mamas", "npc": "sofia", "padre": "sofia_video", "costo": 0,
+     "pregunta": "¿Con quiénes estabas discutiendo?",
+     "respuesta": ("Con Lina, la hermana de don Hernán, y con Caro, la mamá de Ana.",
+                   "Lina lo recibió de su hermano y lo puso en el chat de la cuadra.",
+                   "Ahí lo vieron Caro y Jorge, el papá de Luis. Si nadie les dice nada,",
+                   "hoy mismo se lo cuentan a sus hijos."),
+     "texto": "Sofía discutía con Lina y Caro: Lina lo recibió de don Hernán y de su "
+              "chat pasó a Caro y a Jorge.",
+     "abre": (), "aristas": [("hernan", "grupo"), ("lina", "hernan"),
+                             ("jorge", "lina"), ("caro", "lina")]},
     # ---- Don Hernan: lo cree, y justo por eso sabe de donde vino ----
     {"id": "hernan_saludo", "npc": "hernan", "padre": None, "costo": 0,
      "pregunta": "Buenos días. ¿Usted ya vio lo del colegio?",

@@ -33,7 +33,9 @@ import cine_campana
 import kombat_cliente
 import lobby
 import versus
+import mando
 versus.enchufar(sys.modules[__name__])
+mando.J = sys.modules[__name__]        # mando.iniciar() conecta los mandos al abrir la ventana
 import billar_cliente
 import plaza
 import cine_colegio
@@ -118,6 +120,11 @@ class Cliente:
         self.lobby = None             # la sala del multijugador (lobby.Lobby)
         self.sesion = None            # lobby.Sesion mientras se juega en red
         self.capitulo_sel = 0         # el renglon marcado en «Capítulos»
+        # «Minijuegos»: la clave del que se esta jugando suelto (None en una
+        # partida normal), el renglon marcado y si aun hay que llegar a el.
+        self.minijuego = None
+        self.minijuego_sel = 0
+        self.minijuego_arranca = False
         self.vigilantes = {}          # id -> (actor, abanico, foco, haz) del dia 2
         self.figurantes = {}          # gente de escenario sin pistas (el rector)
         self.cine = None              # la cinematica de un capitulo, si suena
@@ -211,8 +218,8 @@ def abrir_menu():
     audio.musica(audio.MUSICA_MENU)
     mundo.corte("PM")
     cl.menu = pantallas.Menu(
-        ["Un jugador", "Multijugador", "Capítulos", "Cómo se juega", "Ajustes",
-         "Créditos", "Salir"], elegir_del_menu,
+        ["Un jugador", "Multijugador", "Capítulos", "Minijuegos", "Cómo se juega",
+         "Ajustes", "Créditos", "Salir"], elegir_del_menu,
         candidatos=[nombre for nombre, _lema, _pesos in CANDIDATOS])
     # Sin esto el del fondo se queda en bucle de idle y la portada
     # parece una captura; con esto saca el telefono y habla.
@@ -225,8 +232,8 @@ def elegir_del_menu(indice):
         return
     cl.menu.cerrar()
     cl.menu = None
-    (jugar_solo, abrir_lobby, abrir_capitulos, abrir_como_jugar, abrir_ajustes,
-     abrir_creditos)[indice]()
+    (jugar_solo, abrir_lobby, abrir_capitulos, abrir_minijuegos, abrir_como_jugar,
+     abrir_ajustes, abrir_creditos)[indice]()
 
 
 def jugar_solo(capitulo=0):
@@ -431,6 +438,117 @@ def jugar_capitulo():
     poner_personaje(PERSONAJE_DEL_DIA.get(cl.capitulo) or rol)
     cerrar_pantalla(jugar=True)
 
+# ===================================================================
+#  MINIJUEGOS: el de cada capitulo, sin jugar el capitulo entero
+# ===================================================================
+# (clave, capitulo, titulo, que es). Cada uno arranca su capitulo de verdad
+# —misma Partida, mismo escenario— y se salta lo que hay antes: cinematica,
+# rotulo y avisos (_hacia_el_minijuego). Al acabar se vuelve a esta lista en
+# vez de pasar al cierre del dia (cerrar_dia).
+MINIJUEGOS = (
+    ("tablero", 0, "El tablero del rumor", "Capítulo 1  ·  convence a los vecinos con pruebas"),
+    ("sigilo", 1, "Sigilo en el colegio", "Capítulo 2  ·  saca la propuesta sin que te vean"),
+    ("billar", 2, "La partida del asesor", "Capítulo 3  ·  billar a ocho bolas"),
+    ("kombat", 3, "Nova Kombat", "Capítulo 4  ·  la pelea contra Nodo"),
+    ("duelo", 4, "El ritmo de la verdad", "Capítulo 5  ·  el duelo musical"),
+    ("persecucion", 4, "Caos en la plaza", "Capítulo 5  ·  la persecución"),
+)
+# Lo que se da por investigado al abrir el tablero suelto: una mañana
+# entera bien aprovechada (cuatro charlas y cuatro miradas al celular son
+# justo los 60 minutos de 7:30 a 8:30), con pruebas de las tres familias y
+# la rama de don Hernan a la vista.
+PISTAS_TABLERO_SUELTO = ("rafa_saludo", "hernan_saludo", "hernan_quien", "hernan_familia",
+                         "perfil", "foto", "cuenta", "comentarios")
+
+
+def abrir_minijuegos(seleccion=0):
+    cl.estado = "minijuegos"
+    cl.minijuego_sel = seleccion
+    p = cl.pantalla
+    p.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
+    p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
+    p.append(E.titular("Minijuegos", (-0.84, 0.405), 2.4, E.TEXTO))
+    p.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
+    for i, (_clave, cap, titulo, que) in enumerate(MINIJUEGOS):
+        y = 0.272 - i * 0.078
+        col = E.TEXTO if i == seleccion else E.TEXTO_TENUE
+        if i == seleccion:
+            caja, filo, largo = E.marca_seleccion(-0.86, y - 0.022, 1.10, alto=0.064,
+                                                  tinta_filo=E.ACENTO_UI)
+            caja.scale_x, filo.scale_x = 1.0, largo
+            p += [caja, filo]
+        p.append(E.pequena(f"{cap + 1:02d}", (-0.84, y), E.UI, escala=0.62))
+        p.append(E.etiqueta(titulo, (-0.74, y), 0.92, col))
+        p.append(E.pequena(que, (-0.74, y - 0.034), E.TEXTO_TENUE, escala=0.56))
+    p.append(E.banda(2.4, 0.003, (0, -0.408), E.luz(46), z=E.Z_ADORNO))
+    p += E.leyenda((("flechas", "elegir"), ("enter", "jugar"), ("esc", "volver")), -0.448)
+
+
+def mover_minijuego(paso):
+    nuevo = (cl.minijuego_sel + paso) % len(MINIJUEGOS)
+    limpiar(cl.pantalla)
+    abrir_minijuegos(nuevo)
+
+
+def jugar_minijuego():
+    clave, cap, _titulo, _que = MINIJUEGOS[cl.minijuego_sel]
+    cl.minijuego, cl.minijuego_arranca = clave, True
+    cl.capitulo = cap
+    rol = rol_capitulo(cap)
+    cl.rol_elegido, cl.reparto = rol, [rol]
+    poner_personaje(PERSONAJE_DEL_DIA.get(cap) or rol)
+    cerrar_pantalla(jugar=True)
+
+
+def _hacia_el_minijuego():
+    """Cada fotograma mientras no se ha llegado: pasa lo de antes del
+    minijuego como lo pasaria el jugador con Enter, y al llegar al juego
+    libre lo arranca."""
+    e = cl.estado
+    if e == "intro" and cl.intro is not None:
+        cl.intro.saltar()
+    elif e == "cinematica" and cl.cine is not None:
+        cl.cine.saltar()
+    elif e == "rotulo":
+        cerrar_rotulo()
+    elif e == "contexto":
+        cerrar_contexto()
+    elif e == "aviso_papel":
+        cerrar_aviso_papel()
+    elif e == "libre":
+        cl.minijuego_arranca = False
+        # Con su hoja de reglas delante, como en el capitulo: quien entra
+        # directo tambien tiene que ver los controles.
+        arranque = {
+            "billar": lambda: abrir_aviso_papel(
+                "LA PARTIDA DEL ASESOR", "Si gana él, sale el rumor", TEXTO_BILLAR,
+                empezar_billar),
+            "kombat": abrir_reglas_kombat,
+            "duelo": lambda: abrir_aviso_papel(
+                "EL RITMO DE LA VERDAD", "Un duelo contra el rumor", TEXTO_DUELO,
+                empezar_duelo),
+            "persecucion": empezar_persecucion,
+            "tablero": _tablero_suelto}.get(cl.minijuego)
+        if arranque is not None:      # el sigilo ES el juego libre del colegio
+            arranque()
+
+
+def _tablero_suelto():
+    """El tablero del dia 1 con una mañana ya investigada."""
+    for pista in PISTAS_TABLERO_SUELTO:
+        cl.partida.descubrir(pista)
+    empezar_decision()
+
+
+def volver_a_minijuegos():
+    """Se acabo el minijuego suelto: de vuelta a la lista, en su renglon."""
+    sel = cl.minijuego_sel
+    volver_al_menu()
+    cl.menu.cerrar()
+    cl.menu = None
+    abrir_minijuegos(sel)
+
+
 EQUIPO = ["David Martínez", "José Angulo", "Yuceth Gil",
           "Sebastián Ibáñez"]
 
@@ -513,6 +631,10 @@ def empezar_partida():
     # marcados como libres.
     roles = list(cl.reparto) or [cl.rol_elegido]
     cl.partida = Partida(roles)
+    if cl.minijuego in ("duelo", "persecucion"):
+        # el minijuego suelto elige la plaza: el duelo es la pacifica y la
+        # persecucion la caotica, pase lo que pase con los indicadores
+        cl.partida.plaza_forzada = "caotica" if cl.minijuego == "persecucion" else "pacifica"
     construir_hud()
     iniciar_dia(cl.capitulo)
 
@@ -1785,8 +1907,8 @@ TEXTO_KOMBAT = (
     "segundos. A y D para moverte, W para saltar (con A o D, en diagonal) y "
     "S para agacharte. J es ligero, K medio y L fuerte, de pie, agachado o en "
     "el aire. Encadena: ligero, luego medio, luego fuerte. El fuerte lo tumba; "
-    "el ligero agachado y el medio en el aire lo marean. Mantén atrás para "
-    "cubrirte (agachado contra lo bajo). S, D y J lanza un dato que deshace "
+    "el ligero agachado y el medio en el aire lo marean. Mantén U para "
+    "cubrirte (o atrás; agachado contra lo bajo). S, D y J lanza un dato que deshace "
     "su bulo; A, D y K es el desmentido; con la barra llena, I es la réplica. "
     "Si lo tumbas, acércate y desenmascáralo.")
 # Lo que cuenta el aviso tras la pelea: (rotulo, titulo, cuerpo).
@@ -2115,7 +2237,8 @@ NIVEL_FASE = (0.55, 0.65, 0.75, 0.88, 1.0)
 JADEO, PITIDO, CERCA_PITIDO = 1.5, 0.7, 8.0
 REPETIR_CHOQUE = 2.0       # un choque contra el mismo obstaculo no cuenta dos veces seguidas
 TITULO_ESCAPE = {"lejos": "SE TE ESCAPÓ", "golpes": "TE HA DEJADO ATRÁS",
-                 "tiempo": "SE ACABÓ EL TIEMPO"}
+                 "tiempo": "SE ACABÓ EL TIEMPO",
+                 "meta": "LLEGÓ AL FINAL Y SE PERDIÓ ENTRE LA GENTE"}
 
 
 def _parkour_al_jugador():
@@ -2236,7 +2359,14 @@ def persecucion_paso(dt):
     actor = cl.sospechoso
     x, z = cl.actor.getX(), cl.actor.getZ()
     y = plaza.suelo(p.sx, p.sz)
-    if p.acorralado:
+    remoto = versus.sospechoso_remoto()
+    if remoto is not None:
+        # En red lo lleva el otro jugador: va donde el lo tiene, con su salto
+        # y su clip (lo que hace la maquina por la ruta aqui no vale).
+        actor.setPos(remoto["x"], remoto["y"], remoto["z"])
+        actor.setH(remoto["h"])
+        versus.poner_clip(actor, remoto.get("clip"))
+    elif p.acorralado:
         actor.setPos(p.sx, y, p.sz)
         actor.setH(180.0 - math.degrees(math.atan2(x - p.sx, z - p.sz)))
         if actor.getCurrentAnim() != "idle":
@@ -2259,6 +2389,7 @@ def persecucion_paso(dt):
         cl.pitido = PITIDO
     fase = p.fases[p.fase - 1][1]
     objetivo = ("¡Lo tienes! Pulsa E para atraparlo" if p.al_alcance(x, z)
+                else f"Lo lleva {versus.rival()}: alcánzalo y pulsa E" if p.humano
                 else OBJETIVOS_PERSECUCION[p.fase])
     accion = "¡ATRÁPALO! · E" if p.al_alcance(x, z) else p.proximo_aviso()
     hud.poner(p.restante, p.distancia, p.proximidad(), p.progreso(), fase, objetivo, accion)
@@ -3043,6 +3174,9 @@ def cerrar_modal(acepta):
 
 def cerrar_dia(plano="PM"):
     """plano: el corte para la foto del cierre; None deja la camara donde esta."""
+    if cl.minijuego is not None:
+        volver_a_minijuegos()         # suelto: no hay dia que cerrar
+        return
     cl.dia_cerrado = True
     cl.nodo_pendiente = None
     cl.agotado = False
@@ -3556,6 +3690,9 @@ def actualizar_mapa():
                            cl.jugador.yaw, gente_del_mapa())
 
 def update():
+    mando.actualizar(time.dt)
+    if cl.minijuego_arranca:
+        _hacia_el_minijuego()
     if cl.estado == "lobby" and cl.lobby is not None:
         cl.lobby.actualizar(time.dt)
         return
@@ -3742,6 +3879,12 @@ def update():
 def volver_al_menu():
     versus.terminar()                # si se jugaba en red, se cuelga
     cl.sesion = None
+    cl.minijuego, cl.minijuego_arranca = None, False
+    # El corcho del dia 1: si se salia al menu con el tablero abierto se
+    # quedaba pintado encima de la portada y de todo lo que viniera despues.
+    if cl.tablero is not None:
+        cl.tablero.cerrar()
+        cl.tablero = None
     audio.callar_todo()
     audio.agachar(False)
     cerrar_libre()
@@ -3808,6 +3951,9 @@ def cerrar_pantalla(jugar = False):
         abrir_menu()
 
 def input(tecla):
+    # El mando se traduce a las teclas de siempre y vuelve a entrar aqui.
+    if mando.boton(tecla):
+        return
     if cl.estado == "lobby" and cl.lobby is not None:
         cl.lobby.tecla(tecla)
         return
@@ -4062,6 +4208,18 @@ def input(tecla):
             cl.ajustes.activar()
         return
 
+    elif cl.estado == "minijuegos":
+        if tecla in ("up arrow", "w", "down arrow", "s"):
+            audio.efecto("mover")
+            mover_minijuego(-1 if tecla in ("up arrow", "w") else 1)
+        elif tecla in ("enter", "space"):
+            audio.efecto("confirmar")
+            jugar_minijuego()
+        elif tecla == "escape":
+            audio.efecto("volver")
+            cerrar_pantalla()
+        return
+
     elif cl.estado == "capitulos" and tecla in ("up arrow", "w", "down arrow", "s"):
         audio.efecto("mover")
         mover_capitulo(-1 if tecla in ("up arrow", "w") else 1)
@@ -4149,6 +4307,7 @@ def main():
     window.color = color.Color(*mundo.CIELO)
     E.cargar_fuentes()           # antes de crear cualquier texto
     E.ocultar_depuracion()
+    mando.iniciar(sys.modules[__name__])
 
     A.aplicar()                  # antes de crear UI: la paleta se lee al nacer
     cl.mundo, cl.actor = mundo.crear()

@@ -54,7 +54,7 @@ PISTAS = (
 # degradado, no en una caja.
 OPCION_X = -0.84
 _OPCION_Y = 0.140
-_OPCION_SALTO = 0.068      # siete renglones (con «Multijugador») entre el titulo y el pie
+_OPCION_SALTO = 0.060      # ocho renglones (con «Minijuegos») entre el titulo y el pie
 
 # La linea que se lee debajo del renglon marcado. Es la unica forma en
 # que el menu cuenta algo, y cuenta solo lo del renglon que miras: la
@@ -64,6 +64,8 @@ PIES_DE_MENU = (
     "Dos PC en la misma red: uno juega la historia y el otro va contra él.",
     "Cinco jornadas, cinco protagonistas. Juega cualquiera por "
     "separado.",
+    "Directo al minijuego de cada capítulo: tablero, sigilo, billar, pelea, "
+    "duelo y persecución.",
     "Tres pasos y los controles. Lo justo para sentarse a jugar.",
     "Volumen, contraste, tamaño de letra y ritmo de la jornada.",
     "Quién hay detrás de esto y con qué está hecho.",
@@ -640,11 +642,13 @@ class PersecucionHUD:
     Mateo y el de la mochila; la distancia, en el color de la proximidad
     (verde encima, rojo a punto de perderlo). El aviso de lo que viene
     («¡SALTA!») sale en grande en el centro ANTES del obstaculo; el golpe,
-    con un fogonazo rojo."""
+    con un fogonazo rojo.
+
+    huye: es la pantalla del que lleva la mochila (en red): no atrapa a nadie."""
 
     ANCHO = 0.56
 
-    def __init__(self):
+    def __init__(self, huye=False):
         self.piezas = []
         a = self.piezas.append
         self.piezas += E.degradado_vertical(0.5, 0.33, alfa=140)
@@ -674,9 +678,9 @@ class PersecucionHUD:
         self.dicho = E.entradilla("", (0, -0.385), 0.84, E.TEXTO, origen=(0, 0.5), ancho=70)
         self.velo = E.banda(2.4, 1.2, (0, 0), color.rgba(0.77, 0.12, 0.08, 0), z=0.09)
         self.piezas += [self.accion, self.mensaje, self.quien, self.dicho, self.velo]
-        self.piezas += E.leyenda((("shift", "correr"), ("espacio", "saltar / trepar"),
-                                  ("ctrl", "agacharse"), ("c", "deslizarse"),
-                                  ("e", "atrapar")), -0.448)
+        teclas = (("shift", "correr"), ("espacio", "saltar / trepar"),
+                  ("ctrl", "agacharse"), ("c", "deslizarse"), ("e", "atrapar"))
+        self.piezas += E.leyenda(teclas[1:-1] if huye else teclas, -0.448)
 
     def poner(self, restante, distancia, proximidad, progreso, fase, objetivo, accion):
         self.reloj.text = f"{int(restante) // 60}:{int(restante) % 60:02d}"
@@ -1168,6 +1172,7 @@ class Dialogo:
         """
         _limpiar(self.cuerpo)
         self.modo = "preguntas"
+        self.renglones = []           # para el cursor del mando (mando.py)
         self.imprimiendo = None
         c = self.caja
         n = max(1, len(opciones))
@@ -1189,6 +1194,7 @@ class Dialogo:
                                1.10, E.TINTA if nota else E.TINTA_TENUE,
                                padre=c)
             self.cuerpo.append(linea)
+            self.renglones.append(linea)
             if nota:
                 self.cuerpo.append(E.pequena(
                     nota, (self.COSTE_X, y - 0.004), E.GAITAN,

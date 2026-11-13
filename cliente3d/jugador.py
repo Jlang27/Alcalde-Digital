@@ -503,7 +503,9 @@ class Jugador:
                 self.yaw += _angulo_corto(self.yaw, self.rail(x, z)) * min(1.0, GIRO_RAIL * dt)
                 self.pitch = PICADO_RAIL
             else:
-                self._mirar(mouse.velocity[0], mouse.velocity[1])
+                import mando                  # el stick derecho, sumado al raton
+                mx, my = mando.mirada(dt)
+                self._mirar(mouse.velocity[0] + mx, mouse.velocity[1] + my)
             if self.desliz is not None and avance == 0 and lado == 0:
                 avance = 1                # el deslizamiento sigue solo: es inercia
             if self.cubierta is not None:
