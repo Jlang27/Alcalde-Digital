@@ -133,7 +133,9 @@ CLIPS = {
 # de ALTO_SALTO en DURA_SALTO; por encima de PASA_SALTANDO se pasa sobre lo
 # saltable. Deslizarse dura DURA_DESLIZ, y mientras se pasa bajo lo
 # deslizable, un poco mas rapido que corriendo.
-ALTO_SALTO, DURA_SALTO, PASA_SALTANDO = 0.75, 0.62, 0.3
+# PASA_SALTANDO era 0,3: el arranque y el final del salto (casi un tercio)
+# contaban como «en el suelo» y un salto a tiempo chocaba igual con la banca.
+ALTO_SALTO, DURA_SALTO, PASA_SALTANDO = 0.75, 0.62, 0.15
 DURA_DESLIZ, VELOCIDAD_DESLIZ = 1.0, 5.8
 GIRO_RAIL = 5.0              # lo rapido que la camara de la persecucion dobla las esquinas
 PICADO_RAIL = 12.0           # y lo que mira hacia abajo, fijo
@@ -287,6 +289,10 @@ class Jugador:
         # corre sin Shift.
         self.rail = None
         self.siempre_corre = False
+        # Lo que hay en la ruta y tiene alto, (x0, x1, z0, z1, de, hasta): la
+        # camara sube por encima si se mete dentro o tapa a Mateo.
+        self.obstaculos_camara = []
+        self.alza = 0.0
         # Y hacia donde lleva W en la persecucion: la ruta justo donde esta
         # Mateo. Con la camara (que mira por delante, para doblar antes) W
         # empujaba en diagonal contra las vallas en las esquinas.
@@ -313,6 +319,7 @@ class Jugador:
                     return True
         # Lo de parkour solo se pasa haciendo lo que pide.
         trepando = self.trepa is not None
+        ax, _ay, az = self.actor.getPos()
         for lista, pasa in ((self.saltables, self.en_el_aire() or trepando),
                             (self.trepables, trepando),
                             (self.agachables, self.agachado or self.desliz is not None),
@@ -320,6 +327,10 @@ class Jugador:
             if pasa:
                 continue
             for x0, x1, z0, z1, *tipo in lista:
+                # Si ya esta dentro (le cayo encima, o aterrizo justo en el
+                # borde) se le deja salir: si no, se quedaba encerrado.
+                if x0 - RADIO < ax < x1 + RADIO and z0 - RADIO < az < z1 + RADIO:
+                    continue
                 if x0 - RADIO < x < x1 + RADIO and z0 - RADIO < z < z1 + RADIO:
                     self.choque = tipo[0] if tipo else "obstaculo"
                     return True
@@ -754,6 +765,30 @@ class Jugador:
         nz = z + d.z * paso
         if not self._bloqueado(x, nz):
             z = nz
+        antes_x, antes_z = self.actor.getX(), self.actor.getZ()
+        if abs(antes_x - x) + abs(antes_z - z) < 1e-6 and self.choque is None:
+            # De frente contra algo pequeño (una farola, un poste) no se
+            # desliza por ningun eje y se quedaba clavado: se rodea por el
+            # lado libre. Contra lo de parkour no (choque): eso se salta.
+            # Se sigue por el mismo lado hasta pasarlo (si no, un fotograma
+            # iba a un lado y el siguiente volvia, y se quedaba temblando);
+            # la primera vez, hacia el centro del pasillo si lo hay.
+            lado = getattr(self, "_rodeo", None)
+            if lado is None:
+                lado = 1
+                if self.pasillo is not None:
+                    dist = self.pasillo[0]
+                    lado = 1 if dist(x + derecha.x, z + derecha.z) <= dist(
+                        x - derecha.x, z - derecha.z) else -1
+            for lado_libre in (lado, -lado):
+                sx = x + derecha.x * paso * lado_libre
+                sz = z + derecha.z * paso * lado_libre
+                if not self._bloqueado(sx, sz):
+                    x, z = sx, sz
+                    self._rodeo = lado_libre
+                    break
+        else:
+            self._rodeo = None
         if self.limites:
             x_min, x_max, z_min, z_max = self.limites
             x = max(x_min, min(x_max, x))
@@ -930,6 +965,16 @@ class Jugador:
         # Y nunca a ras de suelo: agachado y mirando hacia arriba se metia
         # por debajo de las mesas.
         pos.y = max(0.35, min(pos.y, self.techo))
+        if self.pasillo is not None:
+            pos = self._dentro_del_pasillo(pos)
+        alza = self._alza_obstaculos(pos)
+        # Sube rapido (que no se vea a traves) y baja despacio (sin saltos).
+        self.alza = alza if inmediato or alza > self.alza else _acercar(self.alza, alza, factor * 0.5)
+        plano_cam = math.hypot(pos.x - self.pivote.x, pos.z - self.pivote.z)
+        mirada_antes = math.degrees(math.atan2(pos.y - self.pivote.y, max(0.3, plano_cam)))
+        pos.y += self.alza
+        # Al subir sigue mirando a Mateo: si no, se quedaba fuera de cuadro.
+        mirar_mas = math.degrees(math.atan2(pos.y - self.pivote.y, max(0.3, plano_cam))) - mirada_antes
         if self.limites is not None:
             x0, x1, z0, z1 = self.limites
             pos.x = max(x0, min(x1, pos.x))
@@ -941,11 +986,53 @@ class Jugador:
                         random.uniform(-1, 1)) * self.temblor * 0.3
             self.temblor = max(0.0, self.temblor - dt * 0.8)
         camera.position = pos
-        camera.rotation = Vec3(pitch + PICADO * self.cerca, self.yaw, 0)
+        camera.rotation = Vec3(pitch + PICADO * self.cerca + mirar_mas, self.yaw, 0)
         lente = (self.fov + (ABRIR_CORRER if self.corriendo else 0)
                  + ABRIR_CORRER * min(1.0, self.impulso / RAMPA_IMPULSO)
                  + ABRIR_CERCA * self.cerca - (CERRAR_APUNTAR if self.apuntando else 0))
         camera.fov = lente if inmediato else _acercar(camera.fov, lente, factor * 0.6)
+
+    def _dentro_del_pasillo(self, pos):
+        """En la persecucion la camara no sale del pasillo: en las esquinas
+        se iba detras de las vallas, entre la gente o dentro de una
+        fachada. Se acerca por su propio eje hasta caber (como contra una
+        pared), sin girar."""
+        distancia, mitad = self.pasillo
+        tope = mitad - 0.35
+        if distancia(pos.x, pos.z) <= tope:
+            return pos
+        px, pz = self.pivote.x, self.pivote.z
+        dentro, fuera = 0.0, 1.0
+        for _ in range(10):                      # biseccion sobre el tramo pivote-camara
+            medio = (dentro + fuera) / 2
+            if distancia(px + (pos.x - px) * medio, pz + (pos.z - pz) * medio) <= tope:
+                dentro = medio
+            else:
+                fuera = medio
+        f = max(dentro, DISTANCIA_MINIMA_MURO / max(0.3, self.distancia))
+        return Vec3(px + (pos.x - px) * f, pos.y, pz + (pos.z - pz) * f)
+
+    def _alza_obstaculos(self, pos):
+        """Cuanto tiene que subir la camara para que lo que hay en la ruta no
+        la contenga ni se meta entre ella y Mateo. Solo cuenta lo que esta
+        de la mitad del tramo hacia la camara: lo que Mateo tiene encima
+        (pasa por debajo, lo trepa) no lo tapa, y subir por eso lo sacaba
+        de cuadro."""
+        if not self.obstaculos_camara:
+            return 0.0
+        p = self.pivote
+        alza = 0.0
+        for k in range(4, 11):
+            f = k / 10
+            x = p.x + (pos.x - p.x) * f
+            y = p.y + (pos.y - p.y) * f
+            z = p.z + (pos.z - p.z) * f
+            for x0, x1, z0, z1, de, hasta in self.obstaculos_camara:
+                if (x0 - 0.2 < x < x1 + 0.2 and z0 - 0.2 < z < z1 + 0.2
+                        and de - 0.15 < y < hasta + 0.2):
+                    # la recta tiene que pasar 0,25 m por encima de su borde
+                    alza = max(alza, (hasta + 0.25 - y) / f)
+        return min(alza, 2.5)
 
     def encuadrar(self):
         """Coloca la camara sin retardo. Para entrar a una escena.

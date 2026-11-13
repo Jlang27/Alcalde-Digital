@@ -93,7 +93,7 @@ assert set(s.sueltos) == {"canicas", "despertador", "petardo", "propuesta_1", "p
 poner(24.0, -7.3, (25.0, -7.3))
 pasar(0.3)
 texto = " ".join(getattr(e, "text", "") for e in J.cl.aviso_papel.piezas)
-assert estado() == "aviso_papel" and "propuesta de ospina" in " ".join(texto.lower().split()), estado()
+assert estado() == "aviso_papel" and "propuesta de de la estrella" in " ".join(texto.lower().split()), estado()
 foto("colegio_salida_sin_propuesta")
 tecla("enter", 0.4)
 assert estado() == "libre" and not s.escapo

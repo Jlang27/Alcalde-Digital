@@ -286,7 +286,12 @@ class Persecucion:
 
     def proximo_aviso(self):
         """La accion que pide el evento anunciado mas cercano: «¡SALTA!»..."""
-        vivos = [ev for ev in self.eventos if ev["estado"] in ("aviso", "activo")
+        # Lo que ya cayo («hecho») sigue pidiendo su accion hasta pasarlo: si
+        # no, la mesa volcada seguia delante y el aviso ya decia «¡ESQUIVA!»
+        # por lo siguiente.
+        vivos = [ev for ev in self.eventos
+                 if (ev["estado"] in ("aviso", "activo")
+                     or (ev["tipo"] == "cae" and ev["estado"] == "hecho"))
                  and ev["s"] >= self.s_mateo - 1.0]
         if not vivos:
             return None
@@ -389,6 +394,14 @@ def _pruebas():
                  (-5, 5, -60, -56, 0.0, 1.5))
     assert altura_en(0, -46, escaleras) == 0.75 and altura_en(0, -50, escaleras) == 1.5
     assert altura_en(9, -50, escaleras) == 0.0
+    # Lo que cae sigue avisando hasta que se pasa, aunque ya este en el suelo.
+    p = Persecucion(((0.0, 0.0), (0.0, 40.0), (40.0, 40.0)), ((0, "UNO"), (1, "DOS")),
+                    ({"tipo": "cae", "rect": (-2, 2, 19.5, 20.5), "queda": "saltar"},))
+    p.empezar()
+    for _ in range(60):
+        p.actualizar(0.05, 0.0, 16.0)          # Mateo, esperando antes de lo que cae
+    cae = next(e for e in p.eventos if e["tipo"] == "cae")
+    assert cae["estado"] == "hecho" and p.proximo_aviso() == ACCION["saltar"], p.proximo_aviso()
     print("persecucion: todo bien")
 
 

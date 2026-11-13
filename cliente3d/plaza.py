@@ -333,6 +333,26 @@ def _cinta(t, x0, x1, z0, z1, y):
         a, rojo = b, not rojo
 
 
+# Lo que ocupa en alto cada pieza de _pieza_evento (desde su suelo): (de,
+# hasta) en metros. Lo usa la camara de la persecucion para no meterse en
+# ellas ni dejar que tapen a Mateo (jugador.obstaculos_camara). Lo bajo
+# (banca, motos, cajas, valla tirada) no hace falta: la camara va por encima.
+ALTO_OBSTACULO = {"mesa": (0.0, 1.05), "valla_alta": (0.0, 1.1), "coche": (0.0, 1.5),
+                  "andamio": (1.18, 1.5), "tuberia": (1.18, 1.5), "pancarta": (1.18, 1.9),
+                  "persiana": (0.75, 1.5)}
+
+
+def obstaculos_camara(activos):
+    """(x0, x1, z0, z1, de, hasta) de lo que hay en la ruta y estorba a la camara."""
+    lista = []
+    for ob in activos:
+        alto = ALTO_OBSTACULO.get(ob.get("objeto"))
+        if alto and not (ob["tipo"] == "saltar"):        # el andamio caido es bajo
+            y = _altura(ob["rect"])
+            lista.append((*ob["rect"][:4], y + alto[0], y + alto[1]))
+    return lista
+
+
 def _pieza_evento(t, tipo, objeto, rect):
     """La forma de lo que se cruza en la ruta (contenido.EVENTOS_PERSECUCION),
     construida en su sitio. La altura dice lo que hay que hacer: lo bajo se

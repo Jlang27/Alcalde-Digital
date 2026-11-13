@@ -2039,6 +2039,7 @@ def _parkour_al_jugador():
     j = cl.jugador
     j.saltables, j.trepables = por_tipo["saltar"], por_tipo["trepar"]
     j.agachables, j.deslizables = por_tipo["agacharse"], por_tipo["deslizar"]
+    j.obstaculos_camara = plaza.obstaculos_camara(activos)
     # El coche atravesado no se salta: se rodea. (Se quita el de la vez
     # anterior antes de ponerlo: esto se llama otra vez cuando algo cae.)
     antes = getattr(cl, "bloqueos_ruta", [])
@@ -2093,14 +2094,20 @@ def persecucion_paso(dt):
     j = cl.jugador
     x, z = cl.actor.getX(), cl.actor.getZ()
     eventos = []
-    # Caer en el hueco entre las plataformas sin estar en el aire: golpe, y
-    # de vuelta al borde (se puede volver a intentar).
+    # Caer en el hueco entre las plataformas sin saltar: golpe, y de vuelta
+    # a la plataforma (se puede volver a intentar). Cualquier salto en curso
+    # lo pasa: antes contaba solo la parte alta del arco y un salto a tiempo
+    # caia igual. Y se vuelve con 2,5 m de carrerilla y sin contar otro
+    # golpe enseguida: con 1 m (y W siempre a la carrera) se volvia a caer
+    # al instante, una y otra vez, hasta «TE HA DEJADO ATRÁS».
     for ob in p.activos:
         x0, x1, z0, z1 = ob["rect"]
         if (ob["tipo"] == "brecha" and x0 < x < x1 and z0 < z < z1
-                and not j.en_el_aire() and j.trepa is None):
-            eventos += p.chocar("brecha")
-            cl.actor.setPos(x, plaza.suelo(x, z0 - 1.0), z0 - 1.0)
+                and j.salto is None and j.trepa is None):
+            if cl.reloj_choque <= 0.0:
+                eventos += p.chocar("brecha")
+                cl.reloj_choque = REPETIR_CHOQUE
+            cl.actor.setPos(x, plaza.suelo(x, z0 - 2.5), z0 - 2.5)
             hud.avisar("¡AL HUECO!", E.GAITAN, 0.8)
     # Estrellarse contra algo de parkour a la carrera: golpe.
     cl.reloj_choque = max(0.0, cl.reloj_choque - dt)
@@ -2236,6 +2243,7 @@ def cerrar_minijuegos():
         cl.jugador.con_impulso = False
         cl.jugador.pasillo = None
         cl.jugador.rail = None
+        cl.jugador.obstaculos_camara = []
         cl.jugador.marcha = None
         cl.jugador.siempre_corre = False
     if cl.captura is not None:

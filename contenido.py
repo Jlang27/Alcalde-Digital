@@ -748,8 +748,11 @@ EVENTOS_PERSECUCION = (
      "dura": 1.4},
     {"tipo": "lanza", "en": (10.9, -7.5), "desde": (4.0, -9.0), "objeto": "botella"},
     {"tipo": "saltar", "rect": (7.4, 14.4, -14.4, -14.0), "objeto": "banca"},
-    {"tipo": "cae", "rect": (14.6, 17.4, -25.8, -18.6), "queda": "saltar", "objeto": "valla"},
-    {"tipo": "cae", "rect": (21.8, 25.2, -30.2, -21.2), "queda": "trepar", "objeto": "mesa"},
+    # El tramo es diagonal: lo que lo corta va fino en x y largo en z (asi
+    # cruza el pasillo entero). Con 2,8 y 3,4 m de fondo no habia salto ni
+    # trepada que lo pasara: te clavabas y sumabas golpes hasta perderlo.
+    {"tipo": "cae", "rect": (15.8, 16.2, -25.8, -18.6), "queda": "saltar", "objeto": "valla"},
+    {"tipo": "cae", "rect": (23.2, 23.8, -30.2, -21.2), "queda": "trepar", "objeto": "mesa"},
     {"tipo": "lanza", "en": (26.5, -27.0), "desde": (25.0, -20.5), "objeto": "caja"},
     # --- fase 2: calles bloqueadas ---
     {"tipo": "trepar", "rect": (30.6, 37.4, -25.0, -23.2), "objeto": "coche"},
@@ -772,7 +775,9 @@ EVENTOS_PERSECUCION = (
     {"tipo": "cruza", "en": (34.4, 33.0), "desde": (34.3, 40.0), "hasta": (34.7, 27.0),
      "dura": 2.6},
     {"tipo": "lanza", "en": (33.0, 42.5), "desde": "sospechoso", "objeto": "botella"},
-    {"tipo": "cae", "rect": (27.2, 35.8, 45.2, 48.6), "queda": "agacharse", "objeto": "pancarta"},
+    # fina en z, como una pancarta: con 3,4 m de fondo era un techo a la
+    # altura de la cabeza (y la camara se quedaba debajo, sin ver a Mateo)
+    {"tipo": "cae", "rect": (27.2, 35.8, 46.7, 47.3), "queda": "agacharse", "objeto": "pancarta"},
     # --- fase 5: la captura ---
     {"tipo": "lanza", "en": (14.0, 50.0), "desde": "sospechoso", "objeto": "caja"},
     {"tipo": "saltar", "rect": (3.8, 4.2, 46.5, 53.5), "objeto": "valla"},
