@@ -93,7 +93,7 @@ MINUTOS_POR_ENVIO = 10
 ENVIOS_POR_JUGADA = 2
 # Y uno mas cada tantos segundos de verdad mientras el protagonista explora:
 # si se queda quieto, quien riega el rumor no puede quedarse sin jugar.
-SEGUNDOS_POR_ENVIO = 25.0
+SEGUNDOS_POR_ENVIO = 40.0
 EFECTO_RONDA = {"desinformacion": 2}
 COMPARTIDOS_POR_RONDA = 150
 # Lo bueno que hagas al decidir rinde segun a cuantos vecinos aun puedes
@@ -834,6 +834,8 @@ class Partida:
         """Los envios que le quedan al que riega el rumor."""
         if not self.rumor_manual or self.red is None:
             return 0
+        if not self.destinos_rumor():
+            return 0                  # ya no queda a quien llevarselo
         ganados = (ENVIOS_INICIALES + self.minutos // MINUTOS_POR_ENVIO + self.envios_extra
                    + int(self.segundos_rumor // self.segundos_por_envio))
         return max(0, ganados - self.envios_gastados)
@@ -841,7 +843,10 @@ class Partida:
     def tiempo_rumor(self, dt):
         """Pasa tiempo de verdad con el protagonista explorando (lo llama
         quien lleva la partida en red): va cargando el siguiente envio."""
-        if self.rumor_manual and self.tablero is None and not self.dia_cerrado_rumor():
+        if (self.rumor_manual and self.tablero is None and self.destinos_rumor()
+                and self.envios() == 0):
+            # Solo se carga si hay a quien llevarselo y no tiene ninguno
+            # guardado: no se acumulan (el rumor no puede llegar todo de golpe).
             self.segundos_rumor += dt
 
     def destinos_rumor(self):
@@ -901,6 +906,11 @@ class Partida:
                 "destinos": destinos, "creen": len(creen), "vecinos": len(self.vecinos()),
                 "hora": self.hora(), "tablero": t is not None,
                 "cerrado": self.dia_cerrado_rumor(),
+                # sin destinos ya no hay nada que regar: todos infectados, o
+                # el protagonista le cerro los caminos que quedaban
+                "completo": not destinos,
+                "sanos": sum(1 for f in fichas.values()
+                             if f["tipo"] == "vecino" and f["estado"] == "sano"),
                 # cuanto lleva cargado el siguiente envio, de 0 a 1 (en decimas)
                 "carga": round((self.segundos_rumor % self.segundos_por_envio)
                                / self.segundos_por_envio, 1)}

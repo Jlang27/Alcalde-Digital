@@ -252,6 +252,11 @@ class Tablero:
             quad(ancho, alto, (0, 0), fondo)
             pon(Text(text="?", parent=caja, origin=(0, 0), position=(0, 0, -0.01),
                      scale=1.5, color=_alfa(E.PAPEL, 0.75), **E.fuente_titular()))
+            # Sin esto el «?» no se entendia: es alguien de la red con quien
+            # no se hablo en la cafeteria (ni salio en el celular).
+            pon(Text(text="SIN DESCUBRIR", parent=caja, origin=(0, 0),
+                     position=(0, -alto * 0.36, -0.01), scale=0.42,
+                     color=_alfa(E.PAPEL, 0.7), **E.fuente_titular()))
         else:
             tinte = {"cree": (E.GAITAN, 0.30), "convencido": (E.RESTREPO, 0.24),
                      "avisado": (E.OSPINA, 0.20)}.get(estado)

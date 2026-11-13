@@ -4424,9 +4424,32 @@ def ciclo(actor, clip):
     # Solo si sobra algo de verdad (un 10 %): un buen ciclo no se toca.
     if not (desde + (n - 1 - hasta) >= 0.1 * n and hasta - desde >= n // 3):
         desde, hasta = 0, n - 1
+    if desde > 0 and hasta - desde > 12:
+        # El clip es un ARRANQUE (de parado a andando), no un ciclo: tras lo
+        # quieto todavia viene una rampa lenta, y entrar por ahi frenaba los
+        # pies en cada vuelta (medido: de 8 a 0,8 m/s justo tras la costura).
+        # Se entra por el cuadro cuya pose mejor continua la del final: donde
+        # los pies estarian un cuadro despues del ultimo.
+        sigue = [tuple(2 * a - b for a, b in zip(r[hasta][k], r[hasta - 1][k])) for k in range(3)]
+        desde = min(range(desde, desde + (hasta - desde) // 2),
+                    key=lambda f: sum(math.dist(r[f][k], sigue[k]) for k in range(3)))
     # El cierre del bucle: si el ultimo cuadro es la misma pose que el
     # primero (asi exporta Mixamo), al repetir se veria dos veces seguidas.
-    if hasta - desde > 4 and all(math.dist(r[hasta][k], r[desde][k]) < 0.01 for k in range(3)):
+    # Y a veces son mas de uno: el conversor reserva un cuadro pasada la
+    # ultima clave (queda repetida) y esa ya era la pose del primero. En el
+    # modelo de Abel y los vigilantes eran tres cuadros parados por vuelta.
+    # «Igual» = se mueve menos de la mitad de lo que se mueve un cuadro
+    # normal de ese clip. Con el recorte, el ultimo cuadro que se ve mezcla
+    # hacia el siguiente, que es la pose del primero: la costura no se nota.
+    saltos = sorted(sum(math.dist(r[f + 1][k], r[f][k]) for k in range(3))
+                    for f in range(n - 1))
+    tope = 0.5 * saltos[len(saltos) // 2]
+
+    def igual(f, g):
+        return sum(math.dist(r[f][k], r[g][k]) for k in range(3)) < tope
+    while hasta - desde > 4 and igual(hasta, hasta - 1):
+        hasta -= 1
+    if hasta - desde > 4 and igual(hasta, desde):
         hasta -= 1
     if (desde, hasta) != (0, n - 1):
         _CICLO[clave] = (desde, hasta)

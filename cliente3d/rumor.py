@@ -89,7 +89,10 @@ class TableroRumor(T.Tablero):
         a(E.pequena("ENVÍOS", (0.470, 0.470), E.TEXTO_TENUE, escala=0.58))
         a(E.titular(str(d["jugadas"]), (0.470, 0.440), 1.9,
                     self.VERDE if d["jugadas"] else E.TEXTO_TENUE))
-        if d["tablero"]:
+        if d.get("completo") or d["cerrado"]:
+            a(E.pequena("ya no queda a quién llevárselo", (0.545, 0.432),
+                        E.TEXTO_TENUE, escala=0.52))
+        elif d["tablero"]:
             a(E.pequena("cada jugada suya en el tablero te da dos", (0.545, 0.418),
                         E.TEXTO_TENUE, escala=0.52))
         else:
@@ -118,6 +121,16 @@ class TableroRumor(T.Tablero):
         if d["cerrado"]:
             a(E.etiqueta(f"{self.rival} ya hizo su jugada pública: el día se cierra.",
                          (-0.850, y + 0.014), 0.92, E.TINTA))
+            return
+        if d.get("completo"):
+            # Se acabo su parte: que se vea, y que sepa que pasa ahora.
+            a(E.banda(0.012, alto, (-0.874, y), E.GAITAN, z=T.Z_FICHA - 0.004))
+            titulo = ("RED INFECTADA: todos los vecinos se lo creen." if not d.get("sanos")
+                      else f"No te quedan caminos: {self.rival} protegió a {d['sanos']}.")
+            a(E.etiqueta(titulo, (-0.850, y + 0.022), 1.0, E.TINTA))
+            a(E.pequena(f"Tu parte está hecha. Ahora mira cómo {self.rival} intenta "
+                        "desmentirlo: lo que convenza se pone verde.",
+                        (-0.850, y - 0.014), E.TINTA_TENUE, escala=0.66))
             return
         if self.sel is None:
             return
@@ -175,6 +188,9 @@ class TableroRumor(T.Tablero):
                             f["estado"] == "convencido" else "avisó a ") + f["nombre"])
         if datos["jugadas"] > self.datos["jugadas"]:
             self.anotar("envío listo")
+        if datos.get("completo") and not self.datos.get("completo") and not datos["cerrado"]:
+            self.anotar("RED INFECTADA: todos los vecinos lo creen" if not datos.get("sanos")
+                        else "sin caminos: lo que queda está protegido")
         self.datos = datos
         if self.sel not in self._elegibles():
             self.sel = self._primera()
