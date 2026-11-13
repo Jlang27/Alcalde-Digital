@@ -35,7 +35,7 @@ VELOCIDAD_GIRO = 10.0        # suavizado del giro del personaje
 # de animacion. Un solo cuadro (a 30 fps) basta para eso: con 0,14 s las
 # piernas seguian andando cuatro cuadros con el cuerpo ya parado, y al
 # soltar la tecla se notaba un lapso.
-GRACIA_PARADA = 0.035
+GRACIA_PARADA = 0.07
 SENSIBILIDAD = 42.0
 
 DISTANCIA = 4.3
@@ -196,6 +196,26 @@ def _choque(ox, oz, dx, dz, rect):
 
 assert _choque(0, 0, 0, -1, (-1, 1, -3, -2)) == 2 - MARGEN_PARED
 assert _choque(0, 0, 0, 1, (-1, 1, -3, -2)) is None
+
+
+_BOTONES = {}
+
+
+def _pulsada(tecla):
+    """1 si la tecla esta abajo. Ademas de held_keys (que Ursina lleva con
+    eventos, y un evento perdido deja la tecla «soltada» un fotograma) se
+    pregunta al teclado de verdad: asi un microcorte no para la carrera."""
+    if held_keys[tecla]:
+        return 1
+    try:
+        from panda3d.core import KeyboardButton
+        from ursina import application
+        if not _BOTONES:
+            _BOTONES.update({k: KeyboardButton.asciiKey(k) for k in "wasd"})
+            _BOTONES.update(shift=KeyboardButton.shift(), control=KeyboardButton.control())
+        return int(application.base.mouseWatcherNode.isButtonDown(_BOTONES[tecla]))
+    except Exception:
+        return 0                      # sin ventana (banco): solo held_keys
 
 
 def _raton(bloqueado):
@@ -475,8 +495,8 @@ class Jugador:
 
     def paso(self, dt):
         if self.explorando:
-            avance = held_keys["w"] - held_keys["s"]
-            lado = held_keys["d"] - held_keys["a"]
+            avance = _pulsada("w") - _pulsada("s")
+            lado = _pulsada("d") - _pulsada("a")
             if self.rail is not None:
                 # La camara la lleva la ruta, no el raton.
                 x, _y, z = self.actor.getPos()
@@ -491,8 +511,8 @@ class Jugador:
             else:
                 # Ursina junta izquierda y derecha en «control» y «shift».
                 # Agachado gana: con Ctrl pulsado no se puede correr.
-                self.agachado = bool(held_keys["control"]) or self.agachado_fijo
-                self.corriendo = ((bool(held_keys["shift"]) or (self.siempre_corre and avance > 0))
+                self.agachado = bool(_pulsada("control")) or self.agachado_fijo
+                self.corriendo = ((bool(_pulsada("shift")) or (self.siempre_corre and avance > 0))
                                   and (not self.agachado or self.siempre_corre)
                                   and not self.apuntando) or self.desliz is not None
                 if self.solo_andar:
@@ -847,7 +867,9 @@ class Jugador:
                 # El ritmo se pone siempre: se guarda por clip, y «caminar»
                 # se queda acelerado si se vuelve a el despues de correr.
                 self.actor.setPlayRate(ritmo, clip)
-                self.actor.loop(clip)
+                # restart=0: el paso sigue por donde iba. Reiniciandolo, un
+                # parpadeo a reposo se veia como parar y volver a arrancar.
+                self.actor.loop(clip, restart=0 if velocidad > 0 else 1)
                 self.clip_puesto = clip
                 return
 

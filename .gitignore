@@ -9,3 +9,4 @@ ajustes.json
 # capturas del banco de pruebas: se regeneran, no se versionan
 herramientas/banco_pruebas/capturas/
 .cache_texturas/
+.cache_modelos_*/

@@ -51,6 +51,7 @@ class Sesion:
         self.rol = rol                    # el de ESTE PC
         self.nombres = nombres            # {rol: nombre}
         self.semilla = semilla
+        self.ip = None                    # la del anfitrion, si este PC se unio
 
     @property
     def protagonista(self):
@@ -325,6 +326,8 @@ class Lobby:
         sesion = Sesion(enlace, self.anfitrion, mio,
                         {rol: d["nombre"] for rol, d in self.reparto.items()}, self.semilla,
                         self.vista.get("capitulo", 0))
+        if sesion.anfitrion is None:
+            sesion.ip = P.ip_de(self.direccion)   # para volver si se corta
         self.anfitrion = self.enlace = None     # ya son de la sesion
         self.cerrar()
         self.al_empezar(sesion)

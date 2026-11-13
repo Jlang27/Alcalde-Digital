@@ -91,6 +91,9 @@ MAX_RONDAS = 6
 ENVIOS_INICIALES = 1
 MINUTOS_POR_ENVIO = 10
 ENVIOS_POR_JUGADA = 2
+# Y uno mas cada tantos segundos de verdad mientras el protagonista explora:
+# si se queda quieto, quien riega el rumor no puede quedarse sin jugar.
+SEGUNDOS_POR_ENVIO = 25.0
 EFECTO_RONDA = {"desinformacion": 2}
 COMPARTIDOS_POR_RONDA = 150
 # Lo bueno que hagas al decidir rinde segun a cuantos vecinos aun puedes
@@ -304,6 +307,8 @@ class Partida:
         self.regados = None           # a quienes ya se lo llevo
         self.envios_gastados = 0
         self.envios_extra = 0         # los que dan las jugadas del tablero
+        self.segundos_rumor = 0.0     # tiempo de verdad explorando (en red)
+        self.segundos_por_envio = SEGUNDOS_POR_ENVIO
         # En red: en el colegio, en vez de la ronda, UN vigilante que lleva
         # el segundo jugador (sigilo.Sigilo.poner_humano).
         self.vigilante_humano = False
@@ -829,8 +834,15 @@ class Partida:
         """Los envios que le quedan al que riega el rumor."""
         if not self.rumor_manual or self.red is None:
             return 0
-        ganados = ENVIOS_INICIALES + self.minutos // MINUTOS_POR_ENVIO + self.envios_extra
+        ganados = (ENVIOS_INICIALES + self.minutos // MINUTOS_POR_ENVIO + self.envios_extra
+                   + int(self.segundos_rumor // self.segundos_por_envio))
         return max(0, ganados - self.envios_gastados)
+
+    def tiempo_rumor(self, dt):
+        """Pasa tiempo de verdad con el protagonista explorando (lo llama
+        quien lleva la partida en red): va cargando el siguiente envio."""
+        if self.rumor_manual and self.tablero is None and not self.dia_cerrado_rumor():
+            self.segundos_rumor += dt
 
     def destinos_rumor(self):
         """{destino: origen}: a quien se le puede llevar ahora y desde quien.
@@ -888,7 +900,10 @@ class Partida:
                 "jugadas": self.envios(), "total": 0, "proximos": sorted(destinos),
                 "destinos": destinos, "creen": len(creen), "vecinos": len(self.vecinos()),
                 "hora": self.hora(), "tablero": t is not None,
-                "cerrado": self.dia_cerrado_rumor()}
+                "cerrado": self.dia_cerrado_rumor(),
+                # cuanto lleva cargado el siguiente envio, de 0 a 1 (en decimas)
+                "carga": round((self.segundos_rumor % self.segundos_por_envio)
+                               / self.segundos_por_envio, 1)}
 
     def creyentes(self, nivel=None):
         """Vecinos a los que ya les llego el rumor, por BFS desde el origen.

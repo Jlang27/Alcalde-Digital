@@ -105,6 +105,7 @@ try:
 
     if MODO == "rumor":
         from juego import ENVIOS_POR_JUGADA
+        p.segundos_por_envio = 1e9        # aqui se prueban los envios del reloj de ella
         assert p.rumor_manual and {"cajero", "hernan"} <= set(p.creyentes())
         assert len(p.creyentes()) <= 3, "llevo mas de lo que su unico envio permite"
         # el primer envio lo tiene de salida: llega sin que yo haga nada mas
@@ -160,6 +161,20 @@ try:
         pasar(0.5)
         assert len(J.cl.mapa.niebla) < tapadas, "el plano no se destapo"
         foto("red_colegio_anfitrion_plano")
+        # Se corta la conexion a mitad: vuelve la ronda de la maquina y, en
+        # cuanto el invitado reconecta solo, el vigilante vuelve a ser suyo.
+        viejo = J.cl.sesion.enlace
+        viejo._cerrar("corte de prueba")
+        pasar(frames=2)
+        assert J.cl.sesion is not None, "la sesion no aguanto el corte"
+        foto("red_colegio_anfitrion_corte")
+        espera(lambda: J.cl.sesion.enlace is not viejo and J.cl.sesion.enlace.vivo, 30,
+               "que el invitado reconecte")
+        espera(lambda: s.humano is not None and versus._V.get("sigilo") == p.dia_actual, 20,
+               "que retome al vigilante")
+        g = s.humano
+        pasar(2.0)
+        print("anfitrion: el invitado reconecto y vuelve a ser el vigilante")
         # Delante de su linterna, quieta: la tiene que pillar.
         mira = [math.sin(math.radians(g.rumbo)), math.cos(math.radians(g.rumbo))]
         sitio = None

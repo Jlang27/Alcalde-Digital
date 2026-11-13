@@ -33,32 +33,75 @@ class TableroRumor(T.Tablero):
     def _primera(self):
         return (self._elegibles() or [None])[0]
 
-    # --- piezas fijas ---
+    # --- piezas fijas: la terminal ---
+    # El otro jugador no esta en la cafeteria: esta delante de un PC, con la
+    # red de vecinos en pantalla, metiendo el bulo cuenta a cuenta. Por eso
+    # no es el corcho de papel del protagonista sino una pantalla oscura con
+    # rejilla y tinta verde (E.RESTREPO); las fichas son las mismas, para
+    # que los dos hablen de la misma red.
+    VERDE = E.RESTREPO
+    LINEAS_CONSOLA = 5
+
     def _fondo(self):
         a = self.fijo.append
-        a(Entity(parent=camera.ui, model="quad", texture=T._corcho(),
-                 scale=(2.4, 1.2), position=(0, 0, T.Z_CORCHO)))
-        a(E.banda(2.4, 0.150, (0, 0.427), E.tinta(244), z=T.Z_CORCHO - 0.01))
-        a(E.banda(2.4, 0.006, (0, 0.352), E.GAITAN, z=T.Z_CORCHO - 0.012))
-        a(E.banda(2.4, 0.090, (0, -0.458), E.tinta(244), z=T.Z_CORCHO - 0.01))
-        a(E.titular("Riega el rumor", (-0.86, 0.474), 1.9, E.TEXTO))
-        self.fijo += E.leyenda((("flechas", "elegir a quién"),
-                                ("enter", "llevárselo")), -0.458)
+        a(E.banda(2.4, 1.2, (0, 0), E.tinta(252), z=T.Z_CORCHO))
+        tenue = T._alfa(self.VERDE, 0.07)
+        for i in range(-12, 13):                          # la rejilla
+            a(E.banda(0.0015, 1.2, (i * 0.08, 0), tenue, z=T.Z_CORCHO - 0.002))
+        for j in range(-7, 8):
+            a(E.banda(2.4, 0.0015, (0, j * 0.08), tenue, z=T.Z_CORCHO - 0.002))
+        a(E.banda(2.4, 0.150, (0, 0.427), E.tinta(250), z=T.Z_CORCHO - 0.01))
+        a(E.banda(2.4, 0.004, (0, 0.352), self.VERDE, z=T.Z_CORCHO - 0.012))
+        a(E.banda(2.4, 0.090, (0, -0.458), E.tinta(250), z=T.Z_CORCHO - 0.01))
+        a(E.pequena("root@nova-alerta:~$  ./regar_rumor --red vecinos", (-0.86, 0.487),
+                    self.VERDE, escala=0.55))
+        a(E.titular("Riega el rumor", (-0.86, 0.462), 1.7, E.TEXTO))
+        # la consola, debajo de la ficha de informacion
+        a(E.banda(1.76, 0.165, (0, -0.325), E.tinta(235), z=T.Z_FICHA + 0.004))
+        a(E.banda(1.76, 0.003, (0, -0.2435), self.VERDE, z=T.Z_FICHA + 0.002))
+        self.consola = [E.pequena("", (-0.86, -0.262 - i * 0.028), self.VERDE, escala=0.55)
+                        for i in range(self.LINEAS_CONSOLA)]
+        self.fijo += self.consola
+        self.registro = ["> conexión abierta con la red de vecinos",
+                         "> @NovaAlerta publicó el bulo: ya corre por el grupo de mamás"]
+        self._pintar_consola()
+        self.fijo += E.leyenda((("flechas", "elegir objetivo"),
+                                ("enter", "inyectar el rumor")), -0.458)
         # el reloj de la clase base no se usa aqui, pero cerrar() lo espera
         self.reloj = self.reloj_cifra = None
+
+    def anotar(self, linea):
+        """Una linea mas en la consola (las ultimas LINEAS_CONSOLA)."""
+        self.registro.append("> " + linea)
+        self._pintar_consola()
+
+    def _pintar_consola(self):
+        ultimas = self.registro[-self.LINEAS_CONSOLA:]
+        for i, t in enumerate(self.consola):
+            t.text = ultimas[i] if i < len(ultimas) else ""
 
     def _pintar_cabecera(self):
         self._borrar(self.cabecera)
         d = self.datos
         a = self.cabecera.append
-        a(E.pequena(f"{d['hora']}  ·  LO CREEN {d['creen']} DE {d['vecinos']} VECINOS",
-                    (-0.86, 0.402), E.GAITAN, escala=0.78))
-        a(E.pequena("ENVÍOS", (0.560, 0.470), E.TEXTO_TENUE, escala=0.58))
-        a(E.titular(str(d["jugadas"]), (0.560, 0.440), 1.9,
-                    E.LLERAS if d["jugadas"] else E.TEXTO_TENUE))
-        a(E.pequena(("cada jugada suya en el tablero te da dos" if d["tablero"]
-                     else "uno por cada 10 minutos que gasta investigando"),
-                    (0.625, 0.418), E.TEXTO_TENUE, escala=0.52))
+        a(E.pequena(f"{d['hora']}  ·  INFECTADOS {d['creen']} DE {d['vecinos']} VECINOS",
+                    (-0.86, 0.397), E.GAITAN, escala=0.74))
+        a(E.pequena("ENVÍOS", (0.470, 0.470), E.TEXTO_TENUE, escala=0.58))
+        a(E.titular(str(d["jugadas"]), (0.470, 0.440), 1.9,
+                    self.VERDE if d["jugadas"] else E.TEXTO_TENUE))
+        if d["tablero"]:
+            a(E.pequena("cada jugada suya en el tablero te da dos", (0.545, 0.418),
+                        E.TEXTO_TENUE, escala=0.52))
+        else:
+            # la barra del siguiente envio: se carga sola mientras el explora
+            a(E.pequena("SIGUIENTE ENVÍO", (0.545, 0.470), E.TEXTO_TENUE, escala=0.5))
+            a(E.banda(0.30, 0.012, (0.695, 0.432), E.tinta(120), z=T.Z_CORCHO - 0.02))
+            ancho = 0.30 * d.get("carga", 0.0)
+            if ancho > 0:
+                a(E.banda(ancho, 0.012, (0.545 + ancho / 2, 0.432), self.VERDE,
+                          z=T.Z_CORCHO - 0.022))
+            a(E.pequena("y uno más por cada charla suya", (0.545, 0.412),
+                        E.TEXTO_TENUE, escala=0.5))
 
     def _pintar_info(self):
         self._borrar(self.info)
@@ -86,8 +129,8 @@ class TableroRumor(T.Tablero):
         if origen:
             de = d["fichas"][origen]["nombre"]
             linea = f"Le llega por {de}."
-            pista = ("Enter para llevárselo." if d["jugadas"] else
-                     f"No te quedan envíos: espera a que {self.rival} gaste tiempo.")
+            pista = ("Enter para inyectárselo." if d["jugadas"] else
+                     "Sin envíos: el siguiente se está cargando.")
         elif f["estado"] == "cree":
             linea, pista = "Ya se lo cree.", ""
         elif f["estado"] == "convencido":
@@ -124,6 +167,14 @@ class TableroRumor(T.Tablero):
     def poner(self, datos):
         """Lo que llega del protagonista. La ficha marcada se conserva si
         sigue siendo elegible; si no, salta a la frontera."""
+        antes = self.datos["fichas"]
+        for v, f in datos["fichas"].items():
+            viejo = antes.get(v, {}).get("estado")
+            if f["estado"] != viejo and f["estado"] in ("convencido", "avisado"):
+                self.anotar(f"ALERTA: {self.rival} " + ("desmintió el bulo ante " if
+                            f["estado"] == "convencido" else "avisó a ") + f["nombre"])
+        if datos["jugadas"] > self.datos["jugadas"]:
+            self.anotar("envío listo")
         self.datos = datos
         if self.sel not in self._elegibles():
             self.sel = self._primera()

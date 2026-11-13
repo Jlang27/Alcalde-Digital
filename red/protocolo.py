@@ -31,7 +31,11 @@ PUERTO = 5050
 VERSION = 3                 # los dos PC tienen que correr el mismo juego
 MAX_MENSAJE = 1 << 20       # 1 MiB: lo que pase de ahi es basura
 LATIDO = 1.0                # cada cuanto se manda un «sigo aqui»
-SILENCIO = 6.0              # sin oir nada este tiempo, el otro se cayo
+# Sin oir nada este tiempo, el otro se cayo. Era 6 s y echaba a quien solo
+# estaba CARGANDO: montar un escenario (y, la primera vez en un PC, generar
+# sus texturas) deja el proceso mudo bastante mas que eso. Un socket que se
+# cierra de verdad se nota al instante; esto solo cubre el cable arrancado.
+SILENCIO = 45.0
 ALFABETO = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"     # sin I, L, O, U: no se confunden
 
 
@@ -189,6 +193,11 @@ class Anfitrion:
         self.codigo = codigo_de(self.ip)
         self.enlace = None
         self._abierto = True
+        # En partida (versus): si el MISMO PC vuelve a llamar es que se le
+        # corto y reintenta; se le cambia el enlace viejo por el nuevo aunque
+        # aqui aun no se haya notado el corte.
+        self.reenganche = False
+        self._de = None
         threading.Thread(target=self._esperar, daemon=True).start()
 
     def _esperar(self):
@@ -198,8 +207,11 @@ class Anfitrion:
             except OSError:
                 return
             if self.enlace is not None and self.enlace.vivo:
-                sock.close()                      # la sala es de dos
-                continue
+                if not (self.reenganche and _de[0] == self._de):
+                    sock.close()                  # la sala es de dos
+                    continue
+                self.enlace.cerrar()
+            self._de = _de[0]
             self.enlace = Enlace(sock)
 
     def cerrar(self):

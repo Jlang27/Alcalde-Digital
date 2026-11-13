@@ -101,6 +101,14 @@ elif MODO == "colegio":
     assert not g.corriendo
     pasar(0.5)
     foto("red_colegio_invitado_anduvo")
+    # El anfitrion corta: aqui se reintenta solo y se vuelve a ser el vigilante.
+    # (en local reconecta en dos cuadros: lo que se espera es el vigilante NUEVO)
+    espera(lambda: V["obj"].get("guardia") is not None and V["obj"]["guardia"] is not gd,
+           60, "reconectar y volver a ser el vigilante")
+    assert V["fase"] == "sigilo" and not V["caido"]
+    pasar(0.5)
+    foto("red_colegio_invitado_reconectado")
+    gd = V["obj"]["guardia"]
     espera(lambda: gd["avisos"] == 1, 60, "pillarla")
     pasar(0.3)
     foto("red_colegio_invitado_pillada")

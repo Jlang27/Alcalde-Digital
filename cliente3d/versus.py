@@ -24,6 +24,7 @@ En el desinformador estas dos funciones se quedan con el fotograma entero.
 """
 
 import math
+import threading
 from types import SimpleNamespace
 
 from ursina import camera, destroy
@@ -36,6 +37,7 @@ import sigilo as S
 import estilo as E
 import kombat as K
 import ritmo as R
+from red import protocolo as P
 from red.espejo import foto, revelar
 
 J = None                       # el modulo juego3d (lo pone enchufar)
@@ -51,8 +53,10 @@ PISTA_DURA = 6.0               # segundos que se marca en el plano lo que oyo
 
 # Lo que se le dice al desinformador de cada capitulo: (titulo, su papel)
 PAPEL = {
-    0: ("El primer rumor", "Vas a regar el rumor por la red de vecinos antes de que "
-        "el protagonista los convenza."),
+    0: ("El primer rumor", "Estás delante de tu PC con la red de vecinos en pantalla. "
+        "Inyecta el bulo cuenta a cuenta (flechas y Enter) antes de que el protagonista "
+        "los convenza hablando con ellos. Los envíos se cargan solos y él te regala uno "
+        "con cada charla."),
     1: ("La propuesta", "Eres el vigilante del colegio: que no saque la propuesta. "
         "W A S D y el ratón. Tu linterna llega más lejos que nunca, pero andas más "
         "despacio que ella. Si la alumbras un rato, aviso; a los tres, fuera. Lo que "
@@ -86,7 +90,10 @@ def empezar(sesion):
     _V.clear()
     _V.update(sesion=sesion, fase="espera", dia=None, partida=None, t=0.0,
               kombat=None, billar=None, duelo=None, ronda=None, ev=[],
-              estado=None, cierre=None, espera=None, obj={}, aviso=None)
+              estado=None, cierre=None, espera=None, obj={}, aviso=None,
+              caido=False, adios=False, intento=None, t_intento=0.0)
+    if sesion.anfitrion is not None:
+        sesion.anfitrion.reenganche = True
     if not sesion.protagonista:
         _tarjeta("EN RED", f"Conectado con {sesion.rival}",
                  "El protagonista está empezando la partida…")
@@ -110,6 +117,7 @@ def terminar():
         _recoger_minijuegos()
     _quitar_tarjeta()
     _quitar_aviso()
+    s.enlace.enviar("adios")          # que el otro no se quede reintentando
     s.cerrar()
     _V["sesion"] = None
 
@@ -126,7 +134,11 @@ def actualizar(dt):
         return False
     _V["t"] += dt
     if not s.enlace.vivo:
-        return _caida()
+        if not _V["caido"]:
+            _caida()
+        if not _V["adios"] and _reenganchar(s, dt):
+            _vuelta()
+        return not s.protagonista
     if s.protagonista:
         _protagonista(dt)
         return False
@@ -166,6 +178,8 @@ def _caida():
     el desinformador no tiene partida propia: vuelve al menu."""
     s = _V["sesion"]
     motivo = s.enlace.motivo or "se cortó la conexión"
+    # Si antes de colgar dijo «adios», salio a proposito: no se le espera.
+    _V["adios"] = any(m["t"] == "adios" for m in s.enlace.leer())
     if s.protagonista:
         k, b, p = _V["kombat"], _V["billar"], _V["partida"]
         if k is not None:
@@ -181,17 +195,72 @@ def _caida():
                 p.sigilo.quitar_humano()
                 if J.cl.vigilantes:
                     J.preparar_vigilantes()
-        s.cerrar()
-        _V["sesion"] = None
-        J.cl.sesion = None
-        _avisar(f"{s.rival} se desconectó: sigues contra la máquina", 6.0)
+        _V["caido"] = True
+        _avisar(f"{s.rival} se desconectó: sigues contra la máquina"
+                + ("" if _V["adios"] else " (puede volver a entrar)"), 6.0)
+        return
+    _V["caido"] = True
+    _recoger_minijuegos()
+    _V["fase"] = "caida"
+    if _V["adios"]:
+        _tarjeta("FIN DE LA CONEXIÓN", f"{s.rival} salió de la partida",
+                 "Pulsa Enter para volver al menú.")
+    else:
+        _tarjeta("SIN CONEXIÓN", "Reconectando…", motivo.capitalize() +
+                 ". Se sigue intentando solo; pulsa Enter para dejarlo y volver al menú.")
+
+
+def _reenganchar(s, dt):
+    """True cuando hay enlace nuevo. Quien hosteo sigue escuchando (el
+    Anfitrion cambia su enlace al volver el otro); quien se unio vuelve a
+    llamar cada pocos segundos, en un hilo para no parar el juego."""
+    if s.anfitrion is not None:
+        e = s.anfitrion.enlace
+        if e is not None and e is not s.enlace and e.vivo:
+            s.enlace = e
+            return True
         return False
-    if _V["fase"] != "caida":
-        _recoger_minijuegos()
-        _V["fase"] = "caida"
-        _tarjeta("SIN CONEXIÓN", "Se perdió la partida", motivo.capitalize() +
-                 ". Pulsa Enter para volver al menú.")
-    return True
+    if s.ip is None:
+        return False
+    intento = _V["intento"]
+    if intento is not None:
+        if intento["hilo"].is_alive():
+            return False
+        _V["intento"] = None
+        if intento["enlace"] is not None:
+            s.enlace = intento["enlace"]
+            return True
+    _V["t_intento"] -= dt
+    if _V["t_intento"] > 0:
+        return False
+    _V["t_intento"] = 2.0
+    intento = {"enlace": None}
+
+    def llamar():
+        intento["enlace"] = P.unirse(s.ip, espera=3.0)[0]
+        if _V.get("sesion") is not s and intento["enlace"] is not None:
+            intento["enlace"].cerrar()        # ya se salio al menu
+    intento["hilo"] = threading.Thread(target=llamar, daemon=True)
+    intento["hilo"].start()
+    _V["intento"] = intento
+    return False
+
+
+def _vuelta():
+    """Hay enlace otra vez: el protagonista lo vuelve a contar todo (dia,
+    minijuego abierto...) como si el otro acabara de llegar."""
+    s = _V["sesion"]
+    _V["caido"] = False
+    if s.protagonista:
+        _V.update(dia=None, estado=None, cierre=None, kombat=None, billar=None,
+                  duelo=None, ronda=None, sigilo=None, firma_rumor=None, ev=[])
+        if _V["partida"] is not None:
+            _V["partida"].vigilante_humano = True
+        _avisar(f"{s.rival} volvió a la partida", 4.0)
+    else:
+        _V["fase"] = "espera"
+        _tarjeta("RECONECTADO", f"De vuelta con {s.rival}",
+                 "Retomando la partida donde iba…")
 
 
 # =====================================================================
@@ -309,6 +378,8 @@ def _rumor_servidor(cl, e, mensajes, p, dt):
         elif cl.estado == "libre" and cl.reloj_manana:
             J.pintar_reloj_manana()       # «ya lo creen N de 8», al momento
     _V["t_rumor"] = _V.get("t_rumor", 0.0) + dt
+    if cl.estado == "libre":
+        p.tiempo_rumor(dt)                # el siguiente envio se va cargando
     estado = p.estado_rumor()
     firma = repr(estado)
     if firma != _V.get("firma_rumor") or _V["t_rumor"] >= 2.0:
@@ -319,6 +390,9 @@ def _rumor_servidor(cl, e, mensajes, p, dt):
 def _escuchar(objeto):
     """Los eventos que el dibujo de este PC va leyendo se guardan tambien
     para mandarselos al otro."""
+    if getattr(objeto, "_escuchado", False):
+        return                        # tras una reconexion ya lo estaba
+    objeto._escuchado = True
     leer = objeto.leer_eventos
 
     def leer_y_guardar():
@@ -737,6 +811,8 @@ def _llega_t_ok(m):
         audio.efecto("rumor_llega")
         nombre = t.datos["fichas"].get(m["a"], {}).get("nombre", "")
         t.aviso = (f"Hecho: {nombre} ya se lo cree.", E.GAITAN)
+        de = t.datos["fichas"].get(m.get("de"), {}).get("nombre", "la red")
+        t.anotar(f"inyectado en {nombre} (vía {de})  ·  OK")
 
 
 def _llega_k_ini(_m):

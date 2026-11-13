@@ -24,6 +24,45 @@ from contenido import ZONAS_SEGURAS_CAPITULO_2
 from sigilo import CARRERA as CARRERA_RONDA, DT_VUELO, VELOCIDAD as VELOCIDAD_RONDA
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# --- el conversor de .glb interpolaba mal las animaciones ---------------
+# panda3d-gltf remuestrea cada clip a 30 cuadros, y su `get_lerp_factor`
+# devuelve max(f, 1): la mezcla vale siempre 1, o sea, no interpola y cada
+# cuadro toma «la clave siguiente». Como los tiempos del archivo van en
+# float32, por redondeo unos cuadros caian en la clave de antes y otros en
+# la de despues: poses REPETIDAS y poses SALTADAS repartidas por el ciclo
+# (medido: 3 cuadros iguales al empezar «caminar» y parejas en medio ciclo).
+# En pantalla era «camina, se queda quieto, camina», en todos los clips.
+# Aqui se corrigen las dos funciones antes de cargar ningun modelo. De paso
+# se descuenta el tiempo de la primera clave (los clips empiezan en 0,033 s
+# y el cuadro 0 quedaba antes de la primera clave).
+import gltf._converter as _conversor
+
+_DESFASE = [0.0]
+
+
+def _indice_de_clave(currtime, tiempos):
+    _DESFASE[0] = tiempos[0]
+    t = currtime + tiempos[0]
+    i = 1
+    while i < len(tiempos) - 1 and t > tiempos[i]:
+        i += 1
+    return i
+
+
+def _factor_de_mezcla(currtime, lasttime, nexttime):
+    if nexttime <= lasttime:
+        return 0.0
+    return min(1.0, max(0.0, (currtime + _DESFASE[0] - lasttime) / (nexttime - lasttime)))
+
+
+_conversor.get_next_time_index = _indice_de_clave
+_conversor.get_lerp_factor = _factor_de_mezcla
+# Los modelos ya convertidos estan en la cache de Panda3D con el fallo
+# dentro: una cache propia (y con numero) obliga a convertirlos otra vez.
+# La primera carga tras esto tarda mas; despues, lo de siempre.
+loadPrcFileData("", "model-cache-dir " + Filename.from_os_specific(
+    os.path.join(RAIZ, ".cache_modelos_2")).getFullpath())
 RUTA_PERSONAJE = os.path.join(RAIZ, "assets", "personajes", "prueba.glb")
 
 
@@ -4383,7 +4422,13 @@ def ciclo(actor, clip):
     desde = next((f for f in range(n) if mov[f] > umbral), 0)
     hasta = next((f for f in range(n - 1, -1, -1) if mov[max(0, f - 3)] > umbral), n - 1)
     # Solo si sobra algo de verdad (un 10 %): un buen ciclo no se toca.
-    if desde + (n - 1 - hasta) >= 0.1 * n and hasta - desde >= n // 3:
+    if not (desde + (n - 1 - hasta) >= 0.1 * n and hasta - desde >= n // 3):
+        desde, hasta = 0, n - 1
+    # El cierre del bucle: si el ultimo cuadro es la misma pose que el
+    # primero (asi exporta Mixamo), al repetir se veria dos veces seguidas.
+    if hasta - desde > 4 and all(math.dist(r[hasta][k], r[desde][k]) < 0.01 for k in range(3)):
+        hasta -= 1
+    if (desde, hasta) != (0, n - 1):
         _CICLO[clave] = (desde, hasta)
     return _CICLO[clave]
 
