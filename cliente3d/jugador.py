@@ -32,8 +32,10 @@ VELOCIDAD_GIRO = 10.0        # suavizado del giro del personaje
 # corta la carrera y la vuelve a empezar. En pantalla se ve como
 # «corre, se queda quieto, vuelve a correr». El personaje DEJA de
 # avanzar y de hacer ruido en el acto; lo unico que espera es el cambio
-# de animacion.
-GRACIA_PARADA = 0.14
+# de animacion. Un solo cuadro (a 30 fps) basta para eso: con 0,14 s las
+# piernas seguian andando cuatro cuadros con el cuerpo ya parado, y al
+# soltar la tecla se notaba un lapso.
+GRACIA_PARADA = 0.035
 SENSIBILIDAD = 42.0
 
 DISTANCIA = 4.3

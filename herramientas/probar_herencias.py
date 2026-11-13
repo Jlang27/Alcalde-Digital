@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from contenido import TACO_DANIEL
 from contenido import DIALOGO_CAPTURA, DIALOGO_EXPEDIENTE, PEDIDOS_CHAT_4  # noqa: E402
 from juego import Partida, RONDA_REFORZADA  # noqa: E402
 from sigilo import AVISOS_MAXIMOS, VELOCIDAD  # noqa: E402
@@ -47,28 +48,23 @@ assert all(v.velocidad == VELOCIDAD for v in p.sigilo.vigilantes)
 p.sigilo.avisos = AVISOS_MAXIMOS
 assert not p.sigilo.expulsada          # el tercero ya no te saca
 
-# --- dia 2 -> dia 3: publicar la propuesta abre una cuarta opcion ---
+# --- dia 2 -> dia 3: publicar la propuesta le facilita el billar a Abel ---
 cerrar(p, "publicar")
 assert "publicaste_la_propuesta" in p.banderas
-assert any("defenderse" in t for t in p.portada()["manana"]), p.portada()
+assert any("Abel" in t for t in p.portada()["manana"]), p.portada()
 p.iniciar_dia(2)
-ids = [o.id for o in p.opciones()]
-assert ids == ["rumor", "prensa", "espiar", "defender"], ids
+assert p.billar.taco == TACO_DANIEL["propuesta_publica"], p.billar.taco
 dialogo = p.dialogo_expediente()
 assert len(dialogo) == len(DIALOGO_EXPEDIENTE)            # la escena cronometra 4 lineas
 assert [q for q, _, _ in dialogo] == [q for q, _, _ in DIALOGO_EXPEDIENTE]
 assert "salió" in dialogo[1][1], dialogo[1]
-antes = p.encuesta["Abel de la Estrella"]
-cerrar(p, "defender")
-assert "ospina_se_defendio_con_datos" in p.banderas
-assert p.encuesta["Abel de la Estrella"] > antes
 
-# guardarla: sin cuarta opcion y el asesor desesperado
+# guardarla: Abel juega sin ayuda y el asesor desesperado
 p = Partida(["periodista"], semilla=1)
 p.iniciar_dia(1)
 cerrar(p, "guardar")
 p.iniciar_dia(2)
-assert [o.id for o in p.opciones()] == ["rumor", "prensa", "espiar"]
+assert p.billar.taco["en_mano"] == 0 and p.billar.taco["guia"] == 1.0, p.billar.taco
 assert "Nadie vio" in p.dialogo_expediente()[1][1]
 
 # el capitulo 3 suelto (sin historia) cuenta el guion tal cual
@@ -76,24 +72,24 @@ p = Partida(["candidato"], semilla=1)
 p.iniciar_dia(2)
 assert p.dialogo_expediente() == DIALOGO_EXPEDIENTE
 
-# --- dia 3 -> dia 4: la guerra sucia llena el chat ---
+# --- dia 3 -> dia 4: como acabo el billar decide con cuanta rabia llega Nodo ---
 p = Partida(["candidato"], semilla=1)
 p.iniciar_dia(2)
-cerrar(p, "rumor")
+cerrar(p, "perdio")
 p.iniciar_dia(3)
-assert "chat_contra_bravo" in p.heredado()
+assert "nodo_agresivo" in p.heredado(), p.heredado()
 p = Partida(["candidato"], semilla=1)
 p.iniciar_dia(2)
-cerrar(p, "prensa")
+cerrar(p, "gano")
 p.banderas.add("desmentiste_una_falsa")
 p.iniciar_dia(3)
-assert p.heredado() == {"chat_sereno", "sofia_en_el_chat"}, p.heredado()
+assert p.heredado() == {"nodo_tranquilo", "sofia_en_el_chat"}, p.heredado()
 
 # --- dia 4 -> dia 5: exponer la red cambia la confesion; la portada
 #     cuenta como amanece la plaza ---
 p = Partida(["influencer"], semilla=1)
 p.iniciar_dia(3)
-cerrar(p, "rastrear")
+cerrar(p, "desenmascarado")
 assert any("Plaza Central" in t for t in p.portada()["manana"]), p.portada()
 p.iniciar_dia(4)
 dialogo = p.dialogo_captura()

@@ -9,7 +9,7 @@ from banco import J
 import versus
 
 MODO = sys.argv[1]
-CAPITULO = {"rumor": 0, "kombat": 3, "billar": 2, "duelo": 4}[MODO]
+CAPITULO = {"rumor": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4}[MODO]
 
 
 def espera(cond, tope=30.0, que=""):
@@ -57,7 +57,7 @@ V = versus._V
 espera(lambda: V["dia"] == CAPITULO, 60, "el dia")
 pasar(0.5)
 foto(f"red_{MODO}_invitado_espera")
-assert MODO == "rumor" or (V["espera"] is not None and V["fase"] == "espera")
+assert MODO in ("rumor", "colegio") or (V["espera"] is not None and V["fase"] == "espera")
 azar = random.Random(9)
 
 if MODO == "rumor":
@@ -86,6 +86,29 @@ if MODO == "rumor":
         tt += 0.2
     assert entregas >= 4, entregas
     print("invitado: regue el rumor ·", entregas, "entregas")
+elif MODO == "colegio":
+    from ursina import held_keys
+    import sigilo as S
+    espera(lambda: V["fase"] == "sigilo", 120, "el colegio")
+    gd = V["obj"]["guardia"]
+    g = gd["jugador"]
+    assert g.factor == S.PASO_HUMANO and g.solo_andar
+    pasar(1.0)
+    foto("red_colegio_invitado_puesto")
+    held_keys["w"], held_keys["shift"] = 1, 1          # correr no vale: anda
+    pasar(1.5)
+    held_keys["w"] = held_keys["shift"] = 0
+    assert not g.corriendo
+    pasar(0.5)
+    foto("red_colegio_invitado_anduvo")
+    espera(lambda: gd["avisos"] == 1, 60, "pillarla")
+    pasar(0.3)
+    foto("red_colegio_invitado_pillada")
+    espera(lambda: not gd["volviendo"], 10, "la vuelta al puesto")
+    espera(lambda: V["fase"] == "espera" and V["espera"] is not None, 60, "que se escape")
+    pasar(0.5)
+    foto("red_colegio_invitado_escapo")
+    print("invitado: vigile el colegio · avisos", gd["avisos"])
 elif MODO == "kombat":
     espera(lambda: V["fase"] == "kombat", 90, "la pelea")
     combate = V["obj"]["combate"]

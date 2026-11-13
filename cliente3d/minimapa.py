@@ -72,7 +72,8 @@ NOMBRES = {
 
 # tipo de punto -> nombre del color en estilo. Se resuelve al CREAR el
 # punto y no al importar: con «alto contraste» la paleta cambia.
-COLORES = {"npc": "TINTA", "vigilante": "GAITAN", "asesor": "OSPINA"}
+COLORES = {"npc": "TINTA", "vigilante": "GAITAN", "asesor": "OSPINA",
+           "presa": "OSPINA", "pista": "LLERAS"}
 # Los que van de ronda se dibujan como triángulo y con cono.
 CON_RUMBO = ("vigilante",)
 
@@ -81,6 +82,11 @@ CON_RUMBO = ("vigilante",)
 Z_SOMBRA, Z_BORDE, Z_PAPEL, Z_SUELO = 0.094, 0.092, 0.090, 0.088
 Z_MUEBLE, Z_MURO = 0.086, 0.084
 Z_CONO, Z_GENTE, Z_REBORDE, Z_YO = 0.070, 0.060, 0.052, 0.050
+Z_NIEBLA = 0.076              # tapa la obra y la gente; la flecha queda encima
+# La niebla de guerra (en red, la periodista): el plano se descubre a medida
+# que se anda, casilla a casilla, hasta este radio alrededor.
+CASILLA_NIEBLA = 1.5
+RADIO_DESCUBRE = 4.5
 
 
 def _triangulo(ancho, alto, tinta, z):
@@ -139,6 +145,9 @@ class Minimapa:
         self.k = 1.0            # metros -> unidades de camera.ui
         self.x0 = self.z0 = 0.0
         self.ox = self.oy = 0.0
+        self.niebla = None      # {casilla: rect} de lo que aun no se ha visto
+        self.malla_niebla = None
+        self.limites = None
 
     # ---------------------------------------------------------------
     #  conversión
@@ -200,6 +209,7 @@ class Minimapa:
                         E.TINTA_TENUE)
         norte.origin = (0.5, 0.5)
         self.piezas = [sombra, borde, papel, suelo, rotulo, norte] + reglas
+        self.limites, self.niebla, self.malla_niebla = tuple(limites), None, None
 
         rects = list(bloqueos)
         tabiques = set(tuple(m) for m in muros)
@@ -220,6 +230,54 @@ class Minimapa:
         # nace apagado: quien llama decide cuándo se ve
         self.visible = True
         self.mostrar(False)
+
+    def con_niebla(self):
+        """El plano empieza tapado y se va descubriendo al andar. Para la
+        periodista en red: tiene que aprenderse el colegio, no leerlo."""
+        if self.limites is None:
+            return
+        x0, x1, z0, z1 = self.limites
+        c = CASILLA_NIEBLA
+        self.niebla = {}
+        for i in range(int(math.ceil((x1 - x0) / c))):
+            for j in range(int(math.ceil((z1 - z0) / c))):
+                self.niebla[(i, j)] = (x0 + i * c, min(x1, x0 + (i + 1) * c),
+                                       z0 + j * c, min(z1, z0 + (j + 1) * c))
+        self._pintar_niebla()
+
+    def descubrir(self, x, z):
+        """Destapa lo que queda a RADIO_DESCUBRE de (x, z). Solo rehace la
+        malla si algo cambio (casi nunca: andando por lo ya visto, nada)."""
+        if not self.niebla:
+            return
+        r2 = RADIO_DESCUBRE ** 2
+        vistas = [k for k, (a, b, c, d) in self.niebla.items()
+                  if (min(max(x, a), b) - x) ** 2 + (min(max(z, c), d) - z) ** 2 <= r2]
+        if vistas:
+            for k in vistas:
+                del self.niebla[k]
+            self._pintar_niebla()
+
+    def oculto(self, x, z):
+        """True si (x, z) sigue bajo la niebla."""
+        if not self.niebla or self.limites is None:
+            return False
+        x0, _x1, z0, _z1 = self.limites
+        k = (int((x - x0) // CASILLA_NIEBLA), int((z - z0) // CASILLA_NIEBLA))
+        return k in self.niebla
+
+    def _pintar_niebla(self):
+        if self.malla_niebla is not None:
+            if self.malla_niebla in self.piezas:
+                self.piezas.remove(self.malla_niebla)
+            destroy(self.malla_niebla)
+            self.malla_niebla = None
+        if self.niebla:
+            self.malla_niebla = self._obra(list(self.niebla.values()), self.limites,
+                                           E.TINTA, Z_NIEBLA)
+            if self.malla_niebla is not None:
+                self.malla_niebla.enabled = self.visible
+                self.piezas.append(self.malla_niebla)
 
     def _obra(self, rects, limites, tinta, z):
         """Esos obstáculos en una sola malla, recortados al plano."""

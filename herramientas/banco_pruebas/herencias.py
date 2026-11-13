@@ -59,38 +59,18 @@ pasar(1.0)
 hasta_pagina("portada")
 foto("herencias_2_portada_cap2")
 portada = J.datos_portada(J.cl.partida)
-assert any("defenderse" in t for t in portada["manana"]), portada
+# Lo que viene manana: el billar de Abel, mas facil por la propuesta publica.
+assert any("Abel" in t for t in portada["manana"]), portada
 
-# Capitulo 3: la cuarta opcion existe por lo que hizo Valeria.
+# Capitulo 3: lo que hizo Valeria cambia la partida de billar de Abel.
 for _ in range(8):
     if estado() == "rotulo":
         break
     tecla("enter", 1.2)
 assert J.mundo._ACTUAL["nombre"] == "campana", J.mundo._ACTUAL["nombre"]
 assert "propuesta_publica" in J.cl.partida.heredado()
-for _ in range(6):
-    if estado() == "libre":
-        break
-    tecla("enter", 0.6)
-assert estado() == "libre", estado()
-J.cl.actor.setPos(15.8, 0, -0.3)
-pasar(0.3)
-assert J.cl.punto_cerca == "mesa", J.cl.punto_cerca
-tecla("e", 0.3)
-assert estado() == "escena", estado()
-pasar(7.5)
-foto("herencias_3_asesor_dialogo")
-while J.cl.escena.fase != "decide":
-    pasar(0.2)
-pasar(0.6)
-assert [o[0] for o in J.cl.escena.opciones] == ["rumor", "prensa", "espiar", "defender"]
-foto("herencias_4_cuatro_opciones")
-tecla("4", 1.5)
-assert "ospina_se_defendio_con_datos" in J.cl.partida.banderas
-foto("herencias_5_consecuencia_defender")
-assert hasta_estado("juego", 12) and J.cl.dia_cerrado, estado()
-pasar(1.0)
-hasta_pagina("portada")
-foto("herencias_6_portada_cap3")
+from contenido import TACO_DANIEL
+assert J.cl.partida.billar.taco == TACO_DANIEL["propuesta_publica"], J.cl.partida.billar.taco
+foto("herencias_3_campana")
 informe()
 print("herencias: todo bien")

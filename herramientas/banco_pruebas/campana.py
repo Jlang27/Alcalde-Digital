@@ -163,6 +163,11 @@ foto("campana_billar_saque")
 bil = J.cl.billar
 p = J.cl.partida.billar
 if PIERDE:
+    # La IA tira con azar (cada partida es otra) y a veces falla la 8, que
+    # le da la partida a Abel: con semilla fija la prueba no va a la suerte.
+    import random
+    p.ia.azar = random.Random(3)
+if PIERDE:
     p.ia.dificultad = 50.0          # sin fallos de pulso: la derrota tiene que ser segura
 azar = random.Random(7)
 fotos = set()

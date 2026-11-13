@@ -304,6 +304,9 @@ class Partida:
         self.regados = None           # a quienes ya se lo llevo
         self.envios_gastados = 0
         self.envios_extra = 0         # los que dan las jugadas del tablero
+        # En red: en el colegio, en vez de la ronda, UN vigilante que lleva
+        # el segundo jugador (sigilo.Sigilo.poner_humano).
+        self.vigilante_humano = False
         self.billar = None            # la partida con el asesor del dia 3 (billar.py)
         self.estado_plaza = None      # "pacifica" o "caotica", el dia 5
         self.duelo = None             # el minijuego de la pacifica (ritmo.py)
@@ -451,6 +454,8 @@ class Partida:
                               avisos_maximos=AVISOS_MAXIMOS + (
                                   1 if "portero_amigo" in heredado else 0))
                        if indice == DIA_SIGILO else None)
+        if self.sigilo is not None and self.vigilante_humano:
+            self.sigilo.poner_humano()
         # Nodo llega como lo dejaron los dias anteriores (contenido.HERENCIAS).
         dificultad = next((DIFICULTAD_NODO[h] for h in heredado if h in DIFICULTAD_NODO), 1.0)
         self.kombat = Pelea(dificultad) if indice == DIA_ESTUDIO else None

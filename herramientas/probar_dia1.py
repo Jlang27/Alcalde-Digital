@@ -21,10 +21,11 @@ def preguntas(p, npc):
 
 p = Partida(["periodista"], semilla=1)
 p.iniciar_dia(0)
-assert p.tiempo_total == 40 and p.tiempo_restante == 40
+assert p.tiempo_total == 120 and p.tiempo_restante == 120   # de 6:30 a 8:30
 assert ids_raiz(p) == {"compartir", "ignorar"}, ids_raiz(p)
-# el rumor avanza por el grafo cada 20 minutos y no pasa por ti
-for rondas, esperados in ((0, 2), (1, 2), (2, 4), (4, 6), (6, 8)):
+# el rumor baja un nivel por el grafo cada RONDAS_POR_NIVEL charlas y no pasa por ti
+from contenido import RONDAS_POR_NIVEL as R
+for rondas, esperados in ((0, 2), (R - 1, 2), (R, 4), (2 * R, 6), (3 * R, 8)):
     p.rondas = rondas
     assert len(p.creyentes()) == esperados, (rondas, p.nombres(p.creyentes()))
 p.rondas = 0

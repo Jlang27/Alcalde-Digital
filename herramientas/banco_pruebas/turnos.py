@@ -3,9 +3,14 @@ en una interrupcion, devolverlo y el dia 2 con el otro protagonista."""
 from banco import *
 
 arrancar()
-J.cl.menu.mover(1); pasar(0.3); tecla("enter", 1.6); foto("como_jugar")
+J.cl.menu.mover(3); pasar(0.3)
+assert J.cl.menu.opciones[J.cl.menu.seleccion] == "Cómo se juega"
+tecla("enter", 1.6); foto("como_jugar")
 tecla("escape", 1.0)
-tecla("enter", 1.2); foto("reparto_j1")
+# El reparto por turnos ya no tiene entrada en el menu (los capitulos tienen
+# su personaje), pero sigue siendo como se juega en un solo PC.
+J.cl.menu.cerrar(); J.cl.menu = None
+J.abrir_seleccion(); pasar(1.2); foto("reparto_j1")
 tecla("enter", 0.6); foto("reparto_j2_eligiendo")
 tecla("enter", 0.4); tecla("space", 0.5)
 hasta_estado("intro", 10); tecla("enter", 1.0); hasta_estado("rotulo", 10)
@@ -18,8 +23,11 @@ p = J.cl.partida
 print("protagonista dia 1:", p.nombre_protagonista,
       "| jugadores:", [f"{j.nombre} ({j.nombre_rol})" for j in p.jugadores])
 sacar_telefono()
-while p.interrupcion is None:
+for _ in range(600):
+    if p.interrupcion is not None:
+        break
     pasar(0.2)
+assert p.interrupcion is not None, "no llego la carta del otro jugador"
 pasar(0.5)
 print("al llegar la carta:", estado(), "· reloj de la interrupcion",
       round(p.tiempo_interrupcion, 1))

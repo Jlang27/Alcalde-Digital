@@ -5,11 +5,13 @@ Este proceso hostea y es el protagonista; lanza un segundo cliente
 pasan por la sala (nombre, hostear/unirse, capitulo, «listo») y juegan el
 minijuego del capitulo pedido, cada uno con su bot:
 
-    .venv/bin/python herramientas/banco_pruebas/red_partida.py [rumor|kombat|billar|duelo]
+    .venv/bin/python herramientas/banco_pruebas/red_partida.py [rumor|colegio|kombat|billar|duelo]
 
   rumor   capitulo 1: el invitado riega el rumor vecino a vecino con los
           envios que le da el reloj del anfitrion; avisar a un contacto lo frena
 
+  colegio capitulo 2: el invitado es el vigilante; anda (mas lento que ella),
+          la pilla con la linterna, vuelve a su puesto y la ve escapar
   kombat  capitulo 4: el invitado lleva a Nodo y gana a un JH777 quieto
   billar  capitulo 3: el invitado tira por el asesor
   duelo   capitulo 5: el invitado toca las notas del rival
@@ -29,7 +31,7 @@ from banco import J
 import versus
 
 MODO = sys.argv[1] if len(sys.argv) > 1 else "kombat"
-CAPITULO = {"rumor": 0, "kombat": 3, "billar": 2, "duelo": 4}[MODO]
+CAPITULO = {"rumor": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4}[MODO]
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -135,6 +137,66 @@ try:
         tecla("2", 0.8)                   # Ignorar: se cierra el dia
         print("anfitrion: rumor · lo creen", len(p.creyentes()), "de", len(p.vecinos()),
               "· avisado", libres[0])
+    elif MODO == "colegio":
+        import math
+        import sigilo as S
+        s = p.sigilo
+        g = s.humano
+        assert g is not None and s.vigilantes == [g], ("sigue la ronda de la maquina", s.vigilantes, ERRORES[-1:])
+        assert J.cl.mapa.niebla, "el plano de la periodista no tiene niebla"
+        tapadas = len(J.cl.mapa.niebla)
+        x0, z0 = g.ruta[0]
+        # Ella, lejos y quieta: el invitado anda un poco hacia delante.
+        J.cl.actor.setPos(24.0, 0, 14.0)
+        espera(lambda: math.hypot(g.x - x0, g.z - z0) > 1.0, 30, "que el vigilante ande")
+        d0 = math.hypot(g.x - x0, g.z - z0)
+        pasar(1.0)
+        rapidez = (math.hypot(g.x - x0, g.z - z0) - d0)
+        print(f"anfitrion: el vigilante anda a {rapidez:.2f} m/s")
+        espera(lambda: not g.andando, 20, "que se pare")
+        foto("red_colegio_anfitrion_vigilante")
+        # Andar por el colegio destapa el plano.
+        J.cl.actor.setPos(10.0, 0, 6.0)
+        pasar(0.5)
+        assert len(J.cl.mapa.niebla) < tapadas, "el plano no se destapo"
+        foto("red_colegio_anfitrion_plano")
+        # Delante de su linterna, quieta: la tiene que pillar.
+        mira = [math.sin(math.radians(g.rumbo)), math.cos(math.radians(g.rumbo))]
+        sitio = None
+        for d in (4.0, 3.0, 5.0, 2.5, 6.0):
+            for lado in (0.0, 0.6, -0.6, 1.2, -1.2):
+                x = g.x + mira[0] * d + mira[1] * lado
+                z = g.z + mira[1] * d - mira[0] * lado
+                if (not J.cl.jugador._bloqueado(x, z) and g.ve(x, z, False, s.tapan_de_pie)
+                        is not None):
+                    sitio = (x, z)
+                    break
+            if sitio:
+                break
+        assert sitio, "no hay donde ponerla a la vista"
+        J.cl.actor.setPos(sitio[0], 0, sitio[1])
+        pasar(0.6)
+        foto("red_colegio_anfitrion_alumbrada")
+        espera(lambda: estado() == "aviso_papel", 20, "que la pille")
+        assert s.avisos == 1, s.avisos
+        foto("red_colegio_anfitrion_pillada")
+        espera(lambda: not g.vuelve, 10, "que el vigilante confirme su vuelta")
+        tecla("enter", 0.6)
+        assert estado() == "libre", estado()
+        # Las dos partes y a la salida: se escapa.
+        s.inventario += [o for o in s.objetivos if o not in s.inventario]
+        pasar(0.3)
+        J.cl.actor.setPos(24.0, 0, -7.3)
+        pasar(0.4)
+        assert estado() == "escena" and s.escapo, estado()
+        pasar(2.0)
+        hasta_estado("escena", 1)
+        for _ in range(6):
+            if J.cl.escena is not None and J.cl.escena.fase == "decide":
+                break
+            tecla("enter", 0.5)
+        tecla("2", 1.2)
+        print("anfitrion: colegio · avisos", s.avisos, "· escapo", s.escapo)
     elif MODO == "kombat":
         J.empezar_kombat()
         pelea = p.kombat

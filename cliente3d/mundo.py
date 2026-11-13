@@ -5,6 +5,7 @@ import textwrap
 
 import simplepbr
 from direct.actor.Actor import Actor
+from panda3d.core import loadPrcFileData
 from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
                           NodePath, CardMaker,
                           Geom, GeomLines, GeomNode, GeomVertexData,
@@ -3678,6 +3679,12 @@ def _niebla(mundo, densidad=0.038):
     mundo.setFog(f)
 
 
+def niebla(mundo, densidad):
+    """Cambia la niebla del escenario puesto. En red, el colegio se ve
+    distinto desde cada lado: la periodista ve menos y el vigilante mas."""
+    _niebla(mundo, densidad)
+
+
 _ACTUAL = {"nombre": None, "contenedor": None}
 
 
@@ -4291,8 +4298,17 @@ def mezclar(actor):
 # No se arregla con una constante a ojo porque cada modelo trae su clip:
 # se mide el del actor y se ajusta su ritmo.
 RITMO_MINIMO, RITMO_MAXIMO = 0.55, 2.45
+# Pero pisar a la velocidad del juego no lo es todo: con un clip de paso
+# corto (el «correr» sintetizado pisa a ~1,5 m/s y el juego corre a 5,2)
+# eso pedia el ritmo maximo y las piernas iban como un molinillo, que se
+# veia ridiculo. Un ciclo (dos pasos) no baja de esto: por encima de la
+# cadencia humana se prefiere que el pie resbale un poco.
+CICLO_MINIMO = {"caminar": 0.85, "correr": 0.62, "agachado_caminar": 1.3}
 PIES = ("LeftFoot", "RightFoot")
-_NATURAL = {}        # (modelo, clip) -> m/s que marca el clip, o None
+# Clave: (clip, su AnimBundle). Antes era el nombre del actor, y todos los
+# .glb se llaman «Armature»: el primer modelo medido decidia el de todos.
+_NATURAL = {}        # -> m/s que marca el clip, o None
+_CICLO = {}          # -> (desde, hasta) del ciclo limpio, o None
 
 
 def _pie(actor, sufijo):
@@ -4303,69 +4319,160 @@ def _pie(actor, sufijo):
     return None
 
 
+def _clave(actor, clip):
+    control = actor.getAnimControl(clip)
+    return None if control is None else (clip, control.getAnim())
+
+
+def _rastro(actor, clip):
+    """Donde estan los dos pies y la cadera (en el espacio del actor) en
+    cada cuadro: [pie izq, pie der, cadera].
+
+    Se mide en una COPIA del actor: posar un cuadro de un clip para todos
+    los demas clips de ese actor (Panda3D sin mezcla de animaciones), y
+    medir sobre el de verdad lo dejaba congelado. Le paso al asesor: la
+    llegada pedia el ritmo de su «caminar» y su «idle» se paraba.
+    """
+    control = actor.getAnimControl(clip)
+    if control is None or control.getNumFrames() < 4 or not control.getFrameRate():
+        return None
+    muestra = Actor(other=actor)
+    try:
+        control = muestra.getAnimControl(clip)
+        nodos = []
+        for sufijo in PIES + ("Hips",):
+            hueso = _pie(muestra, sufijo)
+            if hueso is None:
+                return None
+            nodos.append(muestra.exposeJoint(None, "modelRoot", hueso))
+        rastro = []
+        for f in range(control.getNumFrames()):
+            control.pose(f)
+            muestra.update(force=True)
+            rastro.append([tuple(p.getPos(muestra)) for p in nodos])
+        return rastro
+    finally:
+        muestra.cleanup()
+        muestra.removeNode()
+
+
+def ciclo(actor, clip):
+    """(desde, hasta): los cuadros del ciclo de verdad, o None si es todo.
+
+    El «caminar» de la periodista (y el «correr» y el agachado que se
+    sacan de el) empieza con medio segundo de pie, con los dos pies
+    quietos: es un arranque, no un ciclo. En bucle eso se veia como
+    «corre, se queda quieta, vuelve a correr» en cada vuelta. Aqui se
+    buscan los cuadros quietos del principio y del final para saltarlos.
+    """
+    clave = _clave(actor, clip)
+    if clave is None:
+        return None
+    if clave in _CICLO:
+        return _CICLO[clave]
+    _CICLO[clave] = None
+    r = _rastro(actor, clip)
+    if r is None:
+        return None
+    n = len(r)
+    # De tres en tres cuadros: los clips traen los cuadros repetidos de
+    # dos en dos y uno a uno saldria quieto la mitad del tiempo.
+    mov = [sum(math.dist(r[min(n - 1, f + 3)][k], r[f][k]) for k in (0, 1))
+           for f in range(n)]
+    umbral = 0.25 * sorted(mov)[n // 2]
+    desde = next((f for f in range(n) if mov[f] > umbral), 0)
+    hasta = next((f for f in range(n - 1, -1, -1) if mov[max(0, f - 3)] > umbral), n - 1)
+    # Solo si sobra algo de verdad (un 10 %): un buen ciclo no se toca.
+    if desde + (n - 1 - hasta) >= 0.1 * n and hasta - desde >= n // 3:
+        _CICLO[clave] = (desde, hasta)
+    return _CICLO[clave]
+
+
 def velocidad_natural(actor, clip):
     """A cuantos m/s «pisa» ese clip. None si no se puede medir.
 
-    Se recorre el clip fotograma a fotograma mirando los dos pies en el
-    espacio del actor y quedandose, en cada uno, con el que mas
-    retrocede: ese es el apoyado. El eje de avance no se supone, se
-    busca entre los tres (suponerlo daba 0,05 m/s, que era el vaiven
-    vertical del pie).
+    Mientras un pie esta apoyado retrocede respecto al cuerpo justo a la
+    velocidad a la que el cuerpo avanza. El apoyado se reconoce por la
+    ALTURA (esta en el suelo), no por el sentido en que se mueve: suponer
+    el sentido falla en los modelos que miran al reves y medía el pie en
+    el aire. Ni el eje vertical ni el de avance se suponen: el vertical es
+    el de la cadera; el de avance, el de mas recorrido de los pies.
     """
-    clave = (actor.getName(), clip)
+    clave = _clave(actor, clip)
+    if clave is None:
+        return None
     if clave in _NATURAL:
         return _NATURAL[clave]
     _NATURAL[clave] = None
-    control = actor.getAnimControl(clip)
-    if control is None:
+    rastro = _rastro(actor, clip)
+    if rastro is None:
         return None
-    n, fps = control.getNumFrames(), control.getFrameRate()
-    if n < 4 or not fps:
+    desde, hasta = ciclo(actor, clip) or (0, len(rastro) - 1)
+    r = rastro[desde:hasta + 1]
+    if len(r) < 6:
         return None
-    nodos = []
-    for sufijo in PIES:
-        hueso = _pie(actor, sufijo)
-        if hueso is None:
-            return None
-        nodos.append(actor.exposeJoint(None, "modelRoot", hueso))
-
-    antes = control.getFrame()
-    rastro = []
-    try:
-        for f in range(n):
-            control.pose(f)
-            actor.update(force=True)
-            rastro.append([tuple(p.getPos(actor)) for p in nodos])
-    finally:
-        for p in nodos:
-            p.removeNode()
-        control.pose(antes)
-
-    mejor = 0.0
-    for eje in (0, 1, 2):
-        pasos = [min(b[0][eje] - a[0][eje], b[1][eje] - a[1][eje])
-                 for a, b in zip(rastro, rastro[1:])]
-        pasos.sort()
-        # El tercio central: fuera el instante en que cambia el pie.
-        medio = pasos[len(pasos) // 3: 2 * len(pasos) // 3 + 1]
-        if medio:
-            mejor = max(mejor, abs(sum(medio) / len(medio)) * fps)
-    _NATURAL[clave] = mejor or None
+    fps = actor.getAnimControl(clip).getFrameRate()
+    arriba = max(range(3), key=lambda e: abs(sum(c[2][e] for c in r)))
+    signo = 1.0 if sum(c[2][arriba] for c in r) > 0 else -1.0
+    avance = max((e for e in range(3) if e != arriba),
+                 key=lambda e: max(c[0][e] for c in r) - min(c[0][e] for c in r))
+    velocidades = []
+    for k in (0, 1):
+        alto = [signo * c[k][arriba] for c in r]
+        suelo = min(alto) + 0.03          # tres dedos: el talon que se despega
+        for f in range(len(r) - 2):
+            if alto[f] <= suelo and alto[f + 2] <= suelo:
+                # De dos en dos cuadros: vienen repetidos de dos en dos.
+                velocidades.append(abs(r[f + 2][k][avance] - r[f][k][avance]) / 2 * fps)
+    if not velocidades:
+        return None
+    velocidades.sort()
+    _NATURAL[clave] = velocidades[len(velocidades) // 2] or None
     return _NATURAL[clave]
 
 
 def ritmo_para(actor, clip, velocidad):
     """El playRate con el que ese clip pisa a esa velocidad.
 
-    Se recorta: por encima de RITMO_MAXIMO las piernas son un borron y
-    queda peor que el patinaje que se queria quitar.
+    Se recorta: por encima de RITMO_MAXIMO (o de la cadencia humana de
+    CICLO_MINIMO) las piernas son un borron y queda peor que el patinaje
+    que se queria quitar.
     """
     if velocidad <= 0:
         return 1.0
     natural = velocidad_natural(actor, clip)
     if not natural:
         return 1.0
-    return max(RITMO_MINIMO, min(RITMO_MAXIMO, velocidad / natural))
+    tope = RITMO_MAXIMO
+    if clip in CICLO_MINIMO:
+        control = actor.getAnimControl(clip)
+        desde, hasta = ciclo(actor, clip) or (0, control.getNumFrames() - 1)
+        dura = (hasta - desde + 1) / control.getFrameRate()
+        tope = min(tope, dura / CICLO_MINIMO[clip])
+    return max(RITMO_MINIMO, min(tope, velocidad / natural))
+
+
+# Todo bucle de andar o correr va por su ciclo limpio, lo ponga quien lo
+# ponga (el jugador, la ronda, el sospechoso, una cinematica, el otro PC):
+# por eso se engancha aqui y no en cada llamada.
+_loop_de_actor = Actor.loop
+
+
+def _loop_por_ciclo(self, animName, restart=1, partName=None, fromFrame=None, toFrame=None):
+    if fromFrame is None and toFrame is None and animName in CICLO_MINIMO:
+        rango = ciclo(self, animName)
+        if rango is not None:
+            fromFrame, toFrame = rango
+    return _loop_de_actor(self, animName, restart, partName, fromFrame, toFrame)
+
+
+Actor.loop = _loop_por_ciclo
+
+# Los clips de Mixamo vienen a 30 cuadros con cada pose repetida dos veces
+# (claves a 15): sin mezclar un cuadro con el siguiente el cuerpo avanza a
+# saltos, y a ritmo lento se nota como un tartamudeo. Se lee al animar,
+# asi que vale aunque la ventana ya este abierta.
+loadPrcFileData("", "interpolate-frames 1")
 
 
 # Hasta donde puede girar el cuello antes de parecer un buho.
@@ -4655,8 +4762,14 @@ def mover_vigilante(par, x, z, rumbo, andando, rayos, alerta, corriendo=False,
     corriendo: va hacia un ruido que oyo. velocidad: la de su ronda, si
     no es la de serie (una ronda reforzada anda mas rapido).
     """
-    actor, abanico, _foco, haz = par
-    mover_actor(actor, x, z, rumbo, andando, corriendo, velocidad)
+    mover_actor(par[0], x, z, rumbo, andando, corriendo, velocidad)
+    luz_vigilante(par, x, z, rumbo, rayos, alerta)
+
+
+def luz_vigilante(par, x, z, rumbo, rayos, alerta):
+    """Solo la linterna (el abanico en el suelo y el haz). Aparte porque en
+    red al vigilante lo mueve su jugador y no hay que tocarle el cuerpo."""
+    _actor, abanico, _foco, haz = par
     rgb = LINTERNA_ALERTA if alerta else LINTERNA
     # Fuerte al pie de la linterna y casi nada en el borde: se lee como luz.
     _abanico(abanico, (x, 0.03, z), rayos, 0.03, rgb, 0.42, 0.05)
@@ -4695,6 +4808,9 @@ def asesor(mundo):
     actor = Actor(Filename.from_os_specific(ruta_personaje("ciudadano")).getFullpath())
     actor.reparentTo(mundo)
     _quitar_mapa_de_brillo(actor)
+    # Nace respirando: si la llegada se salta con Enter nadie le pone clip
+    # y esperaba arriba, junto al billar, en pose T.
+    actor.loop("idle")
     return actor
 
 

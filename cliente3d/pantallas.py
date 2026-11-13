@@ -432,8 +432,16 @@ class DueloRitmo:
     LETRAS = ("D", "F", "J", "K")             # juego3d.TECLAS_DUELO
     ANCHO_BARRA = 0.9
 
-    def __init__(self, textura, rival="TAVO, EL DEL RUMOR"):
+    def __init__(self, textura, rival="TAVO, EL DEL RUMOR", espejo=False, yo="MATEO"):
+        """espejo: en el PC del rival (red): sus carriles van a la DERECHA,
+        encima de su personaje, y los de Mateo a la izquierda, encima de
+        Mateo. Aqui «mateo» es siempre quien toca en este PC; yo, su nombre."""
         from panda3d.core import TransparencyAttrib
+        self.espejo, self.yo = espejo, yo
+        if espejo:
+            self.X_MATEO, self.X_RIVAL = DueloRitmo.X_RIVAL, DueloRitmo.X_MATEO
+        mia, ajena = (E.GAITAN, E.OSPINA) if espejo else (E.OSPINA, E.GAITAN)
+        self.tintas_quien = {"mateo": mia, "rival": ajena}
         self._tex, self._alfa = textura, TransparencyAttrib.MAlpha
         self.piezas, self.notas_vivas, self.cartel = [], [], []
         a = self.piezas.append
@@ -456,22 +464,33 @@ class DueloRitmo:
             t = E.titular(letra, (x, y + 0.002), 1.1, E.TEXTO, origen=(0, 0))
             self.teclas.append((caja, t))
             self.piezas += [caja, filo, t]
-        a(E.pequena("MATEO", (self.X_MATEO[0] - 0.07, self.Y_MARCA + 0.012), E.OSPINA,
-                    escala=0.6, origen=(0.5, 0.5)))
-        a(E.pequena(rival, (self.X_RIVAL[-1] + 0.04, self.Y_MARCA + 0.085), E.GAITAN,
-                    escala=0.6, origen=(0.5, 0.5)))
+        if espejo:
+            a(E.pequena(yo, (self.X_MATEO[-1] + 0.07, self.Y_MARCA + 0.012), mia,
+                        escala=0.6, origen=(-0.5, 0.5)))
+            a(E.pequena(rival, (self.X_RIVAL[0] - 0.04, self.Y_MARCA + 0.085), ajena,
+                        escala=0.6, origen=(-0.5, 0.5)))
+        else:
+            a(E.pequena(yo, (self.X_MATEO[0] - 0.07, self.Y_MARCA + 0.012), mia,
+                        escala=0.6, origen=(0.5, 0.5)))
+            a(E.pequena(rival, (self.X_RIVAL[-1] + 0.04, self.Y_MARCA + 0.085), ajena,
+                        escala=0.6, origen=(0.5, 0.5)))
         self.ronda = E.pequena("", (0, 0.462), E.TEXTO, escala=0.62, origen=(0, 0.5))
         a(self.ronda)
-        self.juicio = E.titular("", (-0.52, 0.19), 1.4, E.TEXTO, origen=(0, 0))
+        self.juicio = E.titular("", (0.52 if espejo else -0.52, 0.19), 1.4, E.TEXTO,
+                                origen=(0, 0))
         a(self.juicio)
         # La barra entre los dos: azul de Mateo contra rojo del rival.
         y = -0.355
         a(E.banda(self.ANCHO_BARRA + 0.012, 0.03, (0, y), E.tinta(220)))
         self.barra_rival = E.banda(self.ANCHO_BARRA, 0.02, (0, y), E.GAITAN)
         # Delante de la roja (z menor): si no, la tapaba entera.
-        self.barra_mateo = E.banda(self.ANCHO_BARRA / 2, 0.02, (-self.ANCHO_BARRA / 2, y),
-                                   E.OSPINA, z=E.Z_ADORNO - 0.01)
-        self.barra_mateo.origin = (-0.5, 0)
+        # La barra es de quien toca aqui: en espejo crece desde la derecha,
+        # roja, sobre el azul de Mateo (los lados del suelo no cambian).
+        lado = 1 if espejo else -1
+        self.barra_rival.color = ajena
+        self.barra_mateo = E.banda(self.ANCHO_BARRA / 2, 0.02, (lado * self.ANCHO_BARRA / 2, y),
+                                   mia, z=E.Z_ADORNO - 0.01)
+        self.barra_mateo.origin = (0.5 if espejo else -0.5, 0)
         self.corte = E.banda(0.008, 0.05, (0, y), E.TEXTO, z=E.Z_ADORNO - 0.02)
         self.piezas += [self.barra_rival, self.barra_mateo, self.corte]
         a(E.pequena("MATEO", (-self.ANCHO_BARRA / 2 - 0.02, y + 0.012), E.OSPINA,
@@ -576,15 +595,19 @@ class DueloRitmo:
         self.precision.text = f"PRECISIÓN  {precision * 100:.0f} %"
         ancho = self.ANCHO_BARRA * barra
         self.barra_mateo.scale_x = ancho
-        self.corte.x = -self.ANCHO_BARRA / 2 + ancho
+        self.corte.x = (self.ANCHO_BARRA / 2 - ancho if self.espejo
+                        else -self.ANCHO_BARRA / 2 + ancho)
 
     def poner_ronda(self, texto):
         self.ronda.text = texto
 
     def cantar(self, quien, texto):
         """La letra de la frase que suena, con quien la canta."""
-        self.quien.text = "MATEO" if quien == "mateo" else "EL RIVAL"
-        self.quien.color = E.OSPINA if quien == "mateo" else E.GAITAN
+        if self.espejo:
+            self.quien.text = self.yo if quien == "mateo" else "MATEO"
+        else:
+            self.quien.text = "MATEO" if quien == "mateo" else "EL RIVAL"
+        self.quien.color = self.tintas_quien[quien]
         self.letra.text, self.letra.wordwrap = texto, 60
 
     def titulo(self, arriba, grande, abajo=""):

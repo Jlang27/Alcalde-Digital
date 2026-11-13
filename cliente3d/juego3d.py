@@ -1352,6 +1352,9 @@ def abrir_libre():
                                     tablero=p is not None and p.pistas is not None)
     cl.mapa.preparar(mundo.escenario(), mundo.limites(),
                      mundo.bloqueos(), mundo.muros())
+    if (p is not None and p.sigilo is not None and p.sigilo.humano is not None
+            and cl.mapa.niebla is None):
+        cl.mapa.con_niebla()          # en red el colegio se aprende andando
     pintar_reloj_manana()
 
 
@@ -1674,6 +1677,7 @@ def ronda(dt):
         lejos = math.hypot(ruido["x"] - cl.actor.getX(), ruido["z"] - cl.actor.getZ())
         audio.efecto(SONIDO_OBJETO[ruido["objeto"]], max(0.25, 1.0 - lejos / 25.0))
         mundo.sonar_objeto(ruido)
+    versus.ruidos(s.sonaron)          # en red, el vigilante tambien los oye
     s.sonaron.clear()
     mundo.animar_usados(dt)
     if evento == "sin_objetivo":
@@ -3522,9 +3526,15 @@ def gente_del_mapa():
     if s is not None and minimapa.MOSTRAR_VIGILANTES:
         # El alcance y la apertura salen de las reglas, no del dibujo:
         # el minimapa no sabe cuanto alumbra una linterna.
+        # En red, el vigilante es una persona: en el plano solo sale si
+        # esta cerca (lo oyes) y fuera de la niebla. Saber siempre donde
+        # esta le quitaria todo el juego.
+        x, z = cl.actor.getX(), cl.actor.getZ()
         gente += [(f"v_{v.id}", v.x, v.z, "vigilante", v.rumbo,
-                   sigilo.ALCANCE, sigilo.MEDIO_ANGULO)
-                  for v in s.vigilantes]   # ...y después se usa
+                   v.alcance, v.medio_angulo)
+                  for v in s.vigilantes   # ...y después se usa
+                  if not v.humano or (math.hypot(v.x - x, v.z - z) < 9.0
+                                      and not cl.mapa.oculto(v.x, v.z))]
     if cl.ronda_asesor is not None:
         gente.append(("asesor", cl.ronda_asesor.x, cl.ronda_asesor.z,
                       "asesor"))
@@ -3541,6 +3551,7 @@ def actualizar_mapa():
     if cl.inventario is not None:
         cl.inventario.mostrar(visible)
     if visible:
+        cl.mapa.descubrir(cl.actor.getX(), cl.actor.getZ())
         cl.mapa.actualizar(cl.actor.getX(), cl.actor.getZ(),
                            cl.jugador.yaw, gente_del_mapa())
 

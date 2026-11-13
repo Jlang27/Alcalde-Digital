@@ -169,6 +169,17 @@ class Plano:
         return estirada or puntos[-1:]
 
 
+def guardia_humano(puesto):
+    """Un vigilante que lleva una persona, en `puesto`. Tambien lo usa el
+    PC del vigilante para pintar su linterna con las mismas medidas."""
+    puesto = tuple(puesto)
+    guardia = Vigilante("guardia", [puesto, puesto])
+    guardia.humano, guardia.andando = True, False
+    guardia.alcance, guardia.alcance_agachado = ALCANCE_HUMANO, ALCANCE_AGACHADO_HUMANO
+    guardia.medio_angulo = MEDIO_ANGULO_HUMANO
+    return guardia
+
+
 class Vigilante:
     """Va y viene por su ruta y se para en cada punto a mirar."""
 
@@ -428,13 +439,14 @@ class Sigilo:
     def poner_humano(self, puesto=None):
         """En red: la ronda se va y queda UN vigilante, el del segundo
         jugador, en su puesto (por defecto, donde empezaba el primero)."""
-        puesto = tuple(puesto or self.vigilantes[0].ruta[0])
-        guardia = Vigilante("guardia", [puesto, puesto])
-        guardia.humano, guardia.andando = True, False
-        guardia.alcance, guardia.alcance_agachado = ALCANCE_HUMANO, ALCANCE_AGACHADO_HUMANO
-        guardia.medio_angulo = MEDIO_ANGULO_HUMANO
-        self.vigilantes = [guardia]
+        guardia = guardia_humano(puesto or self.vigilantes[0].ruta[0])
+        self.ronda_guardada, self.vigilantes = self.vigilantes, [guardia]
         return guardia
+
+    def quitar_humano(self):
+        """El segundo jugador se fue: vuelve la ronda de siempre."""
+        if getattr(self, "ronda_guardada", None):
+            self.vigilantes, self.ronda_guardada = self.ronda_guardada, None
 
     @property
     def humano(self):
@@ -815,4 +827,29 @@ if __name__ == "__main__":
     assert not s.elegir(2)
     assert s.agarrar(5.5, 0.5) == "petardo" and s.inventario == ["canicas", "petardo"]
     assert s.elegir(1) and s.en_mano == "canicas" and s.cantidades["canicas"] == 5
+
+    # En red: un solo vigilante, el del segundo jugador. No se mueve solo,
+    # ve mas lejos que los de ronda, un ruido le apaga la linterna y, tras
+    # pillarla, vuelve a su puesto.
+    s = Sigilo({"a": [(0.0, 0.0), (10.0, 0.0)], "b": [(0.0, 5.0), (5.0, 5.0)]}, (0, 0, 0))
+    g = s.poner_humano()
+    assert s.vigilantes == [g] and s.humano is g and (g.x, g.z) == (0.0, 0.0)
+    s.actualizar(1.0, 30.0, 30.0, False, False)
+    assert (g.x, g.z) == (0.0, 0.0), "el vigilante humano se movio solo"
+    g.mandar(0.0, 0.0, 90.0, False)                    # mira hacia +x
+    assert g.ve(8.5, 0.0, False, []) is not None       # a 8,5 m: uno de ronda no la veria
+    assert Vigilante("r", [(0.0, 0.0), (10.0, 0.0)]).ve(8.5, 0.0, False, []) is None
+    s.ruidos.append({"x": 2.0, "z": 0.0, "radio": 6.0, "dura": 3.0, "falta": 0.0,
+                     "objeto": "canicas"})
+    s.actualizar(0.05, 30.0, 30.0, False, False)
+    assert g.ciego > 0 and g.pista == (2.0, 0.0) and g.ve(4.0, 0.0, False, []) is None
+    s.actualizar(DESLUMBRE + 0.1, 30.0, 30.0, False, False)
+    assert g.ciego == 0 and g.ve(4.0, 0.0, False, []) is not None
+    g.mandar(3.0, 0.0, 90.0, True)
+    for _ in range(60):
+        if s.actualizar(0.05, 5.0, 0.0, False, False) == "pillada":
+            break
+    assert s.avisos == 1 and g.vuelve and (g.x, g.z) == (0.0, 0.0)
+    g.mandar(7.0, 7.0, 0.0, True)
+    assert (g.x, g.z) == (0.0, 0.0), "volviendo a su puesto no se le manda"
     print("sigilo: todo bien")

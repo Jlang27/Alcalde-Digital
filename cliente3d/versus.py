@@ -10,7 +10,7 @@ dibujo (red/espejo.py). Una sola simulacion = nada que pueda divergir.
 
 LO QUE HACE EL DESINFORMADOR EN CADA CAPITULO
     1  riega el rumor por la red de vecinos        rumor.TableroRumor
-    2  es el vigilante del colegio                 (pendiente)
+    2  es el vigilante del colegio                 Jugador + sigilo.guardia_humano
     3  juega al billar por el asesor               Partida8Remota
     4  es Nodo en Nova Kombat                      PeleaRemota
     5  canta el bulo en el duelo de la plaza       DueloRed
@@ -30,6 +30,9 @@ from ursina import camera, destroy
 
 import audio
 import billar as B
+import jugador as JG
+import pantallas
+import sigilo as S
 import estilo as E
 import kombat as K
 import ritmo as R
@@ -40,11 +43,20 @@ ENVIO = 1 / 40                 # cada cuanto viaja el estado de un minijuego
 
 _V = {"sesion": None}
 
+# La niebla del colegio en red (la de un jugador es 0,03): la periodista ve
+# un poco menos y el vigilante bastante mas. Es la mitad de su ventaja: la
+# otra mitad es la linterna larga de sigilo.ALCANCE_HUMANO.
+NIEBLA_PERIODISTA, NIEBLA_VIGILANTE = 0.048, 0.014
+PISTA_DURA = 6.0               # segundos que se marca en el plano lo que oyo
+
 # Lo que se le dice al desinformador de cada capitulo: (titulo, su papel)
 PAPEL = {
     0: ("El primer rumor", "Vas a regar el rumor por la red de vecinos antes de que "
         "el protagonista los convenza."),
-    1: ("La propuesta", "Vas a ser el vigilante del colegio: que no saque la propuesta."),
+    1: ("La propuesta", "Eres el vigilante del colegio: que no saque la propuesta. "
+        "W A S D y el ratón. Tu linterna llega más lejos que nunca, pero andas más "
+        "despacio que ella. Si la alumbras un rato, aviso; a los tres, fuera. Lo que "
+        "oyes sale en el plano; un petardo cerca te deslumbra."),
     2: ("La primera jugada sucia", "Juegas al billar por el asesor. Ratón para apuntar, "
         "clic y arrastra hacia abajo (o mantén ESPACIO) para la potencia, flechas para el "
         "efecto. Si ganas, el rumor contra Pineda sale esta noche."),
@@ -140,7 +152,7 @@ def tecla(k):
             J.pulsar_duelo(carril)
     elif fase in ("caida", "fin") and k in ("enter", "space", "escape"):
         J.volver_al_menu()
-    elif k == "escape" and fase == "espera":
+    elif k == "escape" and fase in ("espera", "sigilo"):
         if _V.get("salir", -9) > _V["t"] - 3.0:
             J.volver_al_menu()
         else:
@@ -162,6 +174,13 @@ def _caida():
             b.remoto = None
         if p is not None and getattr(p, "duelo", None) is not None:
             p.duelo.rival_humano = False
+        if p is not None:
+            p.vigilante_humano = False
+            if p.sigilo is not None and p.sigilo.humano is not None:
+                # vuelve la ronda de siempre, con lo que ya llevaba ella
+                p.sigilo.quitar_humano()
+                if J.cl.vigilantes:
+                    J.preparar_vigilantes()
         s.cerrar()
         _V["sesion"] = None
         J.cl.sesion = None
@@ -189,6 +208,7 @@ def _protagonista(dt):
         _V["partida"], _V["dia"] = p, None
         p.plaza_forzada = "pacifica"
         p.rumor_manual = True             # el dia 1 lo riega el otro jugador
+        p.vigilante_humano = True         # y el 2 lo vigila
     if cl.estado != _V["estado"]:
         _V["estado"] = cl.estado
         e.enviar("hace", estado=cl.estado)
@@ -211,6 +231,61 @@ def _protagonista(dt):
     _pelea_servidor(cl, e, mensajes, toca)
     _billar_servidor(cl, e, mensajes, toca)
     _duelo_servidor(cl, e, mensajes, p)
+    _sigilo_servidor(cl, e, mensajes, p, toca)
+
+
+def ruidos(lista):
+    """juego3d.ronda avisa de lo que acaba de sonar: viaja con el estado."""
+    if _V.get("sesion") is not None and _V["sesion"].protagonista:
+        _V.setdefault("ruidos", []).extend(
+            {"o": r["objeto"], "x": round(r["x"], 2), "z": round(r["z"], 2)} for r in lista)
+
+
+def _sigilo_servidor(cl, e, mensajes, p, toca):
+    """Dia 2: el vigilante es el otro jugador. Sus pasos llegan aqui
+    (Vigilante.mandar) y las reglas de siempre deciden si la ve; de vuelta
+    va lo que hace falta para pintar a la periodista en su PC."""
+    s = p.sigilo
+    if s is None or not p.vigilante_humano:
+        return
+    if s.humano is None:
+        # El dia ya estaba montado con la ronda (se empezo por este capitulo):
+        # se cambia por el vigilante humano y se vuelve a montar.
+        s.poner_humano()
+        if cl.vigilantes:
+            J.preparar_vigilantes()
+    g = s.humano
+    if not cl.vigilantes:
+        return
+    if _V.get("sigilo") != p.dia_actual:
+        if cl.estado != "libre":
+            return                        # el vigilante sale cuando ella entra
+        _V["sigilo"], _V["ruidos"], _V["fin_sigilo"] = p.dia_actual, [], None
+        # que el cuerpo no patine: anda a lo que anda su jugador
+        g.velocidad = JG.VELOCIDAD * S.PASO_HUMANO
+        J.mundo.niebla(cl.mundo, NIEBLA_PERIODISTA)
+        e.enviar("g_ini", x=g.x, z=g.z, r=g.rumbo, avm=s.avisos_maximos,
+                 partes=len(s.objetivos))
+    for m in mensajes:
+        if m["t"] == "g":
+            g.mandar(m["x"], m["z"], m["r"], m["an"])
+        elif m["t"] == "g_ok":
+            g.vuelve = False
+    fin = "escapo" if s.escapo else "expulsada" if s.expulsada else None
+    if fin and _V["fin_sigilo"] is None:
+        _V["fin_sigilo"] = fin
+        e.enviar("g_fin", res=fin)
+    if not toca or fin:
+        return
+    a, j = cl.actor, cl.jugador
+    e.enviar("g_est", x=round(a.getX(), 3), z=round(a.getZ(), 3), h=round(a.getH(), 1),
+             ag=bool(j and j.agachado), mo=bool(j and j.moviendose),
+             co=bool(j and j.corriendo), sos=round(s.sospecha, 3), av=s.avisos,
+             salvo=s.a_salvo, ve=s.quien == g.id, ciego=round(g.ciego, 2),
+             pista=list(g.pista) if g.pista else None,
+             vuelve=list(g.ruta[0]) if g.vuelve else None,
+             lleva=len(s.objetivos) - len(s.falta()), ruidos=_V["ruidos"])
+    _V["ruidos"] = []
 
 
 def _rumor_servidor(cl, e, mensajes, p, dt):
@@ -444,6 +519,156 @@ def _desinformador(dt):
             e.enviar("b_apunta", a=round(bil.angulo, 4), r=round(bil.retro, 4))
     elif fase == "duelo":
         J.duelo_paso(dt)
+    elif fase == "sigilo":
+        _sigilo_cliente(dt)
+
+
+# --- el vigilante del colegio (capitulo 2) ---
+
+class SospechaGuardia(pantallas.Sospecha):
+    """La misma franja de la periodista, contada desde la linterna."""
+
+    def poner(self, sospecha, avisos, maximo, a_salvo=False):
+        super().poner(sospecha, avisos, maximo, a_salvo)
+        self.texto.text = ("ZONA SEGURA   ·   AHÍ NO PUEDES PILLARLA" if a_salvo else
+                           f"LA ESTÁS ALUMBRANDO   ·   AVISOS {avisos}/{maximo}")
+
+
+def _llega_g_ini(m):
+    """Monta al vigilante en este PC: su cuerpo lo mueve un Jugador (mas
+    lento, siempre de pie) y la linterna se pinta con las medidas de las
+    reglas. Si la ve o no lo decide el PC del protagonista."""
+    cl, obj, mundo = J.cl, _V["obj"], J.mundo
+    if "guardia" in obj:
+        return
+    _quitar_tarjeta()
+    par = mundo.vigilante(cl.mundo)
+    rumbo = m["r"]
+    par[0].setPos(m["x"], 0, m["z"])
+    par[0].setH(180.0 - rumbo)
+    g = JG.Jugador(par[0], limites=mundo.limites(), bloqueos=mundo.bloqueos(),
+                   muros=mundo.muros())
+    g.techo, g.fov = mundo.techo(), mundo.lente()
+    g.factor, g.solo_andar = S.PASO_HUMANO, True
+    g.yaw, g.rumbo = rumbo, 180.0 - rumbo
+    g.estado = None
+    g._animar("quieto")           # si no, en pose T hasta que da un paso
+    g.encuadrar()
+    g.activar()
+    mundo.niebla(cl.mundo, NIEBLA_VIGILANTE)
+    cl.actor.show()
+    cl.mapa.preparar(mundo.escenario(), mundo.limites(), mundo.bloqueos(), mundo.muros())
+    obj["guardia"] = {"par": par, "jugador": g, "reglas": S.guardia_humano((m["x"], m["z"])),
+                      "tapan": mundo.coberturas()[0], "hud": SospechaGuardia(),
+                      "avm": m["avm"], "partes": m.get("partes", 2), "est": None,
+                      "avisos": 0, "pista": None, "t_pista": 0.0, "lleva": 0,
+                      "volviendo": False, "ciego": 0.0, "envio": 0.0}
+    _V["fase"] = "sigilo"
+    _avisar(f"Eres el vigilante. {_V['sesion'].rival} va a por la propuesta.", 5.0)
+
+
+def _sigilo_cliente(dt):
+    gd = _V["obj"]["guardia"]
+    g, actor, v = gd["jugador"], gd["par"][0], gd["reglas"]
+    g.paso(dt)
+    g.seguir(dt)
+    x, z, rumbo = actor.getX(), actor.getZ(), 180.0 - actor.getH()
+    v.x, v.z, v.rumbo = x, z, rumbo
+    est = gd["est"]
+    v.ciego = est["ciego"] if est else 0.0      # deslumbrado: linterna corta
+    J.mundo.luz_vigilante(gd["par"], x, z, rumbo, v.rayos(gd["tapan"]),
+                          bool(est and est["ve"]))
+    gd["envio"] += dt
+    if gd["envio"] >= ENVIO and not gd["volviendo"]:
+        gd["envio"] = 0.0
+        _V["sesion"].enlace.enviar("g", x=round(x, 3), z=round(z, 3), r=round(rumbo, 1),
+                                   an=bool(g.moviendose))
+    # El plano: el colegio entero (es su colegio), donde la vio y lo que oyo.
+    gente = []
+    gd["t_pista"] = max(0.0, gd["t_pista"] - dt)
+    if gd["pista"] and gd["t_pista"] > 0:
+        gente.append(("pista", gd["pista"][0], gd["pista"][1], "pista"))
+    if est and (est["ve"] or est["sos"] > 0.01):
+        gente.append(("presa", est["x"], est["z"], "presa"))
+    cl = J.cl
+    cl.mapa.mostrar(True)
+    cl.mapa.actualizar(x, z, g.yaw, gente)
+
+
+def _animar_remota(actor, m):
+    """La periodista tal como va en el otro PC: el clip que toque, con su
+    repuesto si el modelo no lo trae (como jugador.CLIPS)."""
+    if m["ag"]:
+        quiere = ("agachado_caminar", "caminar") if m["mo"] else ("agachado", "idle")
+    elif m["mo"]:
+        quiere = ("correr", "caminar") if m["co"] else ("caminar",)
+    else:
+        quiere = ("idle",)
+    nombres = actor.getAnimNames()
+    clip = next((c for c in quiere if c in nombres), "idle")
+    if actor.getCurrentAnim() != clip:
+        # al ritmo al que pisa en el otro PC, como en jugador._animar
+        rapidez = (JG.VELOCIDAD_AGACHADO if m["ag"] else JG.VELOCIDAD_CORRER if m["co"]
+                   else JG.VELOCIDAD) if m["mo"] else 0.0
+        actor.setPlayRate(J.mundo.ritmo_para(actor, clip, rapidez), clip)
+        actor.loop(clip)
+
+
+def _llega_g_est(m):
+    gd = _V["obj"].get("guardia")
+    if gd is None or _V["fase"] != "sigilo":
+        return
+    gd["est"] = m
+    a = J.cl.actor
+    a.setPos(m["x"], 0, m["z"])
+    a.setH(m["h"])
+    _animar_remota(a, m)
+    gd["hud"].poner(m["sos"], m["av"], gd["avm"], m["salvo"])
+    g = gd["jugador"]
+    if m["vuelve"] and not gd["volviendo"]:
+        # La pillo: el vigilante vuelve a su puesto (lo mandan las reglas)
+        # y lo confirma para que sus pasos vuelvan a valer.
+        x, z = m["vuelve"]
+        g.salir_de_cobertura()
+        gd["par"][0].setPos(x, 0, z)
+        g.pivote = None
+        _V["sesion"].enlace.enviar("g_ok")
+    gd["volviendo"] = bool(m["vuelve"])
+    if m["av"] > gd["avisos"]:
+        gd["avisos"] = m["av"]
+        audio.efecto("sello")
+        _avisar(f"¡La pillaste! Aviso {m['av']} de {gd['avm']}. Vuelves a tu puesto.", 4.0)
+    if m["pista"] and m["pista"] != gd["pista"]:
+        gd["pista"], gd["t_pista"] = m["pista"], PISTA_DURA
+        _avisar("Oíste algo: mira el plano", 2.5)
+    if m["ciego"] > 0 and gd["ciego"] <= 0:
+        _avisar("¡Te deslumbró! La linterna tarda en volver", 3.0)
+    gd["ciego"] = m["ciego"]
+    if m["lleva"] > gd["lleva"]:
+        gd["lleva"] = m["lleva"]
+        _avisar(f"Se llevó una parte de la propuesta ({m['lleva']} de {gd['partes']})", 4.0)
+    x, z = gd["par"][0].getX(), gd["par"][0].getZ()
+    for r in m["ruidos"]:
+        lejos = math.hypot(r["x"] - x, r["z"] - z)
+        audio.efecto(J.SONIDO_OBJETO.get(r["o"], "petardo"), max(0.25, 1.0 - lejos / 25.0))
+
+
+def _llega_g_fin(m):
+    _recoger_minijuegos()
+    _quitar_aviso()
+    if _V["fase"] in ("fin", "caida"):
+        return
+    _V["fase"] = "espera"
+    rival = _V["sesion"].rival
+    if m["res"] == "escapo":
+        _tarjeta("SE TE ESCAPÓ", "Salió con la propuesta",
+                 f"{rival} cruzó la puerta verde con las dos partes. Ahora decide "
+                 "si la publica…")
+    else:
+        audio.efecto("sello")
+        _tarjeta("TRES AVISOS", "La sacaste del colegio",
+                 f"{rival} se va sin la propuesta: lo que no alcanzó a ver se queda "
+                 "en el archivo.")
 
 
 # --- lo que llega del protagonista ---
@@ -563,13 +788,18 @@ def _llega_r_ini(m):
     cl.actor.setH(180.0 - math.degrees(math.atan2(1.5 - x, 22.0 - z)))
     J.animar("idle")
     cl.rival = plaza.preparar_duelo()
+    # Las poses de cada nota (juego3d.Cantante): aqui el que canta lo SUYO
+    # es el rival, asi que va primero; Mateo canta lo que llega del otro PC.
+    cl.cantantes = (J.Cantante(cl.rival), J.Cantante(cl.actor))
+    cl.duelo_pulso = 0.0
     pos, mira, fov = plaza.PLANO_DUELO
     camera.fov = fov
     camera.position = pos
     J.mundo.mirar(mira)
     cl.partida = SimpleNamespace(duelo=_duelo_red(_V["sesion"].enlace, m.get("semilla", 7)))
     cl.ritmo = J.pantallas.DueloRitmo(plaza.textura_flecha(),
-                                      rival=f"MATEO · {_V['sesion'].rival}".upper())
+                                      rival=f"MATEO · {_V['sesion'].rival}".upper(),
+                                      espejo=True, yo="TÚ")
     cl.duelo_fin, cl.duelo_ronda = None, -1
     audio.parar_musica(fundido=0.8)
     _V["fase"] = "duelo"
@@ -611,7 +841,8 @@ _RECIBE = {"t_est": _llega_t_est, "t_ok": _llega_t_ok, "dia": _llega_dia, "hace"
            "k_ini": _llega_k_ini, "k_est": _llega_k_est, "k_fin": _llega_cierra_minijuego,
            "b_ini": _llega_b_ini, "b_est": _llega_b_est, "b_fin": _llega_cierra_minijuego,
            "r_ini": _llega_r_ini, "r_ronda": _llega_r_ronda, "r_fin": _llega_r_fin,
-           "r_cierra": _llega_cierra_minijuego}
+           "r_cierra": _llega_cierra_minijuego,
+           "g_ini": _llega_g_ini, "g_est": _llega_g_est, "g_fin": _llega_g_fin}
 
 
 def _recoger_minijuegos():
@@ -626,6 +857,12 @@ def _recoger_minijuegos():
         obj.pop("combate").cerrar()
         J.mundo.retirar_luchador(obj.pop("nodo"))
         azotea.caseton(True)
+    if "guardia" in obj:
+        gd = obj.pop("guardia")
+        gd["jugador"].desactivar()
+        J.mundo.quitar_vigilantes([gd["par"]])
+        gd["hud"].cerrar()
+        cl.mapa.mostrar(False)
     if "billar" in obj:
         obj.pop("billar").cerrar()
         J.mundo.quitar_npc([obj.pop("asesor")])
@@ -633,6 +870,9 @@ def _recoger_minijuegos():
     if cl.ritmo is not None and not _V["sesion"].protagonista:
         cl.ritmo.cerrar()
         cl.ritmo, cl.partida, cl.duelo_fin = None, None, None
+        for cantante in getattr(cl, "cantantes", ()):
+            cantante.soltar()
+        cl.cantantes = ()
         audio.parar_musica(fundido=0.8)
 
 

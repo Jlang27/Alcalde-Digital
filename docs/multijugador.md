@@ -1,5 +1,45 @@
 # Multijugador de Alcalde Digital
 
+## 0. Lo implementado: protagonista contra desinformador (dos PC)
+
+Lo que hay en el código hoy. El plan de cuatro roles de más abajo (§1 en
+adelante) queda como referencia; donde choque, manda esta sección.
+
+**Menú.** «Un jugador» (la historia de siempre, sin selector: cada capítulo
+tiene su personaje, como en Detroit) y «Multijugador» (la sala).
+
+**Sala** (`cliente3d/lobby.py`, reglas en `red/sala.py`), a lo R.E.P.O.:
+nombre → crear o unirse → la sala. Quien la crea ve su IP y un **código**
+de 7 letras (la IP codificada, `red.protocolo.codigo_de`); el otro escribe
+cualquiera de los dos. En la sala: R cambia los papeles (siempre uno de
+cada), ← → el capítulo (solo el anfitrión), Enter «listo». Cambiar papel o
+capítulo quita el «listo». Con los dos listos, cuenta atrás de 3 s.
+
+**Red** (`red/protocolo.py`): TCP en el puerto 5050, mensajes JSON con 4
+bytes de longitud, `TCP_NODELAY`, latido cada segundo (se mide la ida y
+vuelta) y hilos con colas para que `update()` nunca espere. Pruebas:
+`python red/probar_red.py`.
+
+**Quién manda** (`cliente3d/versus.py`): la `Partida` y la simulación de
+cada minijuego corren **solo en el PC del protagonista**, que juega el
+juego de siempre. El desinformador manda sus teclas y recibe el estado
+(~40 veces por segundo) y lo pinta con el mismo código de dibujo. Una sola
+simulación: nada que pueda divergir. Si se cae la conexión, el protagonista
+sigue contra la máquina y el desinformador vuelve al menú.
+
+| Cap. | Protagonista | Desinformador |
+|---|---|---|
+| 1 | investiga y arma el tablero, como siempre | riega el rumor vecino a vecino por las aristas (`Partida.rumor_manual`, `regar`); los envíos salen del reloj de ella (`MINUTOS_POR_ENVIO`) y de las jugadas del tablero |
+| 2 | mismo objetivo y misma velocidad; ve un poco menos (niebla 0,048) y el plano se destapa al andar (`minimapa.con_niebla`) | **el vigilante** (`Sigilo.poner_humano`): linterna más larga y ancha (`ALCANCE_HUMANO`, `MEDIO_ANGULO_HUMANO`), niebla 0,014, pero anda al 78 % (`PASO_HUMANO`) y nunca corre; ve en el plano lo que oye; un petardo cerca lo deslumbra (`DESLUMBRE`); tras un aviso vuelve a su puesto |
+| 3 | billar contra el otro | juega por el asesor (`Partida8Remota`) |
+| 4 | JH777 | Nodo (`PeleaRemota`, `Pelea.nodo_humano`) |
+| 5 | Mateo en el duelo | las notas del rival (`ritmo.DueloRival`); la plaza va siempre pacífica en red |
+
+Prueba con dos clientes de verdad (necesita GPU):
+`herramientas/banco_pruebas/red_partida.py [rumor|colegio|billar|kombat|duelo]`.
+
+---
+
 Diseño para la entrega final (16–20 nov). Cubre el §13 del documento del
 proyecto: *modo multijugador local, arquitectura cliente-servidor, preferiblemente
 sockets*, con un cliente por rol (Ciudadano, Periodista, Influencer, Alcalde) y un

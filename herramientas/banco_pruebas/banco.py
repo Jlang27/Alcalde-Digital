@@ -141,12 +141,22 @@ def hasta_estado(objetivo, maximo=120.0):
 
 
 def ir_a_cafeteria(jugadores=1):
-    """Menu -> reparto -> carga -> intro (saltada) -> rotulo -> libre."""
-    tecla("enter", 0.5)                     # Jugar
-    assert estado() == "seleccion", estado()
-    for _ in range(jugadores):
-        tecla("enter", 0.3)                 # ficha y salta al siguiente libre
-    tecla("space", 0.5)                     # continuar
+    """Menu -> carga -> intro (saltada) -> rotulo -> libre.
+
+    jugadores > 1: por el reparto de antes (abrir_seleccion), que ya no
+    tiene entrada en el menu pero sigue siendo como se juega por turnos."""
+    if jugadores > 1:
+        J.cl.menu.cerrar()
+        J.cl.menu = None
+        J.abrir_seleccion()
+        pasar(0.5)
+        assert estado() == "seleccion", estado()
+        for _ in range(jugadores):
+            tecla("enter", 0.3)             # ficha y salta al siguiente libre
+        tecla("space", 0.5)                 # continuar
+    else:
+        assert J.cl.menu.opciones[J.cl.menu.seleccion] == "Un jugador"
+        tecla("enter", 0.5)                 # Un jugador
     hasta_estado("intro", 10)
     tecla("enter", 1.0)                     # saltar la cinematica
     hasta_estado("rotulo", 10)
