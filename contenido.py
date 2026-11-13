@@ -1168,11 +1168,12 @@ TEXTO_SOSPECHOSO = (
     "acelera), Espacio salta o trepa, Ctrl te agacha y C te desliza a la "
     "carrera. Los avisos salen antes de cada obstáculo.")
 FINAL_PERSECUCION = {
-    "capturado": ("LA MOCHILA ERA UNA RED",
-                  "Dentro hay una repetidora y una lista: catorce mochilas como "
-                  "esta en catorce plazas, todas pagadas desde la misma cuenta, "
-                  "firmada «Nodo». Alguien está fabricando el caos de Ciudad Nova "
-                  "a propósito, y ahora tienes por dónde empezar a buscarlo."),
+    # Es el ultimo capitulo: lo que habia dentro, y que con eso se acabo.
+    "capturado": ("CORTASTE LA RED",
+                  "En la mochila había una repetidora que llenaba las pantallas "
+                  "con el bulo y la lista de los catorce que hacían lo mismo en "
+                  "otras plazas. La apagas y entregas la lista: sin su señal, la "
+                  "red de Nodo se queda muda y las pantallas vuelven a negro."),
     "escapo": ("SE PERDIÓ ENTRE EL HUMO",
                "El de la chaqueta negra se escapó con la mochila. Las pantallas "
                "siguen emitiendo el bulo y sin la repetidora no hay pista de "

@@ -397,8 +397,8 @@ PANTALLAS_CIUDAD = (
 CARTELES = (
     ("DE LA ESTRELLA",   (0.012, 0.115, 0.390), -38.0),
     ("PINEDA",   (0.546, 0.044, 0.033), -33.0),
-    ("LLERAS",   (0.745, 0.372, 0.023), -28.0),
-    ("RESTREPO", (0.048, 0.275, 0.093), -23.0),
+    ("MEDINA",   (0.745, 0.372, 0.023), -28.0),
+    ("RUIZ",     (0.048, 0.275, 0.093), -23.0),
 )
 X_CARTELES = MURO_CARTELES[1] + 0.05
 # Altos: la franja del apellido tiene que quedar por encima de las
@@ -1188,7 +1188,43 @@ def _peatones(mundo):
         if actor is not None:
             actores.append(actor)
     actores += _gentio(mundo, random.Random(7))
+    actores += _vidas(mundo)
     _ACTUAL["actores"] = actores
+
+
+# La vida de cada protagonista antes de la alerta (intro.PLANOS_INTRO,
+# los planos «vida_*»): (rol o npc, x, z, rumbo, clip). En la acera, entre
+# la fila de peatones y el mitin, cada uno a lo suyo.
+# Rumbo: 0 mira a -z; -90 a la calle desde la acera de la derecha (+x) y
+# 90 desde la de la izquierda. La entrevista va de perfil a la calle.
+VIDAS = (
+    ("ciudadano", 7.7, -36.0, -90, "celular"),     # Mateo, con el telefono
+    ("periodista", 7.9, -40.7, 180, "hablar"),     # Valeria entrevista...
+    ("npc2", 7.9, -39.4, 0, "idle"),               # ...a un vecino
+    ("candidato", -8.9, -47.5, 90, "hablar"),      # Abel, en su mitin
+    ("influencer", 8.0, -46.0, -90, "celular"),    # JH777, en directo
+)
+
+
+def _vidas(mundo):
+    """Los protagonistas en la acera (con su propia copia del modelo, como
+    los peatones: el de Mateo es el del jugador). Sin luces propias."""
+    actores = []
+    for quien, x, z, rumbo, clip in VIDAS:
+        if quien.startswith("npc"):
+            actor = npc(mundo, quien, (x, 0.15, z), rumbo, clip)
+        else:
+            ruta = Filename.from_os_specific(ruta_personaje(quien)).getFullpath()
+            actor = Actor(application.base.loader.loadModel(ruta).copyTo(NodePath()))
+            _quitar_mapa_de_brillo(actor)
+            actor.reparentTo(mundo)
+            actor.setPos(x, 0.15, z)
+            actor.setH(rumbo)
+            mezclar(actor)
+            animar_con_vida(actor, clip)
+        if actor is not None:
+            actores.append(actor)
+    return actores
 
 
 def _luces_ciudad(mundo):
@@ -2443,7 +2479,7 @@ def _obra_campana():
     frente = zs + 0.035
     o.pared("banner_rojo", "z", zs, 1, 9.7, 12.15, 2.4, 2.75, 0.05, 0.055)
     o.letrero("ÚLTIMA HORA", "z", frente + 0.01, 1, 10.92, 2.57, 0.12, BLANCO)
-    o.letrero("OSPINA CAE 10 PUNTOS", "z", frente, 1, 10.92, 2.15, 0.085, BLANCO)
+    o.letrero("DE LA ESTRELLA CAE 10 PUNTOS", "z", frente, 1, 10.92, 2.15, 0.065, BLANCO)
     o.letrero("#CierreDeColegios", "z", frente, 1, 10.92, 1.35, 0.1, ROJO_TITULAR)
     o.letrero("tendencia en Civitas", "z", frente, 1, 10.92, 1.15, 0.06, BLANCO)
     o.letrero("INTENCIÓN DE VOTO", "z", frente, 1, 8.32, 2.55, 0.1, BLANCO)
@@ -2490,7 +2526,7 @@ def _obra_campana():
     o.pared("pantalla_azul", "x", xf, -1, -2.1, 1.3, 1.08, 2.22, 0.05, 0.06)
     o.pared("banner_rojo", "x", xf, -1, -2.1, 1.3, 1.08, 1.32, 0.06, 0.065)
     o.letrero("NOTICIAS NOVA", "x", xf - 0.04, -1, -0.4, 1.2, 0.09, BLANCO)
-    o.letrero("OSPINA Y EL COLEGIO", "x", xf - 0.04, -1, -0.4, 1.85, 0.15, BLANCO)
+    o.letrero("DE LA ESTRELLA Y EL COLEGIO", "x", xf - 0.04, -1, -0.4, 1.85, 0.11, BLANCO)
     o.letrero("lo que no dijo", "x", xf - 0.04, -1, -0.4, 1.6, 0.09, CREMA)
 
     # ================= VOLUNTARIOS =================
@@ -2541,7 +2577,7 @@ def _obra_campana():
     o.caja("madera_clara", 3.0, 6.6, 0, 1.05, -13.3, -12.6, bloquea=True)
     o.caja("madera_oscura", 2.9, 6.7, 1.05, 1.1, -13.35, -12.55)
     o.pared("afiche_ospina", "z", zr, 1, 3.0, 6.8, 1.3, 2.6, 0, 0.03)
-    o.letrero("OSPINA ALCALDE", "z", zr, 1, 4.9, 2.0, 0.26, BLANCO)
+    o.letrero("DE LA ESTRELLA ALCALDE", "z", zr, 1, 4.9, 2.0, 0.17, BLANCO)
 
     # ================= COCINETA =================
     o.pared("madera_clara", "z", zr, 1, 7.9, 12.4, 0, 0.92, 0, 0.6, bloquea=True)

@@ -100,6 +100,12 @@ while per.empezada and not per.terminada and not per.acorralado and t < 140:
     t += 1 / 30
     if not per.empezada or per.terminada:
         break
+    alza, agachado = J._parkour_sospechoso(per)
+    if (alza > 0.5 or agachado) and len([f for f in fotos if f.startswith("sosp")]) < 6:
+        clave = f"sosp_{int(per.s)}"
+        if not any(abs(int(f[5:]) - int(per.s)) < 4 for f in fotos if f.startswith("sosp")):
+            fotos.add(clave)
+            foto("auditar_" + clave)
     cam = camera.world_position
     x, y, z = J.cl.actor.getX(), J.cl.actor.getY(), J.cl.actor.getZ()
     que = dentro(cam.x, cam.y, cam.z)

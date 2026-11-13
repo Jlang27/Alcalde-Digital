@@ -28,6 +28,7 @@ import azotea
 import cierre
 import cine_azotea
 import cine_final
+import cine_plaza
 import cine_campana
 import kombat_cliente
 import lobby
@@ -1195,6 +1196,8 @@ CINEMATICAS = {
     # El asesor entra preocupado y cita a Abel en su oficina.
     "campana": lambda actor, nombre: cine_campana.LlegadaCampana(
         actor, nombre, cl.asesor, DIALOGO_ASESOR_PREOCUPADO),
+    # La plaza en paz o en caos, como la dejaron los dias anteriores.
+    "plaza_central": cine_plaza.LlegadaPlaza,
 }
 
 
@@ -1873,6 +1876,8 @@ def empezar_duelo():
     cl.actor.setH(180.0 - math.degrees(math.atan2(1.5 - x, 22.0 - z)))
     animar("idle")
     cl.rival = plaza.preparar_duelo()
+    cl.cantantes = (Cantante(cl.actor), Cantante(cl.rival))
+    cl.duelo_pulso = 0.0
     pos, mira, fov = plaza.PLANO_DUELO
     camera.fov = fov
     camera.position = pos
@@ -1924,6 +1929,8 @@ def _reloj_duelo(dt):
 
 def duelo_paso(dt):
     cl.duelo_t += dt
+    for cantante in getattr(cl, "cantantes", ()):
+        cantante.actualizar(dt, getattr(cl, "duelo_pulso", 0.0))
     d = cl.partida.duelo
     if cl.duelo_fin is not None:
         cl.duelo_fin += dt
@@ -1949,8 +1956,10 @@ def duelo_paso(dt):
     cantadas, falladas = d.actualizar(t)
     for c in cantadas:
         cl.ritmo.canta(c)
+        cl.cantantes[1].nota(c)
     for c in falladas:
         cl.ritmo.fallo(c)
+        cl.cantantes[0].fallo()
         tropezar()
     cl.ritmo.mover(t, VELOCIDAD_NOTAS[i])
     cl.ritmo.cifras(d.puntos, d.combo, d.multiplicador, d.precision(), d.barra)
@@ -1964,12 +1973,85 @@ def duelo_paso(dt):
         cl.ritmo.cantar(quien, texto)
         _cantan(quien)
     cl.tropiezo = max(0.0, cl.tropiezo - dt)
-    plaza.pulso(max(0.0, 1.0 - (t / negra) % 1.0 * 3.0))
+    cl.duelo_pulso = max(0.0, 1.0 - (t / negra) % 1.0 * 3.0)
+    plaza.pulso(cl.duelo_pulso)
     if d.ronda_terminada(t):
         if i + 1 < len(ritmo.RONDAS):
             empezar_ronda(i + 1)
         else:
             terminar_duelo()
+
+
+# Las poses de cada nota, como en los juegos de ritmo de duelo: el que canta
+# marca la flecha con el cuerpo (izquierda, abajo, arriba, derecha) y vuelve
+# a su balanceo al compas; al fallar, se encoge. Direcciones de hueso en
+# (derecha, arriba, delante) del cantante (kombat_cliente.Cuerpo). La mano
+# derecha lleva el micro a la boca salvo cuando la flecha la pide.
+_MICRO = {"RightArm": (0.35, -0.55, 0.45), "RightForeArm": (-0.45, 0.8, 0.35)}
+_PIERNAS = {"RightUpLeg": (0.2, -1.0, 0.0), "LeftUpLeg": (-0.2, -1.0, 0.0),
+            "RightLeg": (0.0, -1.0, 0.0), "LeftLeg": (0.0, -1.0, 0.0)}
+POSE_REPOSO = {**_MICRO, **_PIERNAS, "LeftArm": (-0.3, -0.95, 0.1),
+               "LeftForeArm": (-0.15, -0.6, 0.6)}
+POSES_CANTO = (
+    # izquierda: el brazo libre señala a su izquierda, piernas abiertas
+    {**POSE_REPOSO, "LeftArm": (-1.0, 0.15, 0.15), "LeftForeArm": (-1.0, 0.2, 0.1),
+     "LeftUpLeg": (-0.45, -1.0, 0.0), "RightUpLeg": (0.3, -1.0, 0.0)},
+    # abajo: se agacha un poco con los brazos hacia el suelo
+    {**POSE_REPOSO, "LeftArm": (-0.3, -0.7, 0.65), "LeftForeArm": (-0.1, -0.9, 0.4),
+     "RightUpLeg": (0.3, -0.75, 0.6), "LeftUpLeg": (-0.3, -0.75, 0.6),
+     "RightLeg": (0.0, -1.0, -0.35), "LeftLeg": (0.0, -1.0, -0.35)},
+    # arriba: el puño al cielo
+    {**POSE_REPOSO, "LeftArm": (-0.2, 1.0, 0.1), "LeftForeArm": (-0.05, 1.0, 0.05)},
+    # derecha: el micro estirado hacia su derecha
+    {**POSE_REPOSO, "RightArm": (1.0, 0.15, 0.15), "RightForeArm": (1.0, 0.25, 0.1),
+     "RightUpLeg": (0.45, -1.0, 0.0), "LeftUpLeg": (-0.3, -1.0, 0.0)},
+)
+POSE_FALLO = {**_PIERNAS, "RightArm": (0.3, -1.0, 0.2), "RightForeArm": (0.1, -0.9, 0.4),
+              "LeftArm": (-0.3, -1.0, 0.2), "LeftForeArm": (-0.1, -0.9, 0.4)}
+DURA_POSE = 0.32            # lo que sostiene la pose de una nota
+
+
+class Cantante:
+    """Mueve a uno de los dos del duelo: pose por nota y balanceo al compas."""
+
+    def __init__(self, actor):
+        from kombat_cliente import Cuerpo
+        self.actor, self.h, self.y0 = actor, actor.getH(), actor.getY()
+        self.cuerpo = Cuerpo(actor)
+        self.pose, self.queda, self.baja = None, 0.0, 0.0
+
+    def nota(self, carril):
+        # Los dos miran al publico: la flecha izquierda de la pantalla es su
+        # derecha (y al reves), como en los juegos de ritmo.
+        self.pose, self.queda = POSES_CANTO[(3, 1, 2, 0)[carril]], DURA_POSE
+
+    def fallo(self):
+        self.pose, self.queda = POSE_FALLO, DURA_POSE * 1.4
+
+    def actualizar(self, dt, pulso):
+        from kombat_cliente import _mezcla
+        self.queda -= dt
+        posando = self.queda > 0 and self.pose is not None
+        objetivo = self.pose if posando else POSE_REPOSO
+        # La pose entra de golpe (es el acento de la nota) y sale suave.
+        f = 1.0 - math.exp(-(40.0 if posando else 9.0) * dt)
+        dirs = self.cuerpo.dirs
+        self.cuerpo.dirs = {k: _mezcla(dirs.get(k, v), v, f) for k, v in objetivo.items()}
+        # Inclinado hacia delante al cantar; al fallar, cabizbajo.
+        inclina = 12.0 if objetivo is POSE_FALLO else (6.0 if posando else 2.0 + 4.0 * pulso)
+        self.cuerpo.inclina += (inclina - self.cuerpo.inclina) * min(1.0, dt * 14)
+        # El cuerpo entero se calcula mirando a +x (como en la pelea) y se gira.
+        self.actor.setH(90.0)
+        self.cuerpo._aplicar(1)
+        self.actor.setH(self.h)
+        baja = 0.12 if objetivo is POSES_CANTO[1] else 0.05 * pulso   # bota al compas
+        self.baja += (baja - self.baja) * min(1.0, dt * 18)
+        self.actor.setY(self.y0 - self.baja)
+
+    def soltar(self):
+        self.cuerpo.soltar()
+        self.actor.setY(self.y0)
+        self.actor.setH(self.h)
 
 
 def _cantan(quien):
@@ -1991,9 +2073,11 @@ def pulsar_duelo(carril):
         return
     if juicio == "MISS":
         cl.ritmo.fallo(carril)
+        cl.cantantes[0].fallo()
         tropezar()
     else:
         cl.ritmo.acierto(carril, juicio)
+        cl.cantantes[0].nota(carril)
 
 
 def tropezar():
@@ -2154,8 +2238,12 @@ def persecucion_paso(dt):
         if actor.getCurrentAnim() != "idle":
             actor.loop("idle")
     else:
-        mundo.mover_actor(actor, p.sx, p.sz, p.rumbo, True, corriendo=True)
-        actor.setY(y)
+        alza, agachado = _parkour_sospechoso(p)
+        mundo.mover_actor(actor, p.sx, p.sz, p.rumbo, True, corriendo=not agachado)
+        if agachado and actor.getCurrentAnim() != "agachado_caminar"                 and "agachado_caminar" in actor.getAnimNames():
+            actor.setPlayRate(2.2, "agachado_caminar")
+            actor.loop("agachado_caminar")
+        actor.setY(y + alza)
     # Lo que se oye: Mateo jadea a la carrera y la mochila pita si esta cerca.
     cl.jadeo -= dt
     if j.corriendo and cl.jadeo <= 0.0:
@@ -2170,6 +2258,34 @@ def persecucion_paso(dt):
                 else OBJETIVOS_PERSECUCION[p.fase])
     accion = "¡ATRÁPALO! · E" if p.al_alcance(x, z) else p.proximo_aviso()
     hud.poner(p.restante, p.distancia, p.proximidad(), p.progreso(), fase, objetivo, accion)
+
+
+# Lo que el de la mochila hace en cada obstaculo de la ruta: (alto del
+# arco, va agachado). Antes pasaba por dentro de todo, como un fantasma.
+SALTO_SOSPECHOSO = {"saltar": 0.65, "trepar": 1.15, "brecha": 0.8}
+MEDIO_TRAMO = 1.3          # metros antes y despues del obstaculo que dura el gesto
+
+
+def _parkour_sospechoso(p):
+    """(alza, agachado) del sospechoso en la ruta: salta o trepa lo que hay
+    (un arco sobre el obstaculo) y pasa agachado bajo andamios y persianas."""
+    alza, agachado = 0.0, False
+    for ob in p.activos:
+        d = p.s - ob.get("s", -1e9)
+        if abs(d) >= MEDIO_TRAMO:
+            continue
+        if ob["tipo"] in SALTO_SOSPECHOSO:
+            arco = SALTO_SOSPECHOSO[ob["tipo"]] * math.cos(math.pi * d / (2 * MEDIO_TRAMO))
+            if ob["tipo"] == "brecha":
+                # Sobre el hueco el suelo baja a 0: se suma lo que falta hasta
+                # la plataforma (1 m), o caeria dentro a medio salto.
+                x0, x1, z0, z1 = ob["rect"]
+                if abs(d) < min(x1 - x0, z1 - z0) / 2:     # el hueco va a lo corto
+                    arco += 1.0
+            alza = max(alza, arco)
+        elif ob["tipo"] in ("agacharse", "deslizar"):
+            agachado = True
+    return alza, agachado
 
 
 def capturar():
@@ -2234,6 +2350,9 @@ def cerrar_minijuegos():
     if cl.ritmo is not None:
         cl.ritmo.cerrar()
         cl.ritmo = None
+    for cantante in getattr(cl, "cantantes", ()):
+        cantante.soltar()
+    cl.cantantes = ()
     if cl.hud_persecucion is not None:
         cl.hud_persecucion.cerrar()
         cl.hud_persecucion = None

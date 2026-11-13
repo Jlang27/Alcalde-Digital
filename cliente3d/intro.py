@@ -44,6 +44,17 @@ PLANOS_INTRO = (
     # que cruzan por delante le dan primer termino al plano.
     ("carteles", 6.0, Vec3(0.0, 2.5, -44), Vec3(0.0, 2.5, -17),
      Vec3(-10, 3.0, -40), Vec3(-10, 3.0, -14), 56),
+    # La vida de cada protagonista, un instante cada uno, desde la mediana
+    # (mundo.VIDAS): Mateo con el telefono, Valeria entrevistando, Abel en
+    # su mitin y JH777 en directo. Asi la alerta les cae a ellos tambien.
+    ("vida_mateo", 2.2, Vec3(5.0, 1.6, -38.4), Vec3(5.2, 1.6, -38.0),
+     Vec3(7.7, 1.45, -36.0), Vec3(7.7, 1.45, -36.0), 42),
+    ("vida_valeria", 2.2, Vec3(4.9, 1.6, -42.8), Vec3(5.1, 1.6, -42.4),
+     Vec3(8.1, 1.5, -40.0), Vec3(8.1, 1.5, -40.0), 44),
+    ("vida_abel", 2.2, Vec3(-5.9, 1.65, -50.2), Vec3(-6.1, 1.7, -49.8),
+     Vec3(-8.9, 1.75, -47.5), Vec3(-8.9, 1.75, -47.5), 42),
+    ("vida_jh777", 2.2, Vec3(5.3, 1.6, -48.6), Vec3(5.5, 1.6, -48.2),
+     Vec3(8.0, 1.5, -46.0), Vec3(8.0, 1.5, -46.0), 42),
     # Los peatones. Aqui suenan todos los telefonos.
     ("peatones", 7.0, Vec3(6.7, 1.50, -34), Vec3(6.9, 1.55, -31),
      Vec3(8.6, 1.40, -15), Vec3(8.6, 1.50, -15), 50),
@@ -61,8 +72,16 @@ DURACION = _t
 
 T_CACEROLAS = 3.4
 T_RADIO = 7.8
-T_ALERTA = INICIOS[3] + 1.5
-T_TITULO = INICIOS[4] + 2.4
+_PLANO = {p[0]: i for i, p in enumerate(PLANOS_INTRO)}
+T_ALERTA = INICIOS[_PLANO["peatones"]] + 1.5
+T_TITULO = INICIOS[_PLANO["final"]] + 2.4
+# Quien es cada uno, en el primer plano suyo: (plano, rotulo, que hace).
+VIDAS = (
+    ("vida_mateo", "MATEO GAITÁN  ·  CIUDADANO", "Lee las noticias de camino al trabajo."),
+    ("vida_valeria", "VALERIA SAMPER  ·  PERIODISTA", "Pregunta a los vecinos qué piensan votar."),
+    ("vida_abel", "ABEL DE LA ESTRELLA  ·  CANDIDATO", "Promete un colegio mejor a quien lo escuche."),
+    ("vida_jh777", "JUAN HERNÁNDEZ  ·  JH777", "En directo para cien mil seguidores."),
+)
 T_NEGRO = DURACION - 1.2
 
 RADIO = ("—Ciudad Nova se prepara para una de las elecciones más "
@@ -359,7 +378,7 @@ class Intro:
             arriba.text = "URGENTE"
             arriba.scale = 50 * k
             arriba.y += 0.6 * k
-            abajo.text = "OSPINA PLANEA CERRAR\nLOS COLEGIOS PÚBLICOS"
+            abajo.text = "DE LA ESTRELLA PLANEA\nCERRAR LOS COLEGIOS"
             abajo.scale = 24 * k
             en_pantalla |= {id(arriba), id(abajo), id(cifra)}
         # Blanco sobre rojo: la cuenta atras ambar ya no pinta nada.
@@ -407,6 +426,11 @@ class Intro:
             for p in self.radio:
                 p.fade_out(duration=0.4)
             self.radio = []
+        for plano, rotulo, texto in VIDAS:
+            cuando = INICIOS[_PLANO[plano]] + 0.15
+            if antes < cuando <= t:
+                for p in self._subtitulo(rotulo, texto, E.LLERAS):
+                    p.fade_out(duration=0.25, delay=1.8)
         if antes < T_ALERTA <= t:
             self._sonar_telefonos()
         if self.alerta:

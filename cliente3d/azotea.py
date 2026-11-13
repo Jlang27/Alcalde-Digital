@@ -110,7 +110,7 @@ def _pintar_afiche(img):
     d, (w, h) = ImageDraw.Draw(img), img.size
     d.rectangle((0, 0, w, h), fill=(29, 95, 168, 255))
     d.rectangle((0, int(h * 0.72), w, h), fill=(240, 237, 229, 255))
-    d.text((w / 2, h * 0.22), "OSPINA", font=M._letra(int(h * 0.15)),
+    d.text((w / 2, h * 0.22), "DE LA ESTRELLA", font=M._letra(int(h * 0.075)),
            fill=(240, 237, 229, 255), anchor="mm")
     d.text((w / 2, h * 0.36), "ALCALDE", font=M._letra(int(h * 0.085)),
            fill=(224, 164, 42, 255), anchor="mm")

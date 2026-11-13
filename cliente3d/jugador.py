@@ -126,6 +126,8 @@ CLIPS = {
     "correr": (("correr", 1.0), ("caminar", 1.7)),
     "agachado": (("agachado", 1.0), ("idle", 1.0)),
     "agachado_andar": (("agachado_caminar", 1.0), ("caminar", 0.55)),
+    # En la persecucion se corre tambien agachado (siempre_corre).
+    "agachado_correr": (("agachado_caminar", 1.0), ("caminar", 1.2)),
     # Deslizarse por debajo de una barrera: la pose agachada, a la carrera.
     "deslizar": (("agachado", 1.0), ("agachado_caminar", 1.6)),
 }
@@ -156,6 +158,7 @@ VELOCIDAD_DE = {
     "andar": VELOCIDAD,
     "correr": VELOCIDAD_CORRER,
     "agachado_andar": VELOCIDAD_AGACHADO,
+    "agachado_correr": VELOCIDAD_CORRER,
     "deslizar": VELOCIDAD_DESLIZ,
 }
 
@@ -484,8 +487,8 @@ class Jugador:
                 # Agachado gana: con Ctrl pulsado no se puede correr.
                 self.agachado = bool(held_keys["control"]) or self.agachado_fijo
                 self.corriendo = ((bool(held_keys["shift"]) or (self.siempre_corre and avance > 0))
-                                  and not self.agachado and not self.apuntando
-                                  ) or self.desliz is not None
+                                  and (not self.agachado or self.siempre_corre)
+                                  and not self.apuntando) or self.desliz is not None
                 if self.trepa is None:        # trepando lo lleva el impulso
                     self._caminar(avance, lado, dt)
                 self._avanzar_salto(dt)
@@ -742,6 +745,10 @@ class Jugador:
 
         if self.desliz is not None:
             velocidad, estado = VELOCIDAD_DESLIZ, "deslizar"
+        elif self.agachado and self.corriendo:
+            # La persecucion no frena por agacharse: se pasa bajo el andamio
+            # a la carrera (en el sigilo, agachado sigue siendo lento).
+            velocidad, estado = VELOCIDAD_CORRER, "agachado_correr"
         elif self.agachado:
             velocidad, estado = VELOCIDAD_AGACHADO, "agachado_andar"
         elif self.corriendo:
