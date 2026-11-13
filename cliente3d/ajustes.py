@@ -42,6 +42,8 @@ VALORES = {
     "imagen": 2,                   # 0 no, 1 suave, 2 cine (posproceso.py)
     "antialias": 2,                # 0 no, 1 2x, 2 4x, 3 8x (posproceso.py)
     "reflejos": True,              # el cielo en lo pulido (ambiente.py)
+    "nombre": "",                  # como te llamas en la sala (lobby.py)
+    "ultima_sala": "",             # la IP o el codigo de la ultima vez
 }
 
 RITMOS = ("Pausado", "Normal", "Rápido")
@@ -78,7 +80,9 @@ def cargar():
     for clave, valor in guardado.items():
         if clave not in VALORES:
             continue                         # sobra: version vieja
-        if isinstance(VALORES[clave], bool):
+        if isinstance(VALORES[clave], str):
+            VALORES[clave] = str(valor)[:40]
+        elif isinstance(VALORES[clave], bool):
             VALORES[clave] = bool(valor)
         elif isinstance(valor, (int, float)):
             VALORES[clave] = int(valor)

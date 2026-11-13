@@ -3946,11 +3946,10 @@ def nivel_de_imagen():
 
 def con_reflejos():
     """Ajustes, o ALCALDE_REFLEJOS (0/1) si se fuerza (ambiente.py)."""
-    forzado = os.environ.get("ALCALDE_REFLEJOS")
-    if forzado in ("0", "1"):
-        return forzado == "1"
-    import ajustes
-    return bool(ajustes.VALORES.get("reflejos", True))
+    # APAGADOS salvo que se fuercen: en esta version los metales (tanques,
+    # lamparas, patas de mesa) reflejan el cielo entero, como espejos. La
+    # fila de Ajustes se quito hasta arreglarlo (pendiente en CLAUDE.md).
+    return os.environ.get("ALCALDE_REFLEJOS") == "1"
 
 
 def reflejos(si):
@@ -3989,6 +3988,7 @@ def crear(escenario="cafeteria", rol=None):
     # escenario nacen ya proyectando (o no).
     luces.preparar_shaders()
     posproceso.preparar_shaders()
+    ambiente.preparar_shaders()
     luces.calidad(nivel_de_sombras())
     texturas.calidad(nivel_de_texturas())
     _montar(mundo, escenario)

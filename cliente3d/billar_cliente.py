@@ -299,7 +299,8 @@ class MesaVista:
 # =====================================================================
 
 class HudBillar:
-    def __init__(self, partida):
+    def __init__(self, partida, yo="daniel"):
+        self.yo = yo
         self.p = partida
         self.piezas, self.tmp, self.fichas = [], [], {}
         a = self.piezas.append
@@ -382,9 +383,9 @@ class HudBillar:
                 ficha.color = color.rgb32(*tinta_de(n))
                 franja.enabled = n in B.RAYADAS
                 tacha.enabled = not p.mesa.bolas[n].en_mesa
-        if p.grupo["daniel"]:
-            self.grupo_txt.text = f"TÚ VAS CON {p.grupo['daniel'].upper()}"
-            if p.va_por_la_ocho("daniel"):
+        if p.grupo[self.yo]:
+            self.grupo_txt.text = f"TÚ VAS CON {p.grupo[self.yo].upper()}"
+            if p.va_por_la_ocho(self.yo):
                 self.grupo_txt.text = "TÚ VAS POR LA 8"
         self.potencia.scale_y = max(0.0001, 0.44 * potencia)
         self.potencia.y = -0.31 + self.potencia.scale_y / 2
@@ -436,12 +437,18 @@ MOTIVO_GRUPO = {"lisas": "LISAS", "rayadas": "RAYADAS"}
 class Billar:
     """actualizar(dt) devuelve True cuando ya se puede cerrar el dia."""
 
-    def __init__(self, partida, actor, asesor):
+    def __init__(self, partida, actor, asesor, yo="daniel", remoto=None):
+        """yo: a quien lleva ESTE PC («daniel» o, en red, «asesor»).
+        remoto: en red, lo que hace el otro jugador mientras apunta
+        ({"angulo", "retro"}, lo actualiza versus.py); None = contra la IA."""
         self.p = partida
+        self.yo = yo
+        self.remoto = remoto
+        self.retro = 0.0                  # cuanto echo atras el taco (se envia)
         self.padre = mundo._ACTUAL["contenedor"]
         mundo.lampara_billar(False)
         self.vista = MesaVista(partida, self.padre)
-        self.hud = HudBillar(partida)
+        self.hud = HudBillar(partida, yo)
         self.angulo = 0.0
         self.efecto = [0.0, 0.0]
         self.potencia = 0.0
@@ -495,7 +502,7 @@ class Billar:
         return x - self.vista.tx, z - self.vista.tz
 
     def mi_turno(self):
-        return self.p.turno == "daniel" and self.p.fase == "apunta" and self.t_fin is None
+        return self.p.turno == self.yo and self.p.fase == "apunta" and self.t_fin is None
 
     # --- teclas ---
     def tecla(self, k):
@@ -562,8 +569,10 @@ class Billar:
             self.vista.pintar(dt)
             self.hud.actualizar(0.0, self.efecto)
             return self.t_fin >= CIERRE
-        if p.fase == "apunta" and p.turno == "daniel":
+        if p.fase == "apunta" and p.turno == self.yo:
             self._turno_daniel(dt)
+        elif p.fase == "apunta" and self.remoto is not None:
+            self._turno_remoto()
         elif p.fase == "apunta":
             self._turno_asesor(dt)
         else:
@@ -622,8 +631,9 @@ class Billar:
                 return
         else:
             retro = RECOGER * self.potencia
+        self.retro = retro
         self.vista.poner_taco(self.angulo, retro)
-        tronera = self.vista.poner_guia(self.angulo, p.taco["guia"])
+        tronera = self.vista.poner_guia(self.angulo, p.taco["guia"] if self.yo == "daniel" else 1.0)
         va_8 = p.va_por_la_ocho()
         self.vista.poner_cantada(tronera if va_8 else None)
         if va_8:
@@ -641,6 +651,15 @@ class Billar:
         p.tirar(self.angulo, potencia, tuple(self.efecto), tronera)
         self.efecto = [0.0, 0.0]
         self.vista.ocultar_guia()
+
+    def _turno_remoto(self):
+        """Tira el otro jugador: su taco se ve donde el lo tiene (sin guia:
+        la del rival no se ve)."""
+        self.vista.ocultar_guia()
+        self.vista.mano.enabled = False
+        self.angulo = self.remoto.get("angulo", self.angulo)
+        self.vista.poner_taco(self.angulo, self.remoto.get("retro", 0.0))
+        self.hud.decir(f"APUNTA {self.remoto.get('nombre', 'EL RIVAL').upper()}…")
 
     def _turno_asesor(self, dt):
         """Piensa (el arbol de jugadas), lleva el taco a su angulo, lo echa
@@ -695,27 +714,35 @@ class Billar:
             elif tipo == "falta":
                 _t, quien, motivo = ev
                 audio.efecto("volver")
-                quien_txt = "FALTA TUYA" if quien == "daniel" else "FALTA DEL ASESOR"
+                quien_txt = ("FALTA TUYA" if quien == self.yo else
+                             "FALTA DEL ASESOR" if quien == "asesor" else "FALTA DE ABEL")
                 self.hud.anuncio(quien_txt, motivo, E.GAITAN, dura=1.6)
             elif tipo == "grupo":
                 _t, quien, g = ev
-                mio = g if quien == "daniel" else ("rayadas" if g == "lisas" else "lisas")
+                mio = g if quien == self.yo else ("rayadas" if g == "lisas" else "lisas")
                 self.hud.anuncio(f"VAS CON {MOTIVO_GRUPO[mio]}", "", E.OSPINA, dura=1.4)
             elif tipo == "turno":
                 _t, quien, en_mano = ev
                 self.ia = None
                 self._colocada = False
-                if quien == "daniel":
+                if quien == self.yo:
                     self._apuntar_hacia_lo_suyo()
-                if en_mano and quien == "daniel":
+                if en_mano and quien == self.yo:
                     self.hud.anuncio("BOLA EN MANO", "colócala donde quieras", E.RESTREPO, 1.3)
-                elif quien == "daniel":
+                elif quien == self.yo:
                     self.hud.decir("TE TOCA")
             elif tipo == "fin":
                 _t, res, motivo = ev
-                titulo = {"mesa_limpia": "¡MESA LIMPIA!", "gano": "¡GANASTE!",
-                          "perdio": "GANA EL ASESOR"}[res]
-                tinta = E.GAITAN if res == "perdio" else E.RESTREPO
+                # el resultado esta contado desde Abel: el que lleva al
+                # asesor gana justo cuando Abel pierde
+                if self.yo == "daniel":
+                    titulo = {"mesa_limpia": "¡MESA LIMPIA!", "gano": "¡GANASTE!",
+                              "perdio": "GANA EL ASESOR"}[res]
+                    gane = res != "perdio"
+                else:
+                    titulo = "¡GANASTE!" if res == "perdio" else "GANA ABEL"
+                    gane = res == "perdio"
+                tinta = E.RESTREPO if gane else E.GAITAN
                 self.hud.anuncio(titulo, motivo, tinta)
                 audio.efecto("sello")
                 audio.parar_musica(fundido=1.5)
@@ -728,7 +755,7 @@ class Billar:
         nunca empieza mirando a la nada."""
         p = self.p
         b = p.mesa.bolas[0]
-        objetivos = [p.mesa.bolas[n] for n in p.objetivos("daniel") if p.mesa.bolas[n].en_mesa]
+        objetivos = [p.mesa.bolas[n] for n in p.objetivos(self.yo) if p.mesa.bolas[n].en_mesa]
         if objetivos and b.en_mesa:
             o = min(objetivos, key=lambda o: math.hypot(o.x - b.x, o.y - b.y))
             self.angulo = math.atan2(o.y - b.y, o.x - b.x)

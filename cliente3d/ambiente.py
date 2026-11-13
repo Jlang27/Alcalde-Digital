@@ -119,6 +119,41 @@ def _preparar(clave, nombre_cielo, sol, color_sol):
     return env
 
 
+_IBL_VIEJO = """    vec3 ibl_f = fresnelSchlickRoughness(n_dot_v, spec_color, perceptual_roughness);
+    vec3 ibl_kd = (1.0 - ibl_f) * (1.0 - metallic);
+    vec3 ibl_diff = base_color.rgb * max(irradiance_from_sh(world_normal), 0.0) * diffuse_function();
+
+    vec3 world_view = normalize(camera_world_position - v_world_position);
+    vec3 ibl_r = reflect(-world_view, world_normal);
+    vec2 env_brdf = texture2D(brdf_lut, vec2(n_dot_v, perceptual_roughness)).rg;"""
+# Con la normal GEOMETRICA y no con la del mapa de relieve: en las piezas
+# cuya tangente llega mal (suelos, cilindros) la normal con relieve sale
+# nula, el angulo se lee como rasante y la pieza reflejaba el cielo entero,
+# como un espejo: tanques, lamparas y suelos blanquecinos.
+_IBL_NUEVO = """    vec3 world_view = normalize(camera_world_position - v_world_position);
+    vec3 ibl_n = normalize(v_world_tbn[2]);
+    float ibl_ndv = clamp(abs(dot(ibl_n, world_view)), 0.0, 1.0);
+    vec3 ibl_f = fresnelSchlickRoughness(ibl_ndv, spec_color, perceptual_roughness);
+    vec3 ibl_kd = (1.0 - ibl_f) * (1.0 - metallic);
+    vec3 ibl_diff = base_color.rgb * max(irradiance_from_sh(ibl_n), 0.0) * diffuse_function();
+
+    vec3 ibl_r = reflect(-world_view, ibl_n);
+    vec2 env_brdf = texture2D(brdf_lut, vec2(ibl_ndv, perceptual_roughness)).rg;"""
+
+
+def preparar_shaders():
+    """Antes de `simplepbr.init`, como luces.py y posproceso.py."""
+    import simplepbr.shaders as sh
+    texto = sh.shaders.get("simplepbr.frag", "")
+    if "ibl_ndv" in texto:
+        return True
+    if _IBL_VIEJO not in texto:
+        print("ambiente: el shader de simplepbr cambio; reflejos sin corregir")
+        return False
+    sh.shaders["simplepbr.frag"] = texto.replace(_IBL_VIEJO, _IBL_NUEVO)
+    return True
+
+
 def _tabla_brdf(lado=64):
     """La tabla que dice cuanto refleja una superficie segun el angulo
     (u) y su rugosidad (v). La que trae simplepbr va en coma flotante de

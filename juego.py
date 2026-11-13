@@ -82,6 +82,15 @@ HORA_INICIO = 7 * 60 + 30
 MINUTOS_POR_RONDA = 10
 MINUTOS_MIRAR = 5              # mirar algo en el celular: media charla
 MAX_RONDAS = 6
+# En red, el rumor no baja solo: lo lleva el segundo jugador, de un vecino
+# a otro por las aristas. Cada entrega gasta un envio; los gana con el
+# reloj del protagonista (cuanto mas investiga este, mas corre el rumor) y
+# con cada jugada del tablero. Con la mañana entera salen 1 + 6 = 7, justo
+# para llegar a los seis vecinos que faltan: solo si el protagonista la
+# gasta toda.
+ENVIOS_INICIALES = 1
+MINUTOS_POR_ENVIO = 10
+ENVIOS_POR_JUGADA = 2
 EFECTO_RONDA = {"desinformacion": 2}
 COMPARTIDOS_POR_RONDA = 150
 # Lo bueno que hagas al decidir rinde segun a cuantos vecinos aun puedes
@@ -290,6 +299,11 @@ class Partida:
         # El dia 4 son dos cosas seguidas: primero el directo (el chat que
         # se modera) y, cuando Nodo lanza su reto por privado, la pelea.
         self.kombat = None            # la pelea en directo del dia 4 (kombat.py)
+        # En red: el rumor del dia 1 lo lleva el segundo jugador (regar).
+        self.rumor_manual = False
+        self.regados = None           # a quienes ya se lo llevo
+        self.envios_gastados = 0
+        self.envios_extra = 0         # los que dan las jugadas del tablero
         self.billar = None            # la partida con el asesor del dia 3 (billar.py)
         self.estado_plaza = None      # "pacifica" o "caotica", el dia 5
         self.duelo = None             # el minijuego de la pacifica (ritmo.py)
@@ -593,6 +607,10 @@ class Partida:
     def _estado_plaza(self):
         """La plaza del capitulo 5 es la que dejaron los dias anteriores:
         si la desinformacion y los conflictos subieron, se desborda."""
+        if getattr(self, "plaza_forzada", None):
+            # En red el capitulo 5 es siempre el duelo (los dos cantan): la
+            # persecucion es de un solo jugador.
+            return self.plaza_forzada
         tension = self.indicadores["desinformacion"] + self.indicadores["conflictos"]
         return "caotica" if tension > TENSION_PLAZA else "pacifica"
 
@@ -792,6 +810,81 @@ class Partida:
                 g.eliminar_arista(de, a)
         return g
 
+    # --- el rumor llevado a mano (en red: el segundo jugador) ---
+
+    def _regados(self):
+        """A quienes ya les llego. Empieza donde empieza el dia de un
+        jugador: el BFS hasta el nivel inicial."""
+        if self.regados is None:
+            _, prof = self._sin_ti().bfs(ORIGEN_RUMOR, max_prof=NIVEL_INICIAL)
+            self.regados = set(prof)
+        return self.tablero["alcanzados"] if self.tablero is not None else self.regados
+
+    def envios(self):
+        """Los envios que le quedan al que riega el rumor."""
+        if not self.rumor_manual or self.red is None:
+            return 0
+        ganados = ENVIOS_INICIALES + self.minutos // MINUTOS_POR_ENVIO + self.envios_extra
+        return max(0, ganados - self.envios_gastados)
+
+    def destinos_rumor(self):
+        """{destino: origen}: a quien se le puede llevar ahora y desde quien.
+        Es la frontera del recorrido: los vecinos de lo alcanzado que aun
+        no lo estan. Lo avisado no entra y lo convencido ya no pasa nada
+        (sus aristas no estan en _sin_ti)."""
+        if not self.rumor_manual or self.red is None or self.dia_cerrado_rumor():
+            return {}
+        alcanzados, g = self._regados(), self._sin_ti()
+        avisados = self.tablero["avisados"] if self.tablero is not None else set()
+        destinos = {}
+        for v in sorted(alcanzados):
+            if v not in g.adyacencia:
+                continue
+            for w in g.vecinos(v):
+                if w not in alcanzados and w not in avisados:
+                    destinos.setdefault(w, v)
+        return destinos
+
+    def dia_cerrado_rumor(self):
+        return self.arbol_decision is None or self.arbol_decision.termino()
+
+    def regar(self, destino):
+        """El segundo jugador le lleva el rumor a `destino`. Devuelve el
+        origen (desde quien le llego) o None si no se puede."""
+        origen = self.destinos_rumor().get(destino)
+        if origen is None or self.envios() <= 0:
+            return None
+        self.envios_gastados += 1
+        self._regados().add(destino)
+        return origen
+
+    def estado_rumor(self):
+        """El tablero como lo ve quien riega el rumor: la red ENTERA (es
+        suya), con la misma forma que estado_tablero para dibujarla igual."""
+        t = self.tablero
+        alcanzados = self._regados()
+        convencidos = t["convencidos"] if t is not None else set()
+        avisados = t["avisados"] if t is not None else set()
+        cortadas = set(t["cortadas"]) if t is not None else set()
+        destinos = self.destinos_rumor()
+        fichas = {}
+        for v, d in self.red.datos.items():
+            if d["tipo"] in ("jugador", "testigo", "medio"):
+                continue
+            estado = ("convencido" if v in convencidos else "avisado" if v in avisados
+                      else "cree" if v in alcanzados else "sano")
+            fichas[v] = {"nombre": d["nombre"], "tipo": d["tipo"], "voto": d["voto"],
+                         "conocido": True, "estado": estado, "frase": "",
+                         "contacto": v in CONTACTOS, "salva": 0}
+        hilos = [(b, a, True, (b, a) in cortadas)
+                 for a, b in self.red.aristas() if a in fichas and b in fichas]
+        creen = [v for v in self.vecinos() if v in alcanzados and v not in convencidos]
+        return {"fichas": fichas, "hilos": hilos, "pruebas": [], "intentos": [],
+                "jugadas": self.envios(), "total": 0, "proximos": sorted(destinos),
+                "destinos": destinos, "creen": len(creen), "vecinos": len(self.vecinos()),
+                "hora": self.hora(), "tablero": t is not None,
+                "cerrado": self.dia_cerrado_rumor()}
+
     def creyentes(self, nivel=None):
         """Vecinos a los que ya les llego el rumor, por BFS desde el origen.
 
@@ -805,6 +898,8 @@ class Partida:
             t = self.tablero
             return [v for v in self.vecinos()
                     if v in t["alcanzados"] and v not in t["convencidos"]]
+        if self.rumor_manual and nivel is None:
+            return [v for v in self.vecinos() if v in self._regados()]
         _, prof = self._sin_ti().bfs(ORIGEN_RUMOR, max_prof=nivel or self.nivel_rumor())
         return [v for v in self.vecinos() if v in prof]
 
@@ -818,6 +913,8 @@ class Partida:
             return
         nivel = self.nivel_rumor()
         _, prof = self._sin_ti().bfs(ORIGEN_RUMOR, max_prof=nivel)
+        if self.rumor_manual:
+            prof = self._regados()        # hasta donde lo llevo el otro jugador
         self.tablero = {"nivel": nivel, "alcanzados": set(prof),
                         "convencidos": set(), "avisados": set(), "cortadas": [],
                         "jugadas": JUGADAS_TABLERO, "intentos": set()}
@@ -838,6 +935,10 @@ class Partida:
                        if w not in t["alcanzados"] and w not in t["avisados"]})
 
     def _avanzar_frente(self):
+        if self.rumor_manual:
+            # en red el frente no baja solo: la jugada le da envios al otro
+            self.envios_extra += ENVIOS_POR_JUGADA
+            return []
         nuevos = self._siguientes()
         self.tablero["alcanzados"].update(nuevos)
         self.tablero["nivel"] += 1

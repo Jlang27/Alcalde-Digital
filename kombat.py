@@ -290,8 +290,12 @@ class Pelea:
         self.santi = Luchador("JH777", -1.6, 1)
         self.nodo = Luchador("Nodo", 1.6, -1)
         self.ia = IANodo(dificultad, semilla)
+        # En red a Nodo lo lleva el segundo jugador: la IA calla y sus
+        # teclas entran por pulsar(tecla, "nodo"), como las de JH777.
+        self.nodo_humano = False
         self.combos = arbol_combos()
         self.buffer = deque(maxlen=6)       # (tecla relativa, instante)
+        self.buffer_nodo = deque(maxlen=6)
         self.proyectiles = []
         self.reloj = DURACION
         self.t = 0.0
@@ -315,9 +319,12 @@ class Pelea:
             return "adelante" if l.mira < 0 else "atras"
         return tecla
 
-    def pulsar(self, tecla):
+    def pulsar(self, tecla, quien="santi"):
         """Teclas del jugador: izquierda, derecha, arriba, abajo, ligero,
-        medio, fuerte, replica. Devuelve lo que se ordeno, o None."""
+        medio, fuerte, replica. Devuelve lo que se ordeno, o None.
+        quien: «santi» o, si a Nodo lo lleva una persona, «nodo»."""
+        if quien == "nodo":
+            return self._pulsar_nodo(tecla)
         s = self.santi
         if self.fase == "remate":
             if tecla in BOTONES + ("replica",) and abs(self.nodo.x - s.x) <= ALCANCE_REMATE:
@@ -352,8 +359,42 @@ class Pelea:
             return "replica" if self.ordenar(s, "replica") else None
         return None
 
-    def soltar(self, tecla):
-        s = self.santi
+    def _pulsar_nodo(self, tecla):
+        """Lo mismo que pulsar(), para Nodo. Sus especiales salen con las
+        mismas teclas, pero lo suyo es el BULO: donde JH777 verifica, el
+        lanza uno. En el remate esta aturdido: no puede hacer nada."""
+        n = self.nodo
+        if not self.nodo_humano or self.fase != "pelea":
+            return None
+        rel = self._relativa(tecla, n)
+        self.buffer_nodo.append((rel, self.t))
+        if tecla in ("izquierda", "derecha"):
+            n.andar = 1 if rel == "adelante" else -1
+            return None
+        if tecla == "abajo":
+            n.agachado = True
+            return None
+        if tecla == "arriba":
+            return "saltar" if self.saltar(n) else None
+        if tecla in BOTONES:
+            teclas = [k for k, t in self.buffer_nodo if self.t - t <= VENTANA_COMBO]
+            nombre, _largo = self.combos.reconocer(teclas)
+            nombre = {"verificar": "bulo"}.get(nombre, nombre)
+            if nombre is not None and self.ordenar(n, nombre):
+                self.buffer_nodo.clear()
+                return nombre
+            if self.ordenar(n, tecla):
+                return n.mov
+            n.pendiente = (tecla, self.t)
+            return None
+        if tecla == "replica":
+            return "replica" if self.ordenar(n, "replica") else None
+        return None
+
+    def soltar(self, tecla, quien="santi"):
+        s = self.santi if quien == "santi" else self.nodo
+        if quien == "nodo" and not self.nodo_humano:
+            return
         if tecla in ("izquierda", "derecha"):
             # solo si se suelta la que manda: con las dos pulsadas, soltar
             # una no puede dejarlo quieto
@@ -409,7 +450,10 @@ class Pelea:
         if l.en_aire:
             l.salto_golpe = True
         else:
-            l.andar = 0 if l is not self.santi else l.andar
+            # la IA suelta el paso al pegar; a una persona se le respeta
+            # la tecla que tenga pulsada
+            humano = l is self.santi or self.nodo_humano
+            l.andar = l.andar if humano else 0
         l.cadena = l.cadena + 1 if encadena else 1
         l.estado, l.mov, l.t, l.acerto, l.conecto = "atacar", mov, 0.0, False, False
         l.pendiente = None
@@ -449,7 +493,8 @@ class Pelea:
                 self._terminar("gano")
             return
         self.reloj -= dt
-        self.ia.decidir(self, self.nodo, self.santi, dt)
+        if not self.nodo_humano:
+            self.ia.decidir(self, self.nodo, self.santi, dt)
         for l in (self.santi, self.nodo):
             self._avanzar(l, dt)
         self._mover(dt)
@@ -915,5 +960,29 @@ if __name__ == "__main__":
         combos.append(p.mejor_combo)
     assert ganadas >= 18, ganadas      # jugar con cabeza gana casi siempre
     assert max(combos) >= 3, combos    # y salen combos de verdad
+    # En red, Nodo es una persona: la IA no decide nada y sus teclas
+    # mandan. Sin teclas, se queda quieto; con ellas anda, pega y lanza
+    # su bulo con la misma secuencia con la que JH777 verifica.
+    p = Pelea(semilla=3)
+    p.nodo_humano = True
+    assert p.pulsar("ligero", "nodo") in GOLPES and p.nodo.estado == "atacar"
+    p = Pelea(semilla=3)
+    assert p.pulsar("ligero", "nodo") is None           # sin nodo_humano no manda
+    p.nodo_humano = True
+    x0 = p.nodo.x
+    _paso(p, 1.0)
+    assert p.nodo.x == x0 and p.nodo.estado == "quieto", "la IA sigue moviendo a Nodo"
+    p.pulsar("izquierda", "nodo")                        # hacia JH777
+    _paso(p, 0.4)
+    assert p.nodo.x < x0 - 0.5
+    p.soltar("izquierda", "nodo")
+    for tecla in ("abajo", "izquierda"):
+        p.pulsar(tecla, "nodo")
+    p.soltar("abajo", "nodo")
+    assert p.pulsar("ligero", "nodo") == "bulo"
+    p.soltar("izquierda", "nodo")
+    _paso(p, 0.5)
+    assert any(pr.tipo == "bulo" for pr in p.proyectiles) or p.santi.vida < VIDA
+
     print(f"kombat: todo bien (un jugador decente gana {ganadas}/30, "
           f"mejor combo {max(combos)})")

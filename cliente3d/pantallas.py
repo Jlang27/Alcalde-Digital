@@ -53,17 +53,18 @@ PISTAS = (
 # Renglonaje del menu. No hay panel: las opciones se apoyan en un
 # degradado, no en una caja.
 OPCION_X = -0.84
-_OPCION_Y = 0.125
-_OPCION_SALTO = 0.078
+_OPCION_Y = 0.140
+_OPCION_SALTO = 0.068      # siete renglones (con «Multijugador») entre el titulo y el pie
 
 # La linea que se lee debajo del renglon marcado. Es la unica forma en
 # que el menu cuenta algo, y cuenta solo lo del renglon que miras: la
 # historia se destapa jugando, no en la portada.
 PIES_DE_MENU = (
-    "Entra a Ciudad Nova y elige con qué voz vas a hablar esta semana.",
-    "Tres pasos y los controles. Lo justo para sentarse a jugar.",
+    "La historia entera, tú solo: cinco jornadas, cada una con su protagonista.",
+    "Dos PC en la misma red: uno juega la historia y el otro va contra él.",
     "Cinco jornadas, cinco protagonistas. Juega cualquiera por "
     "separado.",
+    "Tres pasos y los controles. Lo justo para sentarse a jugar.",
     "Volumen, contraste, tamaño de letra y ritmo de la jornada.",
     "Quién hay detrás de esto y con qué está hecho.",
     "Cerrar el periódico. Ciudad Nova vota igual.",
@@ -2105,8 +2106,6 @@ FILAS = (
      "Resplandor de las luces, color y viñeta. «Suave» no pesa nada."),
     ("antialias", "Antialiasing", "opcion",
      "Bordes sin dientes de sierra. 8x, solo con gráfica dedicada."),
-    ("reflejos", "Reflejos del cielo", "casilla",
-     "El atardecer en los metales y una luz que cambia según a dónde mira cada cosa."),
     ("volumen", "Volumen general", "barra",
      "Manda sobre la música y los efectos."),
     ("musica", "Música", "barra",

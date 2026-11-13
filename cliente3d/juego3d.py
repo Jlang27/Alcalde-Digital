@@ -29,6 +29,9 @@ import cierre
 import cine_azotea
 import cine_campana
 import kombat_cliente
+import lobby
+import versus
+versus.enchufar(sys.modules[__name__])
 import billar_cliente
 import plaza
 import cine_colegio
@@ -110,6 +113,8 @@ class Cliente:
         self.npcs = {}                # id -> Actor de la cafeteria
         self.bloqueos_npc = []
         self.capitulo = 0             # el dia con el que arranca la partida
+        self.lobby = None             # la sala del multijugador (lobby.Lobby)
+        self.sesion = None            # lobby.Sesion mientras se juega en red
         self.capitulo_sel = 0         # el renglon marcado en «Capítulos»
         self.vigilantes = {}          # id -> (actor, abanico, foco, haz) del dia 2
         self.figurantes = {}          # gente de escenario sin pistas (el rector)
@@ -204,8 +209,8 @@ def abrir_menu():
     audio.musica(audio.MUSICA_MENU)
     mundo.corte("PM")
     cl.menu = pantallas.Menu(
-        ["Jugar", "Cómo se juega", "Capítulos", "Ajustes", "Créditos",
-         "Salir"], elegir_del_menu,
+        ["Un jugador", "Multijugador", "Capítulos", "Cómo se juega", "Ajustes",
+         "Créditos", "Salir"], elegir_del_menu,
         candidatos=[nombre for nombre, _lema, _pesos in CANDIDATOS])
     # Sin esto el del fondo se queda en bucle de idle y la portada
     # parece una captura; con esto saca el telefono y habla.
@@ -218,8 +223,48 @@ def elegir_del_menu(indice):
         return
     cl.menu.cerrar()
     cl.menu = None
-    (abrir_seleccion, abrir_como_jugar, abrir_capitulos, abrir_ajustes,
+    (jugar_solo, abrir_lobby, abrir_capitulos, abrir_como_jugar, abrir_ajustes,
      abrir_creditos)[indice]()
+
+
+def jugar_solo(capitulo=0):
+    """«Un jugador»: la historia desde el dia 1, sin elegir personaje. Cada
+    capitulo tiene el suyo (contenido.PERSONAJE_DEL_DIA), como en Detroit:
+    elegir uno aqui para que luego no se respetara no tenia sentido. El
+    reparto de antes (abrir_seleccion) sigue en el codigo, sin entrada en
+    el menu. capitulo: en red, el anfitrion puede empezar mas adelante."""
+    cl.capitulo = capitulo
+    rol = rol_capitulo(capitulo)
+    cl.rol_elegido, cl.reparto = rol, [rol]
+    poner_personaje(PERSONAJE_DEL_DIA.get(capitulo) or rol)
+    abrir_carga()
+
+
+# ===================================================================
+#  MULTIJUGADOR: la sala y el arranque (lobby.py, versus.py)
+# ===================================================================
+
+def abrir_lobby():
+    cl.estado = "lobby"
+    cl.lobby = lobby.Lobby(empezar_en_red, salir_del_lobby)
+
+
+def salir_del_lobby():
+    cl.lobby = None
+    abrir_menu()
+
+
+def empezar_en_red(sesion):
+    """Los dos dijeron «listo». El protagonista juega la historia de
+    siempre en su PC (que es quien lleva la Partida) y avisa al otro de
+    lo que va pasando; el desinformador entra a su propio recorrido."""
+    cl.lobby = None
+    cl.sesion = sesion
+    versus.empezar(sesion)
+    if sesion.protagonista:
+        jugar_solo(sesion.capitulo)
+    else:
+        cl.estado = "versus"
 
 
 # ===================================================================
@@ -1843,7 +1888,9 @@ def empezar_ronda(i):
     cl.duelo_reloj = None
     cl.duelo_frase = None
     ronda = ritmo.RONDAS[i]
-    cl.ritmo.preparar(ritmo.partitura(i))
+    # la partitura como la ve quien juega en este PC (en red, el segundo
+    # jugador pulsa las notas del rival)
+    cl.ritmo.preparar(cl.partida.duelo.partitura_de(i))
     cl.ritmo.poner_ronda(f"RONDA {i + 1} DE {len(ritmo.RONDAS)}  ·  {ronda['nombre']}")
     cl.ritmo.titulo(f"RONDA {i + 1} DE {len(ritmo.RONDAS)}", ronda["nombre"],
                     SUBTITULO_RONDA[i])
@@ -1959,6 +2006,9 @@ def tropezar():
 
 
 def terminar_duelo():
+    if versus.desinformador():
+        versus.fin_duelo_local()      # el resultado lo dice el protagonista
+        return
     d = cl.partida.duelo
     res = d.resultado()
     audio.parar_musica(fundido=1.2)
@@ -3348,6 +3398,11 @@ def actualizar_mapa():
                            cl.jugador.yaw, gente_del_mapa())
 
 def update():
+    if cl.estado == "lobby" and cl.lobby is not None:
+        cl.lobby.actualizar(time.dt)
+        return
+    if versus.actualizar(time.dt):
+        return                       # el desinformador: todo lo lleva versus
     if cl.estado == "menu" and cl.menu is not None:
         cl.menu.actualizar(time.dt)
         return
@@ -3527,6 +3582,8 @@ def update():
 
 
 def volver_al_menu():
+    versus.terminar()                # si se jugaba en red, se cuelga
+    cl.sesion = None
     audio.callar_todo()
     audio.agachar(False)
     cerrar_libre()
@@ -3593,6 +3650,11 @@ def cerrar_pantalla(jugar = False):
         abrir_menu()
 
 def input(tecla):
+    if cl.estado == "lobby" and cl.lobby is not None:
+        cl.lobby.tecla(tecla)
+        return
+    if cl.sesion is not None and versus.tecla(tecla):
+        return
     if cl.confirmando:
         if tecla in ("left arrow", "a", "right arrow", "d"):
             audio.efecto("mover")

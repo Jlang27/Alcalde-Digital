@@ -46,6 +46,7 @@ RONDAS = (
 )
 ENTRADA = 1                # un compas de cuenta atras antes de la primera nota
 PERFECTA, PARCIAL = 0.85, 0.60
+MARGEN_RIVAL = 0.10        # en red: quedar tan por debajo del rival es perder
 # La barra: arranca en el medio, sube al acertar y baja al fallar.
 BARRA_ACIERTO, BARRA_FALLO = 0.025, 0.06
 
@@ -100,12 +101,40 @@ class Duelo:
         self.ronda = None
         self.notas = []          # las de Mateo que quedan por juzgar
         self.rival = []          # las del rival que quedan por cantar
+        # En red el rival es el segundo jugador: toca sus notas en su PC y
+        # aqui llegan sus juicios (juicio_rival). Cuentan para la barra y
+        # para el resultado.
+        self.rival_humano = False
+        self.rival_juzgadas = 0
+        self.rival_peso = 0.0
+
+    MIO, AJENO = "mateo", "rival"      # quien toca en este PC y quien no
+
+    def partitura_de(self, i):
+        """La partitura como la ve quien juega aqui: sus notas son las de
+        «mateo» (las que se pulsan) y las del otro, las de «rival»."""
+        return [(t, c, "mateo" if q == self.MIO else "rival")
+                for t, c, q in partitura(i, self.semilla)]
 
     def empezar(self, i):
         self.ronda = i
-        todas = partitura(i, self.semilla)
+        todas = self.partitura_de(i)
         self.notas = [[t, c] for t, c, q in todas if q == "mateo"]
         self.rival = [[t, c] for t, c, q in todas if q == "rival"]
+
+    def juicio_rival(self, nombre):
+        """Una nota del rival humano, juzgada en su PC. Su acierto tira de
+        la barra hacia el; su fallo se la devuelve a Mateo."""
+        peso = next((p for n, _v, _pt, p in JUICIOS if n == nombre), 0.0)
+        self.rival_juzgadas += 1
+        self.rival_peso += peso
+        if nombre == "MISS":
+            self.barra = min(1.0, self.barra + BARRA_ACIERTO)
+        else:
+            self.barra = max(0.0, self.barra - BARRA_ACIERTO * peso)
+
+    def precision_rival(self):
+        return self.rival_peso / self.rival_juzgadas if self.rival_juzgadas else 0.0
 
     @property
     def multiplicador(self):
@@ -163,7 +192,21 @@ class Duelo:
     def resultado(self):
         """"perfecta", "parcial" o "derrota", por la precision total."""
         p = self.precision()
+        if self.rival_humano and self.rival_juzgadas:
+            # Contra una persona no basta con tocar bien: hay que tocar
+            # mejor que ella. La perfecta pide ademas no quedar por debajo;
+            # se pierde tocando mal o quedando claramente por detras.
+            r = self.precision_rival()
+            if p >= PERFECTA and p >= r:
+                return "perfecta"
+            return "derrota" if p < PARCIAL or p < r - MARGEN_RIVAL else "parcial"
         return "perfecta" if p >= PERFECTA else "parcial" if p >= PARCIAL else "derrota"
+
+
+class DueloRival(Duelo):
+    """El duelo en el PC del segundo jugador: toca las notas del rival (las
+    que en un jugador canta solo) y ve pasar las de Mateo."""
+    MIO, AJENO = "rival", "mateo"
 
 
 def _pruebas():
