@@ -276,6 +276,13 @@ try:
                 pasar(0.6)
                 if pb.fase == "apunta" and pb.turno == "daniel":
                     ang, pot, ef, _tr = B.jugador_simulado(pb, 0.8, azar)
+                    if tiros["daniel"] == 0:
+                        # El saque, flojo: con fuerza a veces entraba la 8 y la
+                        # partida acababa antes de que al invitado le tocara,
+                        # que es justo lo que esta prueba quiere ver. Flojo no
+                        # mete nada y el turno pasa (o es falta: bola en mano
+                        # para el asesor, que tambien le toca).
+                        pot = 0.12
                     bil._colocada = True
                     bil.tirar_ya(ang, pot, ef)
             if pb.turno == "asesor" and pb.fase == "apunta" and "apunta" not in visto:

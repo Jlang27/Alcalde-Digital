@@ -87,30 +87,125 @@ RUTINA_MENU = (
     ("hablar", 5.5),
 )
 
-# Esto ya no vive en la portada: vive detras de una opcion. Era el
-# bloque que la convertia en una diapositiva llena de texto.
-COMO_SE_JUEGA = (
-    ("1", "Llega el rumor",
-     "A las 7:30 una publicación entra a Civitas y el barrio empieza a "
-     "creerla. Si no haces nada, sigue su camino sin ti."),
-    ("2", "Investiga: hablar cuesta",
-     "Pregunta a la gente (cada charla son 10 minutos y el rumor avanza) "
-     "y toca la publicación en el celular. Tab abre tu libreta."),
-    ("3", "Decide con el teléfono",
-     "Al sacarlo se acaba la investigación: eliges con 1-9 antes de que "
-     "el reloj llegue a cero. Lo que no ganaste no estará."),
-    ("4", "La ciudad recuerda",
-     "Al cerrar el día ves tu camino, a quién le llegó el rumor y cómo se "
-     "mueve la encuesta. Con amigos, cada día juega otro: pasen el control."),
-)
-
-CONTROLES = (
-    ("WASD", "moverse"),
-    ("E", "hablar"),
-    ("Tab", "libreta"),
-    ("Enter", "teléfono y confirmar"),
-    ("1-9", "decidir"),
-    ("Esc", "menú"),
+# La AYUDA, pagina a pagina: (titulo, entradilla, renglones). Cada renglon
+# es (lo que se busca, lo que hay que saber). Si se cambia una regla del
+# juego, se cambia aqui; ComoJugar solo la pinta.
+AYUDA = (
+    ("Objetivo",
+     "Ciudad Nova elige alcalde en cinco días y por Civitas corren rumores, "
+     "bulos y ataques. Tú decides qué hacer con lo que te llega.",
+     (("La meta", "Que la ciudad llegue a la elección con más información "
+                  "verificada, más convivencia y más confianza."),
+      ("Lo que evitas", "Que suban la desinformación, los conflictos y los "
+                        "rumores que se comparten sin mirar."),
+      ("Cómo", "Investiga antes de creer, verifica antes de compartir y "
+               "reporta lo que es falso."),
+      ("Sin preguntas", "Aquí no hay examen: se aprende por lo que pasa "
+                        "después de cada decisión."),
+      ("Cinco días", "Cada día es un capítulo con su protagonista, como en "
+                     "Detroit: Become Human."),
+      ("Memoria", "Lo que haces un día cambia los siguientes: la ciudad "
+                  "recuerda."))),
+    ("Reglas",
+     "Un capítulo por día. Cada uno se juega distinto, pero todos terminan "
+     "en una decisión que mueve la ciudad.",
+     (("Día 1", "Cafetería. Llega un rumor y el barrio empieza a creerlo. "
+                "Investigas (cada charla 10 min, el celular 5) y a las 8:30 "
+                "frenas el rumor en el tablero."),
+      ("Día 2", "Colegio, de noche. Saca la propuesta del archivo sin que "
+                "te vean los vigilantes. Tres avisos y te echan."),
+      ("Día 3", "Oficina de campaña. Una partida de billar con el asesor "
+                "decide si sale un rumor sucio contra el rival."),
+      ("Día 4", "Azotea, en directo. Empiezas tu directo en el trípode y "
+                "Nodo te reta: gánale la pelea o sale su audio falso."),
+      ("Día 5", "La plaza. Según cómo vaya la ciudad: duelo de ritmo "
+                "contra el rumor, o perseguir al de la mochila."),
+      ("Tiempo", "Muchas decisiones tienen reloj. Si no eliges, la "
+                 "publicación sigue su camino sin ti."),
+      ("Al azar", "Cada día trae un evento distinto (una red de bots, una "
+                  "campaña de convivencia...) y cambia entre partidas."),
+      ("Cierre", "Al terminar el día ves tu camino en el árbol, a quién le "
+                 "llegó el rumor en el grafo y cómo se mueve la encuesta."))),
+    ("Botones",
+     "Teclado y ratón, o mando: con un mando enchufado las leyendas "
+     "muestran sus botones.",
+     (("WASD", "Moverse."),
+      ("Ratón", "Mirar alrededor."),
+      ("Shift", "Correr (te oyen más)."),
+      ("Ctrl", "Agacharse."),
+      ("E", "Hablar, agarrar, mirar lo que tienes al lado."),
+      ("1 - 9", "Elegir: preguntas, opciones, objetos."),
+      ("F", "Mirar el celular (día 1)."),
+      ("Enter", "Confirmar; en el día 1 abre el tablero."),
+      ("Tab", "La libreta: lo que sabes y los indicadores."),
+      ("C", "Esconderse; con A y D te asomas (día 2)."),
+      ("Clic", "Mantener apunta, soltar lanza (día 2)."),
+      ("Billar", "Ratón apunta, clic y arrastra para la potencia."),
+      ("Pelea", "J K L golpean, U se cubre, W salta, S se agacha."),
+      ("Duelo", "Flechas o WASD al ritmo de las notas."),
+      ("Persecución", "Espacio salta, Ctrl agacha, C desliza, E atrapa."),
+      ("Esc", "Pausa: seguir, ajustes o volver al menú."))),
+    ("Personajes",
+     "No eliges uno: cada capítulo tiene el suyo y cada uno resuelve las "
+     "cosas a su manera.",
+     (("Mateo Gaitán", "Ciudadano (días 1 y 5). Recibe la información "
+                       "como cualquiera; su fuerza es no reenviar lo que no "
+                       "verificó."),
+      ("Valeria Samper", "Periodista (día 2). Investiga y busca pruebas, "
+                         "aunque tenga que colarse en un archivo."),
+      ("Abel de la Estrella", "Candidato (día 3). Tiene que ganar confianza "
+                              "sin jugar sucio contra sus rivales."),
+      ("JH777", "Influencer (día 4). Lo que dice llega a cien mil "
+                "personas: sus decisiones pesan más que las de nadie."),
+      ("Multijugador", "Dos PC: uno es el protagonista y el otro el "
+                       "desinformador, que riega el rumor, vigila, juega por "
+                       "el asesor, es Nodo o lleva la mochila."))),
+    ("Cómo se gana",
+     "Al final se vota. El resultado es la encuesta del último día, y cada "
+     "decisión de los cinco la fue moviendo.",
+     (("En paz", "Decidiste bien: la plaza celebra y gana el candidato que "
+                 "no jugó sucio."),
+      ("Partida en dos", "El rumor ganó el duelo de la plaza: nadie rompe "
+                         "nada, pero nadie se habla."),
+      ("Se levanta", "La plaza ardió, pero recuperaste la mochila y la "
+                     "verdad llegó a tiempo."),
+      ("En ruinas", "Los bulos corrieron sin freno o el de la mochila "
+                    "escapó."),
+      ("La plaza", "Está tranquila o en caos según la desinformación y los "
+                   "conflictos que dejaste los días anteriores."),
+      ("Tu puntuación", "Sube con la reputación y lo que verificas; baja "
+                        "cuando compartes lo que no sabías si era cierto."))),
+    ("Indicadores",
+     "Seis números de 0 a 100 describen la ciudad. Los ves en la libreta "
+     "(Tab) y en el cierre de cada día.",
+     (("Información verificada", "Cuánto de lo que circula se comprobó. "
+                                 "Sube al investigar y desmentir."),
+      ("Confianza ciudadana", "Cuánto se creen unos a otros. Baja con cada "
+                              "bulo que se comparte."),
+      ("Convivencia", "Si los vecinos discuten sin romperse. Sube con el "
+                      "diálogo y las campañas."),
+      ("Bienestar digital", "Si usar Civitas hace bien o hace daño."),
+      ("Desinformación", "Cuánto bulo hay suelto. Si sube, la plaza del "
+                         "último día acaba en caos."),
+      ("Conflictos", "Peleas y ataques. También empujan la plaza al caos."))),
+    ("Accesibilidad",
+     "Todo se cambia en Ajustes, también en mitad de la partida (Esc).",
+     (("Alto contraste", "Para quien ve poco o juega con mucha luz: negro "
+                         "sobre blanco y tintas oscuras que se leen."),
+      ("Texto grande", "Para quien lee con dificultad o juega lejos de la "
+                       "pantalla: agranda todo el cuerpo de texto."),
+      ("Subtítulos", "Siempre puestos y con el nombre de quien habla, para "
+                     "quien no oye bien o juega sin sonido."),
+      ("Avisos a la vista", "Los avisos importantes (te vieron, llega un "
+                            "mensaje) se ven además de oírse."),
+      ("Brillo", "Se ajusta mirando la propia escena, para pantallas "
+                 "oscuras o proyectores."),
+      ("Mando", "Se juega entero con mando, para quien no se maneja con "
+                "teclado y ratón."),
+      ("Ritmo", "Alarga el reloj de las decisiones para quien necesita "
+                "más tiempo para leer."),
+      ("Gráficos", "Sombras, texturas e imagen se bajan para que el juego "
+                   "vaya fluido en cualquier PC."))),
 )
 
 # La fila del elenco, igual que en mundo.PASO_ELENCO.
@@ -1757,49 +1852,84 @@ class Menu:
 
 
 class ComoJugar:
-    """El cajon donde vive lo que antes llenaba la portada de texto.
+    """La AYUDA (seccion 16 del enunciado): siete paginas que se pasan con
+    las flechas. Cubre lo que pide el documento por nombre —objetivo,
+    reglas, botones, cada personaje, como se gana y que es cada
+    indicador— y la pagina de accesibilidad explica que dificultad atiende
+    cada opcion, que es lo que pide la seccion 15.
 
-    Tres pasos y los controles. Nada mas: si no cabe en una ojeada, no
-    sirve de nada en una feria, que es donde se va a enseñar.
+    Una idea por renglon y renglones cortos: se lee de pie en una feria.
+    El texto vive en AYUDA (arriba), no aqui: cambiar una regla es
+    cambiar una tupla.
     """
 
-    def __init__(self):
+    def __init__(self, pagina=0):
+        self.pagina = max(0, min(len(AYUDA) - 1, pagina))
+        self.fijas = []
         self.piezas = []
-        self.piezas.append(E.banda(2.4, 1.20, (0, 0), E.tinta(234),
-                                   z=E.Z_FONDO))
+        self.fijas.append(E.banda(2.4, 1.20, (0, 0), E.tinta(236), z=E.Z_FONDO))
+        self.fijas.append(E.pequena("AYUDA  ·  MANUAL DE LA EDICIÓN", (-0.80, 0.43),
+                                    E.TEXTO_TENUE, escala=0.56))
+        self.fijas.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46), z=E.Z_ADORNO))
+        self.fijas += E.leyenda((("flechas", "pasar página"), ("esc", "volver")), -0.458)
+        self._pintar(animado=True)
 
-        def nace(pieza, retraso, desde=-0.05):
-            destino = pieza.x
-            pieza.x = destino + desde
-            pieza.alpha = 0
-            pieza.animate_x(destino, duration=0.32, delay=retraso,
-                            curve=curve.out_cubic)
-            pieza.fade_in(duration=0.28, delay=retraso)
-            self.piezas.append(pieza)
+    def _nace(self, pieza, retraso, animado):
+        self.piezas.append(pieza)
+        if not animado:
             return pieza
+        destino = pieza.x
+        pieza.x = destino - 0.04
+        pieza.alpha = 0
+        pieza.animate_x(destino, duration=0.28, delay=retraso, curve=curve.out_cubic)
+        pieza.fade_in(duration=0.24, delay=retraso)
+        return pieza
 
-        nace(E.pequena("MANUAL DE LA EDICIÓN", (-0.62, 0.40), E.TEXTO_TENUE,
-                       escala=0.56), 0.02)
-        nace(E.titular("Cómo se juega", (-0.62, 0.345), 2.5, E.TEXTO), 0.06)
-        self.piezas.append(E.regla(1.24, (-0.62, 0.262), 0.0030, E.TEXTO))
+    def _pintar(self, animado=False):
+        _limpiar(self.piezas)
+        titulo, entradilla, renglones = AYUDA[self.pagina]
+        n = len(AYUDA)
+        # las pestañas: una por pagina, la actual en tinta
+        for k in range(n):
+            x = -0.80 + k * 0.235
+            actual = k == self.pagina
+            self.piezas.append(E.banda(0.22, 0.004, (x + 0.11, 0.392),
+                                       E.TEXTO if actual else E.luz(40)))
+            self.piezas.append(E.pequena(AYUDA[k][0].upper(), (x, 0.380),
+                                         E.TEXTO if actual else E.TEXTO_TENUE,
+                                         escala=0.46))
+        self._nace(E.titular(titulo, (-0.80, 0.320), 2.3, E.TEXTO), 0.02, animado)
+        if entradilla:
+            linea = E.pequena(entradilla, (-0.80, 0.248), E.TEXTO_TENUE, escala=0.62)
+            linea.wordwrap = 96
+            self._nace(linea, 0.05, animado)
+        self.piezas.append(E.regla(1.60, (-0.80, 0.205), 0.0024, E.luz(70)))
+        # renglones: (clave, texto). Dos columnas si no caben en una.
+        alto = 0.058 if len(renglones) <= 9 else 0.047
+        por_columna = 9 if len(renglones) <= 9 else 11
+        for k, (clave, texto) in enumerate(renglones):
+            col, fila = divmod(k, por_columna)
+            x = -0.80 + col * 0.82
+            y = 0.165 - fila * alto
+            ancho_clave = 0.25 if len(renglones) > 9 else 0.30
+            self._nace(E.etiqueta(clave, (x, y), 0.70, E.LLERAS), 0.07 + k * 0.025, animado)
+            cuerpo = E.pequena(texto, (x + ancho_clave, y + 0.004), E.TEXTO, escala=0.58)
+            cuerpo.wordwrap = 52 if len(renglones) > 9 else 70
+            self._nace(cuerpo, 0.08 + k * 0.025, animado)
+        self.piezas.append(E.pequena(f"{self.pagina + 1} / {n}", (0.80, 0.43),
+                                     E.TEXTO_TENUE, escala=0.56, origen=(0.5, 0.5)))
 
-        for i, (numero, titulo, linea) in enumerate(COMO_SE_JUEGA):
-            y = 0.185 - i * 0.145
-            nace(E.titular(numero, (-0.62, y), 2.6, E.TEXTO_TENUE),
-                 0.12 + i * 0.07)
-            nace(E.titular(titulo, (-0.50, y + 0.004), 1.25, E.TEXTO),
-                 0.14 + i * 0.07)
-            cuerpo = E.pequena(linea, (-0.50, y - 0.044), E.TEXTO_TENUE,
-                               escala=0.62)
-            cuerpo.wordwrap = 62
-            nace(cuerpo, 0.16 + i * 0.07)
-
-        self.piezas.append(E.banda(2.4, 0.003, (0, -0.418), E.luz(46),
-                                   z=E.Z_ADORNO))
-        self.piezas += E.leyenda(CONTROLES, -0.458)
+    def pasar(self, paso):
+        nueva = max(0, min(len(AYUDA) - 1, self.pagina + paso))
+        if nueva == self.pagina:
+            return False
+        self.pagina = nueva
+        self._pintar(animado=True)
+        return True
 
     def cerrar(self):
         _limpiar(self.piezas)
+        _limpiar(self.fijas)
 
 
 class Seleccion:

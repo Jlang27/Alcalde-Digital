@@ -218,7 +218,7 @@ def abrir_menu():
     audio.musica(audio.MUSICA_MENU)
     mundo.corte("PM")
     cl.menu = pantallas.Menu(
-        ["Un jugador", "Multijugador", "Capítulos", "Minijuegos", "Cómo se juega",
+        ["Un jugador", "Multijugador", "Capítulos", "Minijuegos", "Ayuda",
          "Ajustes", "Créditos", "Salir"], elegir_del_menu,
         candidatos=[nombre for nombre, _lema, _pesos in CANDIDATOS])
     # Sin esto el del fondo se queda en bucle de idle y la portada
@@ -473,15 +473,39 @@ def abrir_minijuegos(seleccion=0):
         y = 0.272 - i * 0.078
         col = E.TEXTO if i == seleccion else E.TEXTO_TENUE
         if i == seleccion:
-            caja, filo, largo = E.marca_seleccion(-0.86, y - 0.022, 1.10, alto=0.064,
+            caja, filo, largo = E.marca_seleccion(-0.86, y - 0.022, 0.98, alto=0.064,
                                                   tinta_filo=E.ACENTO_UI)
             caja.scale_x, filo.scale_x = 1.0, largo
             p += [caja, filo]
         p.append(E.pequena(f"{cap + 1:02d}", (-0.84, y), E.UI, escala=0.62))
         p.append(E.etiqueta(titulo, (-0.74, y), 0.92, col))
         p.append(E.pequena(que, (-0.74, y - 0.034), E.TEXTO_TENUE, escala=0.56))
+    p += _foto_minijuego(*MINIJUEGOS[seleccion])
     p.append(E.banda(2.4, 0.003, (0, -0.408), E.luz(46), z=E.Z_ADORNO))
     p += E.leyenda((("flechas", "elegir"), ("enter", "jugar"), ("esc", "volver")), -0.448)
+
+
+def _foto_minijuego(clave, cap, titulo, _que):
+    """A la derecha de la lista, la foto del minijuego marcado: una captura
+    del propio juego (assets/fotos/mini_<clave>.jpg) montada como foto de
+    prensa, con su borde de papel y su pie. Sin foto, no se pone nada."""
+    x, y, ancho = 0.515, 0.050, 0.66
+    alto = ancho * 9 / 16
+    foto = E.imagen(f"fotos/mini_{clave}.jpg", ancho, alto, (x, y), z=E.Z_ADORNO - 0.02)
+    if foto is None:
+        return []
+    marco = E.banda(ancho + 0.018, alto + 0.018, (x, y), E.PAPEL, z=E.Z_ADORNO - 0.01)
+    sombra = E.banda(ancho + 0.018, alto + 0.018, (x + 0.008, y - 0.008),
+                     color.rgba(0, 0, 0, 120), z=E.Z_ADORNO)
+    for pieza in (sombra, marco, foto):
+        pieza.rotation_z = -1.2
+    # entra como una foto que se deja sobre la mesa, no aparece de golpe
+    foto.alpha = 0
+    foto.fade_in(duration=0.18)
+    pie_y = y - alto / 2 - 0.036
+    return [sombra, marco, foto,
+            E.pequena(f"CAPÍTULO {cap + 1}", (x - ancho / 2, pie_y), E.UI, escala=0.62),
+            E.pequena(titulo, (x - ancho / 2 + 0.135, pie_y), E.TEXTO, escala=0.62)]
 
 
 def mover_minijuego(paso):
@@ -4152,7 +4176,10 @@ def input(tecla):
         return
 
     elif cl.estado == "comojugar":
-        if tecla in ("escape", "enter", "space"):
+        if tecla in ("right arrow", "d", "left arrow", "a"):
+            if cl.como.pasar(1 if tecla in ("right arrow", "d") else -1):
+                audio.efecto("pagina")
+        elif tecla in ("escape", "enter", "space", "backspace"):
             audio.efecto("volver")
             cerrar_como_jugar()
         return

@@ -252,6 +252,38 @@ def banda(ancho, alto, posicion, col, padre=None, z=Z_ADORNO):
                   scale=(ancho, alto), position=(x, y, z))
 
 
+CARPETA_IMAGENES = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+_imagenes = {}
+
+
+def textura(ruta):
+    """La textura de una foto o un video de assets/ («fotos/cap_1.jpg»), o
+    None si no esta o no se puede leer: quien la pide decide que poner en
+    su lugar. Se guarda: el menu de minijuegos se rehace a cada flecha."""
+    if ruta not in _imagenes:
+        from ursina import Texture
+        completa = os.path.join(CARPETA_IMAGENES, *ruta.split("/"))
+        try:
+            # Path y no str: Ursina solo resuelve una ruta absoluta si es Path
+            _imagenes[ruta] = Texture(Path(completa)) if os.path.isfile(completa) else None
+        except Exception:
+            _imagenes[ruta] = None
+        if _imagenes[ruta] is not None and _imagenes[ruta]._texture is None:
+            _imagenes[ruta] = None
+    return _imagenes[ruta]
+
+
+def imagen(ruta, ancho, alto, posicion, padre=None, z=Z_ADORNO):
+    """Una foto de assets/ en un rectangulo. None si la foto no esta."""
+    foto = textura(ruta)
+    if foto is None:
+        return None
+    x, y = posicion
+    return Entity(parent=padre or camera.ui, model="quad", texture=foto,
+                  color=color.white, scale=(ancho, alto), position=(x, y, z))
+
+
 def sello(texto, posicion, col, padre=None, retraso=0.0, giro=-8):
     """Sello de goma: marco y letra en una tinta, girado, que cae sobre el
     papel (de 1,35 a 1). Devuelve las piezas con el contenedor al final:

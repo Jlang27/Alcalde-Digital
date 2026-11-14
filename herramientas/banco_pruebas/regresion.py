@@ -39,8 +39,14 @@ REGLAS = (
 
 def correr(orden, donde):
     try:
-        r = subprocess.run(orden, cwd=donde, capture_output=True, text=True, timeout=1200)
-        salida = r.stdout + r.stderr
+        # utf-8 explicito: en Windows el texto se leia con la pagina de
+        # codigos del sistema, la primera tilde mataba al lector y
+        # stdout llegaba como None (TypeError al sumar).
+        entorno = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+        r = subprocess.run(orden, cwd=donde, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", env=entorno,
+                           timeout=1200)
+        salida = (r.stdout or "") + (r.stderr or "")
         bien = r.returncode == 0 and "Traceback" not in salida
     except subprocess.TimeoutExpired as e:
         salida, bien = (e.stdout or "") + "\n(se paso de tiempo)", False

@@ -232,7 +232,12 @@ def unirse(ip, puerto=PUERTO, espera=4.0):
     try:
         sock = socket.create_connection((ip, puerto), timeout=espera)
     except socket.timeout:
-        return None, "Nadie contesta en esa dirección."
+        # Casi siempre es el firewall de Windows del otro PC, o una wifi
+        # que no deja a los equipos verse entre si (las de los eventos):
+        # se dice que hacer, no solo que fallo.
+        return None, ("Nadie contesta. En el PC que hostea, ejecuta como "
+                      "administrador herramientas/abrir_puerto_feria.bat; si "
+                      "sigue igual, usad el punto de acceso de un celular.")
     except ConnectionRefusedError:
         return None, "Ese PC no está hosteando una partida."
     except OSError:

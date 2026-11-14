@@ -3,7 +3,9 @@
 Cinco planos sobre Ciudad Nova al atardecer, segun el guion: la ciudad
 desde el aire, la avenida con los buses y la pantalla gigante, los
 cuatro carteles, los peatones a los que les suena el telefono a la vez
-y la ciudad otra vez desde arriba, ya en rojo.
+y la ciudad otra vez desde arriba, ya en rojo. Entre los protagonistas y
+la alerta, EL RECORRIDO: un travelling por el lugar de cada capitulo
+(cafeteria, rectoria, billar, azotea y tarima) con su titulo en el centro.
 
 Aqui no hay reglas de juego: solo camara, rotulos y el decorado que
 monta mundo.py. Por eso vive en el cliente y no en juego.Partida.
@@ -19,16 +21,30 @@ Lenguaje de montaje (skill de direccion de fotografia):
 import math
 import random
 
-from ursina import Entity, Text, Vec3, camera, color, curve, destroy, scene
+from ursina import (Entity, Text, Vec2, Vec3, camera, color, curve, destroy,
+                    scene, window)
 
 import audio
 import estilo as E
 import mundo
+from pantallas import CAPITULOS
 
 # (nombre, segundos, camara desde, camara hasta, mira desde, mira hasta,
 #  fov). Los numeros salen de la planta de mundo.py: la avenida va por
 # x = 0 a lo largo de z, los carteles estan en el muro de x = -10 y los
 # peatones en la acera de x = +8.
+# EL RECORRIDO: donde va a pasar cada capitulo. No se monta ningun
+# escenario (serian cinco cargas en mitad de la cinematica): cada plano es
+# un video grabado en el propio juego con banco_pruebas/grabar_recorrido.py
+# (assets/video/recorrido_<n>.mp4) que tapa la pantalla; si en algun PC el
+# video no carga, sale su foto (assets/fotos/cap_<n>.jpg) con un empuje lento.
+# La camara de la ciudad se queda quieta detras, donde la recoge «peatones».
+SEGUNDOS_RECORRIDO = 3.0
+_QUIETA = (Vec3(6.7, 1.50, -34), Vec3(6.7, 1.50, -34),
+           Vec3(8.6, 1.40, -15), Vec3(8.6, 1.40, -15), 50)
+_RECORRIDO = tuple((f"cap_{n + 1}", SEGUNDOS_RECORRIDO) + _QUIETA
+                   for n in range(len(CAPITULOS)))
+
 PLANOS_INTRO = (
     # La ciudad desde el aire, entrando hacia las torres del centro.
     # Desde lejos y alto, para que entre cielo: pegada a las torres la
@@ -55,6 +71,7 @@ PLANOS_INTRO = (
      Vec3(-8.9, 1.75, -47.5), Vec3(-8.9, 1.75, -47.5), 42),
     ("vida_jh777", 2.2, Vec3(5.3, 1.6, -48.6), Vec3(5.5, 1.6, -48.2),
      Vec3(8.0, 1.5, -46.0), Vec3(8.0, 1.5, -46.0), 42),
+) + _RECORRIDO + (
     # Los peatones. Aqui suenan todos los telefonos.
     ("peatones", 7.0, Vec3(6.7, 1.50, -34), Vec3(6.9, 1.55, -31),
      Vec3(8.6, 1.40, -15), Vec3(8.6, 1.50, -15), 50),
@@ -132,6 +149,11 @@ class Intro:
         self.cifra = None         # ultimo texto del contador en pantalla
         self.titulo = []
         self.letreros = []
+        self.cine = None          # el rectangulo donde se ve el recorrido
+        self.rotulo_cap = []      # el titulo del capitulo que esta en pantalla
+        # Los videos se abren ya: abrirlos al cortar daria un tiron en el corte.
+        self.videos = [E.textura(f"video/recorrido_{n + 1}.mp4")
+                       for n in range(len(CAPITULOS))]
 
         self._barras()
         self._rotulos_del_decorado()
@@ -294,6 +316,78 @@ class Intro:
             chip.animate_scale(0.001, duration=0.25, delay=retraso + 1.1)
             self.piezas.append(chip)
 
+    def _recorrido(self, n):
+        """El plano del capitulo n (desde 0): su video a toda pantalla,
+        detras de las barras, y el titulo en el centro."""
+        ancho = max(window.aspect_ratio, 16 / 9)
+        if self.cine is None:
+            self.cine = Entity(parent=camera.ui, model="quad", z=-0.4,
+                               color=color.white)
+            self.piezas.append(self.cine)
+        for s in list(self.cine.animations):
+            s.kill()
+        self.cine.scale = (ancho, ancho * 9 / 16)
+        video = self.videos[n]
+        if video is not None:
+            pelicula = video._texture
+            self.cine.texture = video
+            # El video no mide una potencia de dos: Panda3D lo mete en una
+            # textura mayor y dice que trozo ocupa.
+            if hasattr(pelicula, "getTexScale"):
+                self.cine.texture_scale = Vec2(*pelicula.getTexScale())
+            if hasattr(pelicula, "play"):
+                pelicula.setLoop(False)
+                pelicula.setTime(0.0)
+                pelicula.play()
+        else:
+            foto = E.textura(f"fotos/cap_{n + 1}.jpg")
+            self.cine.texture = foto
+            self.cine.texture_scale = Vec2(1, 1)
+            self.cine.color = color.white if foto else color.black
+            # Sin video, la foto no se queda clavada: un empuje lento.
+            self.cine.animate_scale(self.cine.scale * 1.07,
+                                    duration=SEGUNDOS_RECORRIDO + 0.2,
+                                    curve=curve.linear)
+        self._titulo_capitulo(n)
+
+    def _titulo_capitulo(self, n):
+        self._quitar_titulo_capitulo()
+        titulo, lugar = CAPITULOS[n]
+        # Una franja de sombra detras: el titular blanco tiene que leerse
+        # igual sobre el neon de la azotea que sobre la pantalla de la tarima.
+        sombra = E.banda(2.4, 0.29, (0, 0.008), color.rgba(0, 0, 0, 0), z=-0.45)
+        sombra.animate_color(color.rgba(0, 0, 0, 175), duration=0.35, delay=0.15)
+        arriba = E.pequena(f"CAPÍTULO {n + 1}", (0, 0.098), E.LLERAS,
+                           escala=0.86, origen=(0, 0))
+        filo = E.banda(0.12, 0.0034, (0, 0.066), E.LLERAS, z=-0.6)
+        grande = E.titular(titulo, (0, 0.0), 3.6, E.TEXTO, origen=(0, 0))
+        abajo = E.pequena(lugar.upper(), (0, -0.084), E.TEXTO,
+                          escala=0.74, origen=(0, 0))
+        for i, p in enumerate((arriba, filo, grande, abajo)):
+            p.z = -0.6
+            p.alpha = 0
+            p.fade_in(duration=0.35, delay=0.20 + i * 0.07)
+        self.rotulo_cap = [sombra, arriba, filo, grande, abajo]
+        self.piezas += self.rotulo_cap
+
+    def _quitar_titulo_capitulo(self):
+        for p in self.rotulo_cap:
+            for s in list(getattr(p, "animations", [])):
+                s.kill()
+            if p in self.piezas:
+                self.piezas.remove(p)
+            destroy(p)
+        self.rotulo_cap = []
+
+    def _fin_del_recorrido(self):
+        """Vuelta a la ciudad: fuera el video y su titulo."""
+        self._quitar_titulo_capitulo()
+        if self.cine is not None:
+            self.cine.enabled = False
+        for video in self.videos:
+            if video is not None and hasattr(video._texture, "stop"):
+                video._texture.stop()
+
     def _titulo_final(self):
         # Velo detras del titular: sobre la rejilla de ventanas la letra
         # pequeña se perdia entre los puntos de luz.
@@ -330,6 +424,12 @@ class Intro:
                 self.negro.color = color.rgba(0, 0, 0, 255)
                 self.negro.animate_color(color.rgba(0, 0, 0, 0),
                                          duration=NEGRO_CORTE)
+            if nombre.startswith("cap_"):
+                self._recorrido(int(nombre[4:]) - 1)
+                self.cine.enabled = True
+                audio.efecto("pagina")
+            elif self.cine is not None and self.cine.enabled:
+                self._fin_del_recorrido()
         f = _suave((self.t - INICIOS[indice]) / dura)
         camera.fov = fov
         camera.position = p0 + (p1 - p0) * f
@@ -451,6 +551,7 @@ class Intro:
 
     def cerrar(self):
         audio.ambiente(False)
+        self._fin_del_recorrido()
         for lista in (self.piezas, self.mundo):
             for p in lista:
                 for s in list(getattr(p, "animations", [])):

@@ -41,6 +41,11 @@ def _tinta(rol):
     return E.OSPINA if rol == PROTAGONISTA else E.GAITAN
 
 
+def puestos_vacios(vista):
+    """True mientras el segundo puesto de la sala sigue libre."""
+    return vista is not None and vista.get("puestos", [None, None])[1] is None
+
+
 class Sesion:
     """Lo que queda de la sala al empezar: el enlace y quien es quien."""
 
@@ -441,6 +446,16 @@ class Lobby:
                         escala=0.56))
             a(E.titular(self.anfitrion.ip, (0.20, 0.432), 1.7, E.LLERAS))
             a(E.etiqueta("código  " + self.anfitrion.codigo, (0.20, 0.368), 0.95, E.TEXTO))
+            # El fallo tipico de una feria es el firewall de este PC: se avisa
+            # aqui, mientras se espera, y no cuando el otro ya se rindio.
+            if puestos_vacios(self.vista):
+                aviso = E.pequena("¿No entra? En este PC, ejecuta como administrador "
+                                  "herramientas/abrir_puerto_feria.bat. Si sigue sin "
+                                  "entrar, conectad los dos PC al punto de acceso de "
+                                  "un celular.", (0.39, -0.090), E.TEXTO_TENUE,
+                                  escala=0.56, origen=(0, 0.5))
+                aviso.wordwrap = 46
+                a(aviso)
         else:
             self._cabecera("Sala de espera")
         puestos = self.vista["puestos"]

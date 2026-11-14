@@ -32,8 +32,9 @@ import sys
 import tempfile
 import wave
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cliente3d"))
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# La raiz tambien: intro importa mundo, y mundo importa contenido.
+sys.path[:0] = [os.path.join(_RAIZ, "cliente3d"), _RAIZ]
 
 FRECUENCIA = 44100
 CARPETA = os.path.join(

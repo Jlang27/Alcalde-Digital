@@ -3,9 +3,9 @@ en una interrupcion, devolverlo y el dia 2 con el otro protagonista."""
 from banco import *
 
 arrancar()
-J.cl.menu.mover(J.cl.menu.opciones.index("Cómo se juega")); pasar(0.3)
-assert J.cl.menu.opciones[J.cl.menu.seleccion] == "Cómo se juega"
-tecla("enter", 1.6); foto("como_jugar")
+J.cl.menu.mover(J.cl.menu.opciones.index("Ayuda")); pasar(0.3)
+assert J.cl.menu.opciones[J.cl.menu.seleccion] == "Ayuda"
+tecla("enter", 1.6); foto("ayuda")
 tecla("escape", 1.0)
 # El reparto por turnos ya no tiene entrada en el menu (los capitulos tienen
 # su personaje), pero sigue siendo como se juega en un solo PC.

@@ -49,16 +49,19 @@ assert "v_desmentir" in p.por_abrir and p.novedades == []
 creyentes_antes = len(p.creyentes())
 compartidos = p.compartidos
 assert p.descubrir("rafa_saludo")[0]
-assert preguntas(p, "cajero") == ["rafa_alboroto"]
+# a Rafa se le puede preguntar mas cosas (rafa_cliente): basta con que
+# el alboroto este entre ellas
+assert "rafa_alboroto" in preguntas(p, "cajero"), preguntas(p, "cajero")
 assert p.descubrir("rafa_alboroto")[0]
 assert "sofia_video" in preguntas(p, "sofia")
 assert p.descubrir("sofia_video")[0]
 assert "verificar" in ids_raiz(p)
 assert p.arbol_decision.buscar("v_desmentir") is not None   # entro con su padre
-assert p.rondas == 3 and p.hora() == "8:00"
+# tres charlas (10 min cada una) y la foto del celular (5 min, media ronda)
+assert p.rondas == 3.5 and p.hora() == "8:05", (p.rondas, p.hora())
 assert p.compartidos == compartidos + 450            # hablar no sale gratis
 assert len(p.creyentes()) > creyentes_antes         # el rumor avanzo por el grafo
-assert preguntas(p, "cajero") == []                   # Rafa ya no tiene nada nuevo
+assert "rafa_alboroto" not in preguntas(p, "cajero")  # lo del alboroto ya esta contado
 
 # la cadena: Hernan conoce el grupo, el celular conecta bots con el origen
 assert p.descubrir("hernan_saludo")[0]
