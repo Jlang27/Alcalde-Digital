@@ -2265,6 +2265,8 @@ FILAS = (
      "Resplandor de las luces, color y viñeta. «Suave» no pesa nada."),
     ("antialias", "Antialiasing", "opcion",
      "Bordes sin dientes de sierra. 8x, solo con gráfica dedicada."),
+    ("reflejos", "Reflejos del cielo", "casilla",
+     "El atardecer tiñe lo que mira al cielo y se refleja en lo pulido."),
     ("volumen", "Volumen general", "barra",
      "Manda sobre la música y los efectos."),
     ("musica", "Música", "barra",

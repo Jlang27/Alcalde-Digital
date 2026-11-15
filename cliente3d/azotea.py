@@ -22,13 +22,47 @@ from panda3d.core import AmbientLight, DirectionalLight, Fog, LColor, PointLight
 from PIL import ImageDraw
 
 import mundo as M
-from ursina import Cylinder, color
+from ursina import Mesh, color
 
 
-def _cilindro():
-    """Un cilindro centrado (el de Ursina arranca en su base). Uno nuevo por
-    pieza: la misma malla en dos Entity se la quita la segunda a la primera."""
-    return Cylinder(20, start=-0.5)
+def _cilindro(lados=24):
+    """Un cilindro centrado de radio 0,5 y alto 1, con tapas y CON NORMALES.
+
+    El `Cylinder` de Ursina no las trae, y sin normal el shader PBR divide
+    por cero: el tanque de agua salia negro (ninguna luz le daba) y, con la
+    luz del cielo encendida, blanco quemado con un rectangulo de resplandor
+    alrededor. Eso era el «los metales reflejan como espejos» de ambiente.py.
+    Uno nuevo por pieza: la misma malla en dos Entity se la quita la segunda
+    a la primera."""
+    v, t, n, uv = [], [], [], []
+    for k in range(lados + 1):                       # el costado
+        a = 2 * math.pi * k / lados
+        x, z = math.sin(a), math.cos(a)
+        v += [(x * 0.5, -0.5, z * 0.5), (x * 0.5, 0.5, z * 0.5)]
+        n += [(x, 0, z)] * 2
+        uv += [(k / lados, 0), (k / lados, 1)]
+    for k in range(lados):
+        i = 2 * k
+        t += [i, i + 2, i + 1, i + 1, i + 2, i + 3]
+    for y in (-0.5, 0.5):                            # las tapas
+        centro = len(v)
+        v.append((0, y, 0)); n.append((0, 1 if y > 0 else -1, 0)); uv.append((0.5, 0.5))
+        for k in range(lados + 1):
+            a = 2 * math.pi * k / lados
+            v.append((math.sin(a) * 0.5, y, math.cos(a) * 0.5))
+            n.append((0, 1 if y > 0 else -1, 0))
+            uv.append((0.5 + 0.5 * math.sin(a), 0.5 + 0.5 * math.cos(a)))
+        for k in range(1, lados + 1):
+            t += [centro, centro + k, centro + k + 1]
+    return Mesh(vertices=v, triangles=t, normals=n, uvs=uv, mode="triangle")
+
+
+def _tubo(cont, mat, escala, posicion, giro=0):
+    """Una pieza cilindrica. De doble cara, como las mallas fundidas: asi no
+    depende del sentido de giro de los triangulos."""
+    e = M._pieza(cont, _cilindro(), mat, escala, posicion, giro)
+    e.setTwoSided(True)
+    return e
 
 # La linea de pelea (ver kombat.ANCHO_RING) y la azotea que la rodea.
 ANCHO = 7.2            # medio ancho de la losa
@@ -69,6 +103,10 @@ BLOQUEOS = (
     (-5.95, -5.25, -2.95, -2.25),    # el tripode de la camara
     (-5.15, -4.65, -3.15, -2.65),    # el pie del aro de luz
     (-4.70, -3.60, -2.05, -1.45),    # la mesa del PC
+    (2.45, 4.55, 2.45, 3.40),        # el sofa viejo (atrezo)
+    (3.00, 3.90, 1.75, 2.35),        # su mesa de cajas
+    (-4.55, -3.75, 2.55, 3.35),      # las cajas de botellas junto al tanque
+    (6.00, 6.95, -3.20, -1.90),      # los pales y los botes contra el pretil
 )
 
 # El PC del directo, en una mesa a la derecha de JH777 (+z, mirando al
@@ -246,6 +284,100 @@ def caseton(visible):
         nodo.show() if visible else nodo.hide()
 
 
+def _atrezo(cont):
+    """Lo que hace que la azotea sea de alguien: el sofa viejo donde JH777
+    se sienta entre directos, la mesa de cajas con latas, neveras, plantas
+    en el pretil, pales, cables del PC al caseton.
+
+    Todo al fondo y a los lados: la pelea va por z = 0 y la camara la mira
+    desde el sur, asi que esto queda DETRAS de los luchadores, por debajo de
+    la barandilla, y no tapa la ciudad. Las cajas se funden en una malla
+    por material (M._pieza_malla); lo de suelo tiene su rectangulo en BLOQUEOS.
+    """
+    mats = {
+        "tela": M._material((0.20, 0.035, 0.03, 1), rugosidad=0.95, textura="tela"),
+        "cojin": M._material((0.035, 0.07, 0.20, 1), rugosidad=0.95, textura="tela"),
+        "pale": M._material((0.30, 0.20, 0.11, 1), rugosidad=0.85, textura="madera"),
+        "caja": M._material((0.42, 0.06, 0.05, 1), rugosidad=0.6),
+        "nevera": M._material((0.05, 0.16, 0.42, 1), rugosidad=0.45),
+        "tapa": M._material((0.62, 0.60, 0.55, 1), rugosidad=0.5),
+        "lata": M._material((0.55, 0.56, 0.58, 1), rugosidad=0.3, metalico=0.9),
+        "lata_tinta": M._material((0.75, 0.50, 0.06, 1), rugosidad=0.35, metalico=0.5),
+        "maceta": M._material((0.26, 0.09, 0.045, 1), rugosidad=0.85),
+        "bote": M._material((0.50, 0.50, 0.48, 1), rugosidad=0.5, metalico=0.4),
+        "cable": M._material((0.012, 0.012, 0.014, 1), rugosidad=0.7),
+        "carton": M._material((0.36, 0.25, 0.14, 1), rugosidad=0.9),
+    }
+    hojas = M._material((0.03, 0.13, 0.045, 1), rugosidad=0.8)
+    caras = {}
+
+    def c(mat, x0, x1, y0, y1, z0, z1):
+        caras.setdefault(mat, []).extend(M._caras_caja(x0, x1, y0, y1, z0, z1))
+
+    # --- el sofa, de espaldas a la ciudad, y su mesa de cajas ---
+    c("tela", 2.55, 4.45, 0.0, 0.40, 2.55, 3.30)
+    c("tela", 2.55, 4.45, 0.40, 0.88, 3.12, 3.30)
+    for x in (2.45, 4.40):
+        c("tela", x, x + 0.15, 0.0, 0.58, 2.55, 3.30)
+    c("cojin", 2.70, 3.15, 0.40, 0.72, 2.98, 3.12)
+    c("cojin", 3.85, 4.30, 0.40, 0.50, 2.62, 3.05)
+    for k, x in enumerate((3.05, 3.50)):                  # dos cajas de botellas
+        c("caja", x, x + 0.40, 0.0, 0.30, 1.85, 2.25)
+        c("cable", x + 0.03, x + 0.37, 0.30, 0.305, 1.88, 2.22)
+    c("pale", 3.00, 3.90, 0.305, 0.34, 1.78, 2.32)        # el tablero encima
+    for k, (x, z) in enumerate(((3.15, 1.95), (3.32, 2.12), (3.62, 1.90), (3.70, 2.15))):
+        c("lata" if k % 2 else "lata_tinta", x, x + 0.065, 0.34, 0.46, z, z + 0.065)
+    c("carton", 3.38, 3.78, 0.34, 0.385, 1.98, 2.28)      # la caja de pizza
+    # --- la nevera portatil, junto al sofa ---
+    c("nevera", 1.85, 2.35, 0.0, 0.34, 2.80, 3.15)
+    c("tapa", 1.83, 2.37, 0.34, 0.39, 2.78, 3.17)
+    c("lata", 2.02, 2.085, 0.39, 0.51, 2.92, 2.985)
+
+    # --- cajas de botellas apiladas junto al tanque ---
+    for k, (x, z, n) in enumerate(((-4.50, 2.60, 3), (-4.10, 2.95, 2))):
+        for i in range(n):
+            c("caja", x + i * 0.012, x + 0.40 + i * 0.012, i * 0.31, i * 0.31 + 0.30, z, z + 0.36)
+    # la antena del poste: los brazos que le faltaban
+    for k, y in enumerate((3.4, 3.7, 4.0)):
+        largo = 0.75 - k * 0.18
+        c("bote", -4.6 - largo, -4.6 + largo, y, y + 0.03, 3.19, 3.22)
+
+    # --- pales contra el pretil derecho, botes de pintura y la escoba ---
+    for k in range(3):
+        c("pale", 6.62 + k * 0.10, 6.70 + k * 0.10, 0.0, 1.0, -3.15, -2.15)
+    for k in range(4):
+        c("pale", 6.56, 6.92, 0.10 + k * 0.26, 0.19 + k * 0.26, -3.17, -2.13)
+    for k, z in enumerate((-2.0, -1.72)):
+        c("bote", 6.55, 6.80, 0.0, 0.28, z, z + 0.25)
+        c(("lata_tinta", "nevera")[k], 6.56, 6.79, 0.28, 0.29, z + 0.01, z + 0.24)
+    c("pale", 6.08, 6.11, 0.0, 1.35, -3.05, -3.02)        # el palo de la escoba
+    c("carton", 5.98, 6.21, 0.0, 0.10, -3.08, -2.99)
+
+    # --- plantas en el pretil de atras (encima, a y = ALTO_PRETIL) ---
+    plantas = ((-3.3, 0.30), (-2.75, 0.22), (0.9, 0.26), (1.45, 0.20), (5.2, 0.28))
+    for x, r in plantas:
+        c("maceta", x - 0.13, x + 0.13, ALTO_PRETIL, ALTO_PRETIL + 0.22,
+          FONDO_Z - 0.13, FONDO_Z + 0.13)
+
+    # --- cables por el suelo: del PC al caseton y al aro de luz ---
+    c("cable", -4.20, -4.17, 0.0, 0.02, -4.55, -2.05)
+    c("cable", -4.90, -4.17, 0.0, 0.02, -2.72, -2.69)
+    c("cable", -5.60, -4.90, 0.0, 0.02, -2.80, -2.77)
+    c("cable", -4.42, -4.02, 0.0, 0.07, -3.55, -3.35)     # la regleta
+    # en la mesa del PC: dos latas y el microfono
+    x, z = MONITOR_PC.x, MONITOR_PC.z - 0.05
+    c("lata_tinta", x + 0.36, x + 0.425, 0.765, 0.885, z - 0.02, z + 0.045)
+    c("lata", x + 0.30, x + 0.365, 0.765, 0.885, z + 0.12, z + 0.185)
+    c("cable", x + 0.18, x + 0.21, 0.765, 0.99, z - 0.20, z - 0.17)
+    c("cable", x + 0.165, x + 0.225, 0.99, 1.09, z - 0.215, z - 0.155)
+
+    for mat, lista in caras.items():
+        M._pieza_malla(cont, lista, mats[mat])
+    for x, r in plantas:
+        M._pieza(cont, "sphere", hojas, r * 2, (x, ALTO_PRETIL + 0.22 + r * 0.7, FONDO_Z))
+        M._pieza(cont, "sphere", hojas, r * 1.3, (x + r * 0.5, ALTO_PRETIL + 0.30 + r * 1.3, FONDO_Z))
+
+
 def construir(cont):
     """Monta la azotea y la ciudad de abajo dentro del contenedor."""
     M._ciudad_abajo(cont)
@@ -281,14 +413,14 @@ def construir(cont):
         M._pieza(cont, "cube", metal, (0.05, 0.5, 0.05), (k * 1.2, 0.8, FONDO_Z))
 
     # a la izquierda, el tanque de agua sobre patas y una antena
-    M._pieza(cont, _cilindro(), metal, (1.4, 1.8, 1.4), (-5.7, 1.7, 2.4))
+    _tubo(cont, metal, (1.4, 1.8, 1.4), (-5.7, 1.7, 2.4))
     for dx, dz in ((-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)):
         M._pieza(cont, "cube", metal, (0.08, 0.9, 0.08), (-5.7 + dx, 0.45, 2.4 + dz))
     M._pieza(cont, "cube", metal, (0.06, 4.2, 0.06), (-4.6, 2.1, 3.2))
     # a la derecha, maquinas de aire acondicionado
     for x, z in ((5.4, 2.6), (5.4, 1.2)):
         M._pieza(cont, "cube", metal, (1.1, 0.8, 1.0), (x, 0.4, z))
-        M._pieza(cont, _cilindro(), goma, (0.7, 0.04, 0.7), (x, 0.82, z))
+        _tubo(cont, goma, (0.7, 0.04, 0.7), (x, 0.82, z))
 
     # el letrero de neon, sobre el pretil de atras, con marco de tubo
     letrero = M._textura("letrero_kombat", _pintar_letrero, 1024, 384)
@@ -309,10 +441,12 @@ def construir(cont):
         M._pieza(cont, "cube", goma, (0.03, 1.5, 0.03),
                  (-5.6 + 0.25 * math.sin(a), 0.72, -2.6 + 0.25 * math.cos(a)))
     M._pieza(cont, "cube", goma, (0.32, 0.2, 0.22), (-5.6, 1.55, -2.6))
-    M._pieza(cont, _cilindro(), aro, (0.85, 0.035, 0.85), (-4.9, 1.75, -2.9), giro=0)
+    _tubo(cont, aro, (0.85, 0.035, 0.85), (-4.9, 1.75, -2.9), giro=0)
     M._pieza(cont, "cube", goma, (0.03, 1.7, 0.03), (-4.9, 0.85, -2.9))
     # Con el caseton: la camara de la pelea pasa por aqui y lo esconde.
     _pc(_ESTADO["caseton"], metal, goma)
+
+    _atrezo(cont)
 
     # guirnaldas de bombillas entre postes, cruzando por detras
     _ESTADO["guirnalda"] = []

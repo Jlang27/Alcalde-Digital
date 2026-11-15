@@ -13,6 +13,14 @@ es buena parte de por que un juego como Detroit se ve «caro»:
     frio y las luces al ambar, un poco mas de contraste y de color.
   - VIÑETA: las esquinas caen un poco y la mirada se queda en el centro.
   - GRANO fino: rompe las bandas de los degradados oscuros (la niebla).
+  - FOCO: en los planos fijos de cerca (decisiones, charlas, el menu) lo
+    que queda lejos del sujeto en el cuadro se desenfoca un poco, como con
+    una lente abierta, y la mirada se queda en la cara. No hay mapa de
+    profundidad (simplepbr no lo saca y pedirlo con multimuestreo es otra
+    obra): se desenfoca por DISTANCIA EN PANTALLA al sujeto, leyendo los
+    mismos mipmaps del resplandor. En un primer plano, lo que esta lejos
+    del sujeto en el cuadro es casi siempre fondo, y da el mismo efecto.
+    Solo en «Cine» (es donde hay mipmaps); explorando no se aplica.
 
 CALIDAD. `calidad(n)`: 0 no (la imagen de antes), 1 suave (etalonaje y
 viñeta: no cuesta nada), 2 cine (ademas el resplandor). Es la fila
@@ -23,18 +31,22 @@ EL SHADER. Como en luces.py: se cambia el texto del `tonemap.frag` de
 parche no encaja, se avisa y la imagen queda como venia.
 """
 
-from panda3d.core import AntialiasAttrib, SamplerState
+from panda3d.core import AntialiasAttrib, LVecBase3f, SamplerState
 
 CALIDADES = ("No", "Suave", "Cine")
 ANTIALIAS = ("No", "2x", "4x", "8x")
 MUESTRAS = (0, 2, 4, 8)
 
-_E = {"tuberia": None, "nivel": 2, "parcheado": False}
+_E = {"tuberia": None, "nivel": 2, "parcheado": False,
+      "foco": [0.5, 0.56, 0.0],        # (u, v, fuerza) que hay ahora en pantalla
+      "foco_meta": 0.0}
+SEGUNDOS_FOCO = 0.45                    # lo que tarda en entrar o salir
 
 _CABECERA_VIEJA = "uniform float exposure;"
 _CABECERA_NUEVA = """uniform float exposure;
 uniform float pos_resplandor;
 uniform float pos_cine;
+uniform vec3 pos_foco;           // (u, v) del sujeto en pantalla y fuerza
 #ifdef USE_330
     #define leer_mip(t, uv, n) textureLod(t, uv, n)
 #else
@@ -48,7 +60,23 @@ vec3 pos_brilla(vec3 c, float umbral) {
 _EXPOSICION_VIEJA = "    color *= exposure;"
 # Antes de la curva de tono, en luz lineal: el resplandor es luz que se
 # suma, no un velo. Solo lo que pasa de 1 (emisiones y brillos fuertes).
-_EXPOSICION_NUEVA = """    if (pos_resplandor > 0.0) {
+_EXPOSICION_NUEVA = """    if (pos_foco.z > 0.0) {
+        // Lejos del sujeto EN EL CUADRO: mas vale en horizontal que en
+        // vertical, porque el sujeto es una persona de pie.
+        vec2 df = (v_texcoord - pos_foco.xy) * vec2(1.0, 0.62);
+        float lejos = smoothstep(0.20, 0.60, length(df)) * pos_foco.z;
+        if (lejos > 0.01) {
+            float nivel = lejos * 3.0;
+            vec2 paso = vec2(0.5625, 1.0) * 0.0045 * lejos;
+            vec3 borroso = leer_mip(tex, v_texcoord, nivel).rgb * 2.0;
+            for (int k = 0; k < 6; k++) {
+                float a = 1.0471976 * float(k);
+                borroso += leer_mip(tex, v_texcoord + vec2(cos(a), sin(a)) * paso, nivel).rgb;
+            }
+            color = mix(color, borroso / 8.0, min(1.0, lejos * 1.5));
+        }
+    }
+    if (pos_resplandor > 0.0) {
         vec3 halo = vec3(0.0);
         // Dos anillos de ocho lecturas alrededor del punto, sobre la
         // imagen un poco reducida. Solo cuenta lo que pasa MUY de 1: una
@@ -143,6 +171,7 @@ def calidad(n):
     cuadro = t._post_process_quad
     cuadro.set_shader_input("pos_cine", 1.0 if n >= 1 else 0.0)
     cuadro.set_shader_input("pos_resplandor", 1.0 if n >= 2 else 0.0)
+    _poner_foco()
     # El resplandor lee los mipmaps de la escena: con este filtro Panda3D
     # los genera en cada fotograma. Sin resplandor no se piden (ni se pagan).
     escena = cuadro.get_shader_input("tex").get_texture()
@@ -150,6 +179,35 @@ def calidad(n):
                          else SamplerState.FT_linear)
     escena.set_wrap_u(SamplerState.WM_clamp)
     escena.set_wrap_v(SamplerState.WM_clamp)
+
+
+def _poner_foco():
+    t = _E["tuberia"]
+    if t is None or not _E["parcheado"]:
+        return
+    u, v, fuerza = _E["foco"]
+    # sin «Cine» no hay mipmaps que leer: el foco se queda en cero
+    t._post_process_quad.set_shader_input(
+        "pos_foco", LVecBase3f(u, v, fuerza if _E["nivel"] >= 2 else 0.0))
+
+
+def enfocar(u=None, v=None, fuerza=0.0):
+    """El plano fijo que acaba de ponerse: donde cae el sujeto en pantalla
+    (0-1, con el origen abajo a la izquierda) y cuanto se desenfoca el
+    resto (0 = nada). Entra y sale poco a poco, en vivir()."""
+    if u is not None:
+        _E["foco"][0], _E["foco"][1] = u, v
+    _E["foco_meta"] = max(0.0, min(1.0, fuerza))
+
+
+def vivir(dt):
+    """Cada fotograma: lleva el foco hacia donde se le ha pedido."""
+    ahora, meta = _E["foco"][2], _E["foco_meta"]
+    if ahora == meta:
+        return
+    paso = dt / SEGUNDOS_FOCO
+    _E["foco"][2] = meta if abs(meta - ahora) <= paso else ahora + paso * (1 if meta > ahora else -1)
+    _poner_foco()
 
 
 def antialias(i):

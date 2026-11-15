@@ -54,6 +54,9 @@ def correr(orden, donde):
 
 
 def main():
+    # La consola de Windows (cp1252) no sabe escribir todo lo que sale de
+    # las pruebas: lo que no pueda, lo sustituye en vez de reventar al final.
+    sys.stdout.reconfigure(errors="replace")
     filtro = sys.argv[1] if len(sys.argv) > 1 else ""
     fallos = 0
     for archivo, *args in ESCENARIOS:

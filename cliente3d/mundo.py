@@ -2638,8 +2638,195 @@ def _obra_campana():
     o.pared("metal_estante", "z", zr, 1, 17.4, 19.2, 0, 1.9, 0, 0.45, bloquea=True)
     for y in (0.3, 0.9, 1.5):
         o.pared("papel", "z", zr, 1, 17.5, 19.1, y, y + 0.3, 0.05, 0.42)
+    _atrezo_campana(o)
     _sala_de_juegos(o)
     return o
+
+
+def _taza(o, x, z, y, mat="loza"):
+    o.caja(mat, x - 0.04, x + 0.04, y, y + 0.09, z - 0.04, z + 0.04)
+    o.caja(mat, x + 0.04, x + 0.065, y + 0.03, y + 0.07, z - 0.012, z + 0.012)   # el asa
+
+
+def _teclado(o, x, z, y, a_lo_largo="x"):
+    dx, dz = (0.22, 0.07) if a_lo_largo == "x" else (0.07, 0.22)
+    o.caja("rejilla", x - dx, x + dx, y, y + 0.018, z - dz, z + dz)
+
+
+def _hojas(o, azar, x, z, y, n=3):
+    """Un monton de folios algo descuadrados."""
+    for k in range(n):
+        dx, dz = azar.uniform(-0.03, 0.03), azar.uniform(-0.03, 0.03)
+        o.caja("papel", x - 0.105 + dx, x + 0.105 + dx, y + k * 0.004,
+               y + (k + 1) * 0.004, z - 0.15 + dz, z + 0.15 + dz)
+
+
+def _cuadro(o, eje, plano, signo, a, y, ancho, alto, lienzo="lienzo"):
+    o.pared("marco", eje, plano, signo, a - ancho / 2, a + ancho / 2,
+            y - alto / 2, y + alto / 2, 0, 0.03)
+    o.pared(lienzo, eje, plano, signo, a - ancho / 2 + 0.05, a + ancho / 2 - 0.05,
+            y - alto / 2 + 0.05, y + alto / 2 - 0.05, 0.03, 0.035)
+
+
+def _atrezo_campana(o):
+    """Lo pequeño: tazas, folios, teclados, notas, cajas de pizza. Un
+    comando a cinco dias de la eleccion no tiene las mesas limpias.
+
+    Nada de esto bloquea ni toca el suelo por donde se anda (las rutas del
+    asesor y de la subida estan medidas), y lleva su propio azar para no
+    mover el de la obra, que reparte sillas y distritos.
+    """
+    azar = random.Random(11)
+    notas = NOTAS[:3]
+
+    # --- el escritorio de Abel (tablero en y = 0.79) ---
+    y = 0.79
+    _teclado(o, -0.1, 2.46, y)
+    _taza(o, 0.62, 2.42, y)
+    for k in range(4):                                  # expedientes apilados
+        o.caja("expediente", -1.55 + k * 0.012, -1.20 + k * 0.012, y + k * 0.022,
+               y + (k + 1) * 0.022, 1.80, 2.26)
+    o.caja("marco", -1.02, -0.80, y, y + 0.20, 2.05, 2.075)           # la foto
+    o.caja("lienzo", -1.00, -0.82, y + 0.02, y + 0.18, 2.075, 2.08)
+    o.caja("laton", -0.72, -0.64, y, y + 0.10, 1.80, 1.88)            # lapicero
+    for dx in (0.015, 0.045):
+        o.caja("libro_azul", -0.72 + dx, -0.712 + dx, y + 0.10, y + 0.17, 1.83, 1.838)
+    o.caja("monitor", 0.20, 0.28, y, y + 0.012, 1.80, 1.95)            # el telefono
+    _hojas(o, azar, -0.25, 1.92, y, 4)
+    o.caja("nota_amarilla", 0.36, 0.44, 0.96, 1.04, 2.343, 2.346)      # en el monitor
+    # la mesa baja: revistas y una taza olvidada
+    for k, mat in enumerate(("libro_crema", "libro_azul", "libro_rojo")):
+        o.caja(mat, -3.25 + k * 0.05, -2.95 + k * 0.05, 0.42 + k * 0.012,
+               0.432 + k * 0.012, -3.0 + k * 0.03, -2.62 + k * 0.03)
+    _taza(o, -2.3, -2.75, 0.42)
+
+    # --- conferencias (tablero en y = 0.76): un sitio por silla ---
+    for x in (16.8, 17.9, 19.0, 20.1):
+        _hojas(o, azar, x, -0.78, 0.76, 2)
+        _hojas(o, azar, x + 0.05, 0.18, 0.76, 2)
+        o.caja("libro_azul", x + 0.16, x + 0.172, 0.768, 0.776, -0.86, -0.70)   # boligrafo
+    o.caja("rejilla", 18.55, 18.85, 0.76, 0.80, -0.42, -0.18)          # el manos libres
+    o.caja("led", 18.68, 18.72, 0.80, 0.805, -0.32, -0.28)
+    o.caja("metal", 20.55, 20.95, 0.76, 0.778, -0.45, -0.15)           # un portatil cerrado
+    _taza(o, 19.5, -0.25, 0.76)
+    _taza(o, 17.3, 0.05, 0.76)
+
+    # --- voluntarios (tableros en y = 0.76): cada puesto con lo suyo ---
+    for x0 in (3.6, 5.4, 7.2, 14.8, 19.8):
+        for z0 in (-6.9, -9.3):
+            _teclado(o, x0 + 0.8, z0 + 0.32, 0.76)
+            if azar.random() < 0.8:
+                _taza(o, x0 + 0.22 + azar.uniform(0, 0.1), z0 + 0.5, 0.76)
+            if azar.random() < 0.7:
+                _hojas(o, azar, x0 + 0.25, z0 + 0.22, 0.76, azar.randint(2, 5))
+            for k in range(azar.randint(0, 3)):         # notas en el canto del monitor
+                o.caja(azar.choice(notas), x0 + 0.52 + k * 0.2, x0 + 0.60 + k * 0.2,
+                       0.84, 0.92, z0 + 0.545, z0 + 0.549)
+            if azar.random() < 0.4:                     # volantes por repartir
+                alto = azar.choice((0.04, 0.08, 0.12))
+                o.caja("volantes", x0 + 1.22, x0 + 1.52, 0.76, 0.76 + alto,
+                       z0 + 0.45, z0 + 0.72)
+    # la cena de la noche larga: cajas de pizza en una mesa del fondo
+    for k in range(3):
+        o.caja("caja_carton", 14.9 + k * 0.02, 15.32 + k * 0.02, 0.76 + k * 0.045,
+               0.80 + k * 0.045, -9.22, -8.80)
+
+    # --- el muro de servicios: corchera y reloj, en el tramo sin puertas
+    #     (las hay en x 1-2.6, 9.6-11 y 17-18.4) ---
+    zb = Z_SERVICIOS + 0.1
+    o.pared("marco", "z", zb, 1, 11.9, 14.3, 1.05, 2.25, 0, 0.03)
+    o.pared("corcho", "z", zb, 1, 11.95, 14.25, 1.10, 2.20, 0.03, 0.04)
+    for k in range(14):
+        a, yy = azar.uniform(12.05, 14.0), azar.uniform(1.18, 2.0)
+        mat = azar.choice(NOTAS)
+        lado = 0.2 if mat == "papel" else 0.12
+        o.pared(mat, "z", zb, 1, a, a + lado, yy, yy + lado * 1.2, 0.04, 0.045)
+    o.pared("marco_metal", "z", zb, 1, 15.0, 15.5, 2.0, 2.5, 0, 0.04)       # reloj
+    o.pared("pizarra_blanca", "z", zb, 1, 15.04, 15.46, 2.04, 2.46, 0.04, 0.045)
+    o.pared("placa_oscura", "z", zb, 1, 15.24, 15.26, 2.25, 2.42, 0.045, 0.05)
+    o.pared("placa_oscura", "z", zb, 1, 15.25, 15.38, 2.24, 2.26, 0.045, 0.05)
+
+    # --- la recepcion (mostrador en y = 1.10) ---
+    y = 1.10
+    o.caja("monitor", 5.5, 6.1, y + 0.06, y + 0.42, -13.28, -13.24)
+    o.caja("metal", 5.75, 5.85, y, y + 0.06, -13.30, -13.22)
+    _teclado(o, 5.8, -13.08, y)
+    o.caja("laton", 4.86, 4.96, y, y + 0.05, -12.76, -12.66)            # el timbre
+    for k in range(3):                                  # volantes para llevarse
+        o.caja("volantes", 3.15, 3.45, y + k * 0.02, y + (k + 1) * 0.02,
+               -12.95 + k * 0.01, -12.70 + k * 0.01)
+    o.caja("papel", 4.05, 4.27, y, y + 0.004, -12.98, -12.68)           # hoja de visitas
+    o.caja("libro_azul", 4.30, 4.312, y + 0.004, y + 0.012, -12.95, -12.80)
+    o.caja("maceta", 6.36, 6.54, y, y + 0.16, -12.86, -12.68)
+    o.esferas.append(("hojas", 6.45, y + 0.30, -12.77, 0.30))
+
+    # --- la cocineta (encimera en y = 0.96, pegada al muro del fondo) ---
+    zr = CZ_FONDO + 0.1
+    y = 0.96
+    o.pared("impresora", "z", zr, 1, 10.5, 11.15, y, y + 0.34, 0.05, 0.45)   # microondas
+    o.pared("placa_oscura", "z", zr, 1, 10.56, 10.95, y + 0.05, y + 0.29, 0.45, 0.455)
+    for k in range(5):                                  # las tazas de todos
+        _taza(o, 9.05 + k * 0.17, zr + 0.22 + (k % 2) * 0.1, y,
+              azar.choice(("loza", "nota_azul", "libro_rojo", "loza")))
+    for k in range(4):                                  # mas pizza
+        o.caja("caja_carton", 11.5 + k * 0.015, 11.94 + k * 0.015, y + k * 0.045,
+               y + 0.04 + k * 0.045, zr + 0.08, zr + 0.52)
+    o.pared("metal", "z", zr, 1, 9.95, 10.35, y - 0.005, y + 0.005, 0.12, 0.48)   # fregadero
+    o.pared("metal", "z", zr, 1, 10.13, 10.17, y, y + 0.22, 0.06, 0.10)
+    for k, mat in enumerate(("nota_amarilla", "nota_rosa", "papel")):   # en la nevera
+        o.pared(mat, "z", zr, 1, 12.75 + k * 0.22, 12.89 + k * 0.22,
+                1.25 + (k % 2) * 0.12, 1.42 + (k % 2) * 0.12, 0.70, 0.705)
+
+
+def _atrezo_juegos(c, o):
+    """La sala de juegos del piso 12: vasos en la barra, cojines, revistas,
+    cuadros. La mesa de billar NO se toca: es el tablero de la partida."""
+    azar = random.Random(12)
+    g = GROSOR_MURO / 2
+    # --- la barra (piedra en y = 1.07) ---
+    y = 1.07
+    for z in (-11.9, -11.55, -10.3, -9.15, -8.8):
+        x = 6.4 + azar.uniform(-0.12, 0.12)
+        c("botella_clara", x - 0.028, x + 0.028, y, y + 0.12, z - 0.028, z + 0.028)   # vaso
+        c("cuero", x - 0.055, x + 0.055, y, y + 0.004, z - 0.055, z + 0.055)          # posavasos
+    c("botella_ambar", 6.42, 6.50, y, y + 0.30, -10.75, -10.67)
+    c("metal", 6.36, 6.60, y, y + 0.20, -8.25, -8.01)                 # la cubitera
+    c("botella_verde", 6.44, 6.52, y + 0.10, y + 0.38, -8.17, -8.09)
+    c("madera_billar", 6.3, 6.62, y, y + 0.05, -12.3, -12.0)          # cuenco de mani
+    c("madera_taco", 6.33, 6.59, y + 0.05, y + 0.06, -12.27, -12.03)
+    # la lamparita de la punta de la barra: un punto ambar mas
+    c("laton", 6.44, 6.52, y, y + 0.22, -7.62, -7.54)
+    c("luz_barra", 6.36, 6.60, y + 0.22, y + 0.40, -7.70, -7.46)
+    # --- los sofas: cojines; la mesa baja: revistas, vasos y el mando ---
+    for sx in (-2.6, 1.2):
+        for k, dx in enumerate((0.15, 1.95)):
+            mat = ("tela_azul", "madera_taco")[(k + (sx > 0)) % 2]
+            c(mat, sx + dx, sx + dx + 0.5, 0.42, 0.82, 1.66, 1.82)
+    yb = 0.45
+    for k, mat in enumerate(("libro_crema", "libro_rojo", "libro_azul")):
+        c(mat, -0.75 + k * 0.04, -0.45 + k * 0.04, yb + k * 0.012, yb + 0.012 + k * 0.012,
+          3.08 + k * 0.03, 3.48 + k * 0.03)
+    for x in (0.55, 1.5):
+        c("botella_clara", x - 0.035, x + 0.035, yb, yb + 0.11, 3.2, 3.27)
+    c("arcade", 0.9, 1.08, yb, yb + 0.02, 3.42, 3.47)                 # el mando de la tele
+    c("madera_billar", 1.9, 2.4, yb, yb + 0.03, 3.1, 3.5)             # bandeja
+    c("botella_ambar", 2.02, 2.10, yb + 0.03, yb + 0.30, 3.2, 3.28)
+    c("botella_clara", 2.22, 2.29, yb + 0.03, yb + 0.14, 3.3, 3.37)
+    # --- el muro oeste: fotos de viejas campañas entre el taquero y la diana ---
+    xw = CX0 + g
+    for k, (z, alto) in enumerate(((-6.9, 0.7), (-6.0, 0.5), (-5.2, 0.7))):
+        o.pared("marco", "x", xw, 1, z - 0.3, z + 0.3, YJ + 1.75 - alto / 2,
+                YJ + 1.75 + alto / 2, 0, 0.03)
+        o.pared(("lienzo", "afiche_ospina", "lienzo")[k], "x", xw, 1, z - 0.25, z + 0.25,
+                YJ + 1.80 - alto / 2, YJ + 1.70 + alto / 2, 0.03, 0.035)
+    # la repisa de las bolas de repuesto y las tizas, bajo el taquero
+    c("madera_billar", xw, xw + 0.16, 1.02, 1.05, -7.3, -6.5)
+    for k in range(5):
+        z = -7.2 + k * 0.15
+        c(("nacar", "barra_roja", "barra_amarilla", "nacar", "barra_azul")[k],
+          xw + 0.05, xw + 0.107, 1.05, 1.107, z, z + 0.057)
+    for k in range(3):
+        c("pano_billar", xw + 0.04, xw + 0.065, 1.05, 1.075, -6.75 + k * 0.05, -6.725 + k * 0.05)
 
 
 def _sala_de_juegos(o):
@@ -2749,6 +2936,7 @@ def _sala_de_juegos(o):
     c("arcade", 5.9, 6.6, 0, 1.75, -4.2, -3.5)
     c("pantalla_azul", 5.88, 5.9, 1.05, 1.55, -4.1, -3.6)
     c("barra_roja", 5.86, 5.9, 1.62, 1.72, -4.15, -3.55)
+    _atrezo_juegos(c, o)
 
 
 OBRA_CAMPANA = _obra_campana()
@@ -2799,6 +2987,8 @@ MATERIALES_CAMPANA = {
     "botella_verde": ((0.03, 0.2, 0.06), 0.15, 0, (0.04, 0.3, 0.08)),
     "botella_clara": ((0.5, 0.5, 0.5), 0.1, 0, (0.35, 0.35, 0.33)),
     "arcade": ((0.03, 0.03, 0.05), 0.4, 0, None),
+    # atrezo: las tazas y lo que no sea de los materiales de arriba
+    "loza": ((0.62, 0.59, 0.53), 0.25, 0, None),
 }
 
 
@@ -3597,6 +3787,7 @@ def fondo_vivo(dt):
     frente = application.base.render.getRelativeVector(cam, Vec3(0, 0, 1))
     luces.seguir(dt, (ojo[0] + frente[0] * 2.5, ojo[1] + frente[1] * 2.5,
                       ojo[2] + frente[2] * 2.5))
+    _foco_vivo(dt)
     if _ACTUAL["nombre"] == "campana":
         seguir_cielo()
         mover_trafico(dt)
@@ -3812,6 +4003,9 @@ BLOQUEOS = {
         # podia hablar (el alcance son 1,6). Solo valia una
         # franja de 25 cm en la esquina.
         (0.36, 2.14, 2.59, 2.97),      # la fila de banquetas
+        # las dos plantas de suelo (generar_cafeteria.PLANTAS_SUELO)
+        (3.12, 3.80, -5.61, -5.09),
+        (3.12, 3.80, -3.81, -3.29),
     ),
     "plaza": (),
     "rectoria": tuple(OBRA_COLEGIO.paso),
@@ -4028,10 +4222,11 @@ def nivel_de_imagen():
 
 def con_reflejos():
     """Ajustes, o ALCALDE_REFLEJOS (0/1) si se fuerza (ambiente.py)."""
-    # APAGADOS salvo que se fuercen: en esta version los metales (tanques,
-    # lamparas, patas de mesa) reflejan el cielo entero, como espejos. La
-    # fila de Ajustes se quito hasta arreglarlo (pendiente en CLAUDE.md).
-    return os.environ.get("ALCALDE_REFLEJOS") == "1"
+    forzado = os.environ.get("ALCALDE_REFLEJOS")
+    if forzado in ("0", "1"):
+        return forzado == "1"
+    import ajustes
+    return bool(ajustes.VALORES.get("reflejos", True))
 
 
 def reflejos(si):
@@ -5571,6 +5766,39 @@ def corte(plano, sujeto=Vec3(0, 0, 0)):
     camera.position = pos
     mirar(Vec3(sujeto.x, altura, sujeto.z))
     camera.rotation_y += desvio
+    _enfocar(plano, Vec3(sujeto.x, altura, sujeto.z))
+
+
+# Cuanto se desenfoca lo que rodea al sujeto en cada plano fijo
+# (posproceso.enfocar). De cerca, mucho; en el plano general no: ahi se
+# mira el sitio, no a una persona.
+FOCO_PLANO = {"PP": 1.0, "PM": 0.8, "LATERAL": 0.8, "DOS": 0.6, "AFICHE": 0.5, "PG": 0.0}
+_FOCO = {"donde": None}
+
+
+def _enfocar(plano, sujeto):
+    """Tras un corte: le dice al posprocesado donde cae el sujeto en la
+    pantalla y con que fuerza desenfocar el resto."""
+    from panda3d.core import Point2, Point3
+    base = application.base
+    p = base.cam.getRelativePoint(base.render, Point3(sujeto.x, sujeto.y, sujeto.z))
+    en_pantalla = Point2()
+    u, v = 0.5, 0.56
+    if base.camLens.project(p, en_pantalla):
+        u, v = en_pantalla[0] * 0.5 + 0.5, en_pantalla[1] * 0.5 + 0.5
+    posproceso.enfocar(u, v, FOCO_PLANO.get(plano, 0.0))
+    _FOCO["donde"] = Vec3(camera.world_position)
+
+
+def _foco_vivo(dt):
+    """El foco es de los planos fijos: en cuanto la camara se va de donde
+    la dejo el corte (se vuelve a explorar, entra una cinematica, la lleva
+    una escena) se quita solo. La deriva de los menus no cuenta."""
+    donde = _FOCO["donde"]
+    if donde is not None and (Vec3(camera.world_position) - donde).length() > 0.6:
+        _FOCO["donde"] = None
+        posproceso.enfocar(fuerza=0.0)
+    posproceso.vivir(dt)
 
 
 def mirar(objetivo):

@@ -1,40 +1,29 @@
-"""Luz ambiente por imagen: el cielo de cada escenario, reflejado.
+"""Luz ambiente del cielo: cada escenario refleja SU cielo.
 
 Hasta aqui lo que no alumbraba una lampara lo alumbraba una luz ambiente
 plana, igual por arriba que por abajo, y un metal pulido no tenia NADA que
 reflejar: el acero del ascensor, el casco de Nodo o una barandilla salian
-como plastico gris. `simplepbr` sabe iluminar con una imagen del entorno
-(un cubo de seis caras): de ella saca una luz difusa que cambia con hacia
-donde mira cada superficie (mas azul lo que mira al cielo, mas ambar lo que
-mira al horizonte del atardecer) y los reflejos de lo pulido.
+como plastico gris. Con esto cada superficie recibe una luz difusa que
+cambia segun hacia donde mira (mas azul lo que mira al cielo, mas ambar lo
+que mira al horizonte del atardecer) y lo pulido refleja ese mismo cielo.
 
-SIN ARCHIVOS. No se descarga ningun HDRI: el cubo se pinta por codigo con
-el cielo de cada escenario —cenit, horizonte y suelo— y el sol de la
-escena, que se lee de su propia luz «sol»: el reflejo cae donde cae la
-luz. Lo prepara `simplepbr` (armonicos esfericos y el cubo filtrado por
-rugosidad) y se guarda en `.cache_texturas/`: la primera vez tarda un
-segundo por escenario, luego es leer del disco.
+EL CIELO ES UNA CUENTA, NO UNA IMAGEN. La primera version usaba el mapa de
+entorno de `simplepbr` (un cubo filtrado por rugosidad y una tabla BRDF) y
+no salio bien: en esta grafica los metales devolvian el cubo entero como un
+espejo —el tanque de la azotea, color crema— y leer el cubo triplicaba el
+tiempo de fotograma (de 6 a 17 ms en la azotea). Pero el cielo de este
+juego es un degradado de tres colores y un sol: se calcula igual de bien
+DENTRO del shader, sin cubo, sin tabla y sin cache en disco. La rugosidad
+lo emborrona acercandolo a su color medio, y la respuesta por angulo es la
+aproximacion analitica de siempre (Karis, 2014).
 
 SUAVE A PROPOSITO. Los escenarios ya estan iluminados a mano y esta luz se
 SUMA: va baja, para que tiña y refleje sin lavar el contraste de las
-sombras. Es la fila «Reflejos del cielo» de Ajustes y cambia en caliente.
+sombras. Es la fila «Reflejos del cielo» de Ajustes y cambia en caliente
+(apagada, la fuerza va a cero y el shader suma cero).
 """
 
-import math
-import os
-import struct
-
-from panda3d.core import Filename, LVector3f, SamplerState, Texture
-
-from simplepbr import _ibl_funcs_cpu as ibl
-from simplepbr.envmap import EnvMap
-
-LADO = 16                # el cubo de partida: un degradado no pide mas
-FILTRADO = 32            # el cubo de reflejos
-MUESTRAS = 12
-VERSION = 2              # subir al tocar un cielo: tira la cache
-CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     ".cache_texturas")
+from panda3d.core import LVector3f, LVecBase3f
 
 # (cenit, horizonte, suelo, fuerza del sol). En luz lineal y bajos: se
 # suman a la luz que ya tiene la escena. Los interiores son «la sala»: un
@@ -54,140 +43,117 @@ CIELOS = {
     "plaza_central:caotica": ((0.050, 0.030, 0.030), (0.300, 0.110, 0.050),
                               (0.050, 0.022, 0.012), 0.5),
 }
+# Cuanto pesa el reflejo frente al difuso. El difuso es luz de relleno y va
+# entero; el reflejo, a la mitad: un metal mate no debe competir con las
+# lamparas de la escena.
+REFLEJO = 0.5
 
-_E = {"tuberia": None, "activo": True, "nombre": None, "sol": None, "listos": {}}
+_E = {"tuberia": None, "activo": True, "nombre": None, "sol": None,
+      "color": (0.0, 0.0, 0.0)}
 
-
-def _cielo(d, cenit, horizonte, suelo, sol, color_sol):
-    """El color del cielo en la direccion d (y hacia arriba)."""
-    x, y, z = d
-    largo = math.sqrt(x * x + y * y + z * z) or 1.0
-    x, y, z = x / largo, y / largo, z / largo
-    if y >= 0:
-        f = y ** 0.55                              # el horizonte, ancho
-        c = [h + (a - h) * f for h, a in zip(horizonte, cenit)]
-    else:
-        f = min(1.0, -y * 3.0)
-        c = [h * 0.55 + (s - h * 0.55) * f for h, s in zip(horizonte, suelo)]
-    if sol is not None:
-        cos = x * sol[0] + y * sol[1] + z * sol[2]
-        # un halo ancho y, dentro, el disco (grande: el cubo es pequeño)
-        halo = max(0.0, cos) ** 6 * 0.35 + max(0.0, cos) ** 60 * 2.2
-        c = [v + k * halo for v, k in zip(c, color_sol)]
-    return c
-
-
-def _cubo(nombre, cenit, horizonte, suelo, sol, color_sol):
-    """El cubo de partida, con la misma cuenta de direcciones que usa
-    simplepbr para leerlo (calc_vector): asi no hay que adivinar como
-    numera caras y filas."""
-    tex = Texture("cielo_" + nombre)
-    tex.setup_cube_map(LADO, Texture.T_float, Texture.F_rgba32)
-    datos = bytearray(LADO * LADO * 6 * 16)
-    for cara in range(6):
-        for y in range(LADO):
-            for x in range(LADO):
-                r, g, b = _cielo(ibl.calc_vector(LADO, cara, x, y),
-                                 cenit, horizonte, suelo, sol, color_sol)
-                # Panda guarda BGRA
-                struct.pack_into("ffff", datos, ((cara * LADO + y) * LADO + x) * 16,
-                                 b, g, r, 1.0)
-    tex.set_ram_image(bytes(datos))
-    return tex
-
-
-def _preparar(clave, nombre_cielo, sol, color_sol):
-    cenit, horizonte, suelo, fuerza = CIELOS[nombre_cielo]
-    color_sol = tuple(c * fuerza for c in color_sol)
-    if sol is None or fuerza <= 0:
-        sol = None
-    marca = "_".join(f"{v:.2f}" for v in (sol or (0, 0, 0)))
-    ruta = os.path.join(CACHE, f"cielo_{nombre_cielo.replace(':', '_')}_{marca}_v{VERSION}.bam")
-    if os.path.exists(ruta):
-        try:
-            return EnvMap._from_bam(Filename.from_os_specific(ruta))
-        except Exception:
-            pass                                  # cache rota: se rehace
-    cubo = _cubo(nombre_cielo, cenit, horizonte, suelo, sol, color_sol)
-    env = EnvMap(cubo, prefiltered_size=FILTRADO, prefiltered_samples=MUESTRAS,
-                 blocking_prepare=True)
-    try:
-        os.makedirs(CACHE, exist_ok=True)
-        env.write(Filename.from_os_specific(ruta))
-    except Exception:
-        pass                                      # sin cache se vive: solo tarda
-    return env
-
-
+# El bloque de luz indirecta de simplepbr (su cubo y su tabla)...
 _IBL_VIEJO = """    vec3 ibl_f = fresnelSchlickRoughness(n_dot_v, spec_color, perceptual_roughness);
     vec3 ibl_kd = (1.0 - ibl_f) * (1.0 - metallic);
     vec3 ibl_diff = base_color.rgb * max(irradiance_from_sh(world_normal), 0.0) * diffuse_function();
 
     vec3 world_view = normalize(camera_world_position - v_world_position);
     vec3 ibl_r = reflect(-world_view, world_normal);
-    vec2 env_brdf = texture2D(brdf_lut, vec2(n_dot_v, perceptual_roughness)).rg;"""
-# Con la normal GEOMETRICA y no con la del mapa de relieve: en las piezas
-# cuya tangente llega mal (suelos, cilindros) la normal con relieve sale
-# nula, el angulo se lee como rasante y la pieza reflejaba el cielo entero,
-# como un espejo: tanques, lamparas y suelos blanquecinos.
+    vec2 env_brdf = texture2D(brdf_lut, vec2(n_dot_v, perceptual_roughness)).rg;
+    vec3 ibl_spec_color = textureCubeLod(filtered_env_map, ibl_r, perceptual_roughness * max_reflection_lod).rgb;
+    vec3 ibl_spec = ibl_spec_color * (ibl_f * env_brdf.x + env_brdf.y);
+    color.rgb += (ibl_kd * ibl_diff  + ibl_spec) * ambient_occlusion;"""
+# ...por el cielo calculado. Con la normal GEOMETRICA y no la del mapa de
+# relieve: en las piezas cuya tangente llega mal la normal con relieve sale
+# nula y el angulo se leia como rasante. Y con guarda: una malla SIN
+# normales (el `Cylinder` de Ursina) daba una division por cero que salia
+# blanco quemado; aqui se toma «hacia arriba» y no revienta.
 _IBL_NUEVO = """    vec3 world_view = normalize(camera_world_position - v_world_position);
-    vec3 ibl_n = normalize(v_world_tbn[2]);
+    vec3 ibl_n = v_world_tbn[2];
+    float ibl_largo = length(ibl_n);
+    ibl_n = ibl_largo > 0.0001 ? ibl_n / ibl_largo : vec3(0.0, 1.0, 0.0);   // malla sin normales
     float ibl_ndv = clamp(abs(dot(ibl_n, world_view)), 0.0, 1.0);
     vec3 ibl_f = fresnelSchlickRoughness(ibl_ndv, spec_color, perceptual_roughness);
     vec3 ibl_kd = (1.0 - ibl_f) * (1.0 - metallic);
-    vec3 ibl_diff = base_color.rgb * max(irradiance_from_sh(ibl_n), 0.0) * diffuse_function();
-
+    vec3 ibl_diff = base_color.rgb * cielo_difuso(ibl_n);
     vec3 ibl_r = reflect(-world_view, ibl_n);
-    vec2 env_brdf = texture2D(brdf_lut, vec2(ibl_ndv, perceptual_roughness)).rg;"""
+    vec2 env_brdf = cielo_brdf(ibl_ndv, perceptual_roughness);
+    vec3 ibl_spec = cielo_reflejo(ibl_r, perceptual_roughness) * (ibl_f * env_brdf.x + env_brdf.y);
+    color.rgb += (ibl_kd * ibl_diff + ibl_spec * cielo_fuerza.y) * ambient_occlusion * cielo_fuerza.x;"""
+
+# «Arriba» es +y: Ursina monta la escena con la y hacia arriba.
+_FUNCIONES = """
+// --- ambiente.py: el cielo del escenario, calculado ---
+uniform vec3 cielo_cenit;
+uniform vec3 cielo_horizonte;
+uniform vec3 cielo_suelo;
+uniform vec3 cielo_sol;          // de donde viene, en mundo
+uniform vec3 cielo_sol_color;
+uniform vec2 cielo_fuerza;       // (todo, reflejo)
+
+vec3 cielo_color(float arriba) {
+    if (arriba >= 0.0) {
+        return mix(cielo_horizonte, cielo_cenit, pow(arriba, 0.55));
+    }
+    return mix(cielo_horizonte * 0.55, cielo_suelo, min(1.0, -arriba * 3.0));
+}
+
+// Lo que ve un reflejo en la direccion d. La rugosidad lo emborrona: el
+// degradado se aplana hacia su color medio y el sol pasa de disco a halo.
+vec3 cielo_reflejo(vec3 d, float rugosidad) {
+    vec3 medio = (cielo_cenit + cielo_horizonte + cielo_suelo) / 3.0;
+    vec3 c = mix(cielo_color(d.y), medio, rugosidad * rugosidad);
+    float hacia_sol = max(dot(d, cielo_sol), 0.0);
+    float halo = pow(hacia_sol, mix(60.0, 3.0, rugosidad)) * mix(1.6, 0.18, rugosidad);
+    return c + cielo_sol_color * halo;
+}
+
+// La luz difusa que le llega a una superficie que mira hacia n: media
+// del hemisferio, o sea el mismo degradado muy emborronado.
+vec3 cielo_difuso(vec3 n) {
+    float f = n.y * 0.5 + 0.5;
+    vec3 abajo = mix(cielo_suelo, cielo_horizonte, 0.25);
+    vec3 arriba = mix(cielo_horizonte, cielo_cenit, 0.6);
+    return mix(abajo, arriba, f) + cielo_sol_color * max(dot(n, cielo_sol), 0.0) * 0.08;
+}
+
+// Cuanto refleja una superficie segun el angulo y su rugosidad
+// (Karis, 2014: la tabla BRDF, en una cuenta).
+vec2 cielo_brdf(float n_dot_v, float rugosidad) {
+    vec4 r = rugosidad * vec4(-1.0, -0.0275, -0.572, 0.022) + vec4(1.0, 0.0425, 1.04, -0.04);
+    float a004 = min(r.x * r.x, exp2(-9.28 * n_dot_v)) * r.x + r.y;
+    return clamp(vec2(-1.04, 1.04) * a004 + r.zw, 0.0, 1.0);
+}
+
+"""
 
 
 def preparar_shaders():
     """Antes de `simplepbr.init`, como luces.py y posproceso.py."""
     import simplepbr.shaders as sh
     texto = sh.shaders.get("simplepbr.frag", "")
-    if "ibl_ndv" in texto:
+    if "cielo_reflejo" in texto:
         return True
-    if _IBL_VIEJO not in texto:
-        print("ambiente: el shader de simplepbr cambio; reflejos sin corregir")
+    if _IBL_VIEJO not in texto or "void main()" not in texto:
+        # Sin el parche el shader sigue con su cubo vacio (negro): no hay
+        # luz del cielo, pero nada se rompe.
+        print("ambiente: el shader de simplepbr cambio; sin luz del cielo")
         return False
-    sh.shaders["simplepbr.frag"] = texto.replace(_IBL_VIEJO, _IBL_NUEVO)
+    texto = texto.replace(_IBL_VIEJO, _IBL_NUEVO)
+    sh.shaders["simplepbr.frag"] = texto.replace("void main()", _FUNCIONES + "void main()", 1)
     return True
-
-
-def _tabla_brdf(lado=64):
-    """La tabla que dice cuanto refleja una superficie segun el angulo
-    (u) y su rugosidad (v). La que trae simplepbr va en coma flotante de
-    16 bits y en esta grafica llegaba mal: daba ~1 para todo, y cualquier
-    metal —un tanque pintado, la pantalla de una lampara— reflejaba el
-    cielo como un espejo. Esta es la aproximacion analitica de siempre
-    (Karis, 2014) en 8 bits, que llega igual a cualquier grafica."""
-    import numpy as np
-    nv, rug = np.meshgrid((np.arange(lado) + 0.5) / lado, (np.arange(lado) + 0.5) / lado)
-    rx = -1.0 * rug + 1.0
-    ry = -0.0275 * rug + 0.0425
-    rz = -0.572 * rug + 1.04
-    rw = 0.022 * rug - 0.04
-    a004 = np.minimum(rx * rx, np.exp2(-9.28 * nv)) * rx + ry
-    escala = np.clip(-1.04 * a004 + rz, 0, 1)
-    sesgo = np.clip(1.04 * a004 + rw, 0, 1)
-    # Panda guarda BGR y la fila 0 es la de abajo (v = 0): tal cual.
-    bgr = np.stack((np.zeros_like(nv), sesgo, escala), -1)
-    tex = Texture("tabla_brdf")
-    tex.setup_2d_texture(lado, lado, Texture.T_unsigned_byte, Texture.F_rgb)
-    tex.set_ram_image(np.ascontiguousarray((bgr * 255).astype(np.uint8)).tobytes())
-    for poner in (tex.set_wrap_u, tex.set_wrap_v):
-        poner(SamplerState.WM_clamp)
-    tex.set_minfilter(SamplerState.FT_linear)
-    tex.set_magfilter(SamplerState.FT_linear)
-    return tex
 
 
 def iniciar(tuberia, activo):
     _E["tuberia"], _E["activo"] = tuberia, bool(activo)
-    # En la CLASE: simplepbr vuelve a poner «su» tabla cada vez que rehace
-    # el shader, y la toma de ahi.
-    type(tuberia)._BRDF_LUT = _tabla_brdf()
-    tuberia._set_env_map_uniforms()
+    # simplepbr tira las entradas que no son suyas cada vez que rehace el
+    # shader (al cambiar la niebla, las sombras...): se reponen detras.
+    rehacer = tuberia._recompile_pbr
+
+    def rehacer_y_reponer():
+        rehacer()
+        _aplicar()
+
+    tuberia._recompile_pbr = rehacer_y_reponer
     _aplicar()
 
 
@@ -227,12 +193,15 @@ def _aplicar():
     t = _E["tuberia"]
     if t is None:
         return
-    if not _E["activo"] or _E["nombre"] is None:
-        if t.env_map is not None:
-            t.env_map = None
-        return
-    sol = _E["sol"]
-    clave = (_E["nombre"], tuple(round(v, 2) for v in sol) if sol else None)
-    if clave not in _E["listos"]:
-        _E["listos"][clave] = _preparar(clave, _E["nombre"], sol, _E.get("color", (0, 0, 0)))
-    t.env_map = _E["listos"][clave]
+    raiz = t.render_node
+    cenit, horizonte, suelo, fuerza_sol = CIELOS[_E["nombre"] or "cafeteria"]
+    sol = _E["sol"] if fuerza_sol > 0 else None
+    color = tuple(c * fuerza_sol for c in _E["color"]) if sol else (0.0, 0.0, 0.0)
+    encendido = 1.0 if (_E["activo"] and _E["nombre"] is not None) else 0.0
+    # LVecBase3f y no tuplas: una tupla de tres la toma por color (vec4).
+    raiz.set_shader_input("cielo_cenit", LVecBase3f(*cenit))
+    raiz.set_shader_input("cielo_horizonte", LVecBase3f(*horizonte))
+    raiz.set_shader_input("cielo_suelo", LVecBase3f(*suelo))
+    raiz.set_shader_input("cielo_sol", LVecBase3f(*(sol or (0.0, 1.0, 0.0))))
+    raiz.set_shader_input("cielo_sol_color", LVecBase3f(*color))
+    raiz.set_shader_input("cielo_fuerza", (encendido, REFLEJO))
