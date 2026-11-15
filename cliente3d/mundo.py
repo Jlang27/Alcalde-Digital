@@ -953,27 +953,82 @@ PIEL = {"piel_1": (0.45, 0.26, 0.16), "piel_2": (0.24, 0.13, 0.07),
 MITIN = (-45.0, -13.0)
 
 
-def _muneco(x, z, azar, caras, pancarta=None):
-    """Piernas, torso y cabeza. pancarta: material del letrero en alto."""
-    s = azar.uniform(0.92, 1.08)
+PELO = {"pelo_1": (0.020, 0.015, 0.012), "pelo_2": (0.10, 0.05, 0.02),
+        "pelo_3": (0.30, 0.20, 0.08), "pelo_4": (0.22, 0.22, 0.22)}
+
+
+def _muneco(x, z, azar, caras, pancarta=None, rumbo=None, ropa=None, casco=None):
+    """Una persona de fondo, de pocas caras: zapatos, dos piernas, torso
+    con hombros, brazos con manos, cuello, cabeza y pelo.
+
+    Antes eran tres piezas (una caja de piernas, una de torso y una bola)
+    todas mirando al mismo lado, y de cerca se leian como fichas de
+    parques: lo que mas delataba era la fila de cajas IGUALES Y PARALELAS.
+    Ahora cada una mira hacia donde le toca con su desvio, tiene otra
+    talla y otra anchura, y los brazos le dan silueta de persona. Sigue
+    fundida por material: no cuesta llamadas de dibujo.
+
+    rumbo: hacia donde mira, en grados (0 = +z, 90 = +x); None, al azar.
+    pancarta: material del letrero que lleva en alto. ropa: material del
+    torso (el chaleco de los voluntarios). casco: material sobre el pelo.
+    """
+    s = azar.uniform(0.92, 1.08)                  # talla
+    w = azar.uniform(0.90, 1.12)                  # anchura
+    if rumbo is None:
+        rumbo = azar.uniform(0.0, 360.0)
+    rumbo += azar.uniform(-22.0, 22.0)
+    c, sn = math.cos(math.radians(rumbo)), math.sin(math.radians(rumbo))
     y = 0.15
-    caras[azar.choice(("pantalon", "pantalon_negro"))].extend(
-        _caras_caja(x - 0.19 * s, x + 0.19 * s, y, y + 0.82 * s,
-                    z - 0.12, z + 0.12))
-    caras[azar.choice(tuple(ROPA))].extend(
-        _caras_caja(x - 0.24 * s, x + 0.24 * s, y + 0.80 * s, y + 1.45 * s,
-                    z - 0.15, z + 0.15))
-    caras[azar.choice(tuple(PIEL))].extend(
-        _caras_esfera(x, y + 1.60 * s, z, 0.13 * s))
+
+    def poner(mat, piezas):
+        for quad, n in piezas:
+            caras[mat].append((tuple((x + p[0] * c + p[2] * sn, p[1], z - p[0] * sn + p[2] * c)
+                                     for p in quad),
+                               (n[0] * c + n[2] * sn, n[1], -n[0] * sn + n[2] * c)))
+
+    pantalon = azar.choice(("pantalon", "pantalon_negro"))
+    camisa = ropa or azar.choice(tuple(ROPA))
+    piel = azar.choice(tuple(PIEL))
+    cadera, hombro = 0.17 * s * w, 0.23 * s * w
+    for lado in (-1, 1):
+        px = lado * 0.095 * s * w
+        poner("pantalon_negro", _caras_caja(px - 0.075, px + 0.075, y, y + 0.07 * s,
+                                            -0.09, 0.16))                    # zapato
+        poner(pantalon, _caras_caja(px - 0.072 * w, px + 0.072 * w, y + 0.06 * s,
+                                    y + 0.84 * s, -0.085, 0.085))
+    poner(pantalon, _caras_caja(-cadera, cadera, y + 0.72 * s, y + 0.92 * s, -0.10, 0.10))
+    poner(camisa, _caras_caja(-cadera - 0.01, cadera + 0.01, y + 0.88 * s, y + 1.16 * s,
+                              -0.105, 0.105))                                # cintura
+    poner(camisa, _caras_caja(-hombro, hombro, y + 1.14 * s, y + 1.44 * s, -0.12, 0.12))
+    # Brazos: caidos, o el derecho en alto si lleva pancarta.
+    for lado in (-1, 1):
+        bx = lado * (hombro + 0.045)
+        if pancarta is not None and lado > 0:
+            poner(camisa, _caras_caja(bx - 0.05, bx + 0.05, y + 1.30 * s, y + 1.74 * s,
+                                      0.0, 0.10))
+            poner(piel, _caras_caja(bx - 0.04, bx + 0.04, y + 1.74 * s, y + 1.83 * s,
+                                    0.01, 0.09))
+        else:
+            delante = azar.uniform(-0.04, 0.05)
+            poner(camisa, _caras_caja(bx - 0.05, bx + 0.05, y + 0.90 * s, y + 1.42 * s,
+                                      delante - 0.055, delante + 0.055))
+            poner(piel, _caras_caja(bx - 0.04, bx + 0.04, y + 0.80 * s, y + 0.90 * s,
+                                    delante - 0.045, delante + 0.045))
+    poner(piel, _caras_caja(-0.05, 0.05, y + 1.43 * s, y + 1.51 * s, -0.05, 0.05))   # cuello
+    cabeza = y + 1.61 * s
+    poner(piel, _caras_esfera(0.0, cabeza, 0.0, 0.118 * s))
+    # El pelo: otra bola algo mayor, echada atras y arriba; deja la cara.
+    poner(casco or azar.choice(tuple(PELO)),
+          _caras_esfera(0.0, cabeza + 0.035 * s, -0.035 * s, 0.124 * s))
     if pancarta is not None:
-        caras["palo"].extend(_caras_caja(x - 0.02, x + 0.02, y + 1.2,
-                                         y + 2.35, z + 0.2, z + 0.24))
-        caras[pancarta].extend(_caras_caja(x - 0.03, x + 0.03, y + 2.0,
-                                           y + 2.5, z - 0.1, z + 0.55))
+        bx = hombro + 0.045
+        poner("palo", _caras_caja(bx - 0.02, bx + 0.02, y + 1.60 * s, y + 2.45,
+                                  0.02, 0.06))
+        poner(pancarta, _caras_caja(bx - 0.34, bx + 0.34, y + 2.0, y + 2.5, 0.06, 0.10))
 
 
 def _multitud(mundo, azar):
-    mats = {n: (c, 0.9, 0.0, None) for n, c in {**ROPA, **PIEL}.items()}
+    mats = {n: (c, 0.9, 0.0, None) for n, c in {**ROPA, **PIEL, **PELO}.items()}
     mats.update({"pantalon": ((0.04, 0.05, 0.09), 0.9, 0.0, None),
                  "pantalon_negro": ((0.015, 0.015, 0.018), 0.9, 0.0, None),
                  "palo": ((0.20, 0.15, 0.10), 0.9, 0.0, None)})
@@ -1005,7 +1060,7 @@ def _multitud(mundo, azar):
         lleva = None
         if azar.random() < 0.35:
             lleva = "pancarta_" + azar.choice(CARTELES)[0]
-        _muneco(x, z, azar, caras, lleva)
+        _muneco(x, z, azar, caras, lleva, rumbo=90.0)     # de cara a la calle
         z += azar.uniform(0.7, 1.6)
 
     for nombre, lista in caras.items():
@@ -2448,8 +2503,11 @@ CREMA = (0.95, 0.85, 0.55)
 ROJO_TITULAR = (0.95, 0.20, 0.15)
 AZUL_OSPINA = (0.35, 0.60, 1.00)
 # La encuesta del muro de pantallas, en el orden de juego.CANDIDATOS. Es
-# la caida que cuenta el capitulo: De la Estrella pierde 10 puntos por el rumor.
+# la caida que cuenta el capitulo: De la Estrella pierde 10 puntos por el
+# rumor. Solo es lo que hay al montar la sala: el juego pone enseguida los
+# numeros de la Partida (encuesta_muro), que son los que valen.
 ENCUESTA_PANTALLA = (28, 34, 21, 17)
+CAIDA_PANTALLA = -10
 
 
 def _obra_campana():
@@ -2519,22 +2577,15 @@ def _obra_campana():
     frente = zs + 0.035
     o.pared("banner_rojo", "z", zs, 1, 9.7, 12.15, 2.4, 2.75, 0.05, 0.055)
     o.letrero("ÚLTIMA HORA", "z", frente + 0.01, 1, 10.92, 2.57, 0.12, BLANCO)
-    o.letrero("DE LA ESTRELLA CAE 10 PUNTOS", "z", frente, 1, 10.92, 2.15, 0.065, BLANCO)
     o.letrero("#CierreDeColegios", "z", frente, 1, 10.92, 1.35, 0.1, ROJO_TITULAR)
     o.letrero("tendencia en Civitas", "z", frente, 1, 10.92, 1.15, 0.06, BLANCO)
     o.letrero("INTENCIÓN DE VOTO", "z", frente, 1, 8.32, 2.55, 0.1, BLANCO)
+    # Las barras, sus cifras y el titular de la caida no van en la obra:
+    # son los numeros de la Partida y los pone encuesta_muro().
     from juego import NOMBRES_CANDIDATOS, apellido
-    barras = ("barra_azul", "barra_roja", "barra_amarilla", "barra_verde")
-    for i, (nombre, votos, barra) in enumerate(zip(NOMBRES_CANDIDATOS,
-                                                   ENCUESTA_PANTALLA, barras)):
-        a = 7.45 + (3 - i) * 0.5
-        o.pared(barra, "z", zs, 1, a, a + 0.34, 1.12, 1.12 + votos / 30.0,
-                0.05, 0.06)
-        o.letrero(apellido(nombre).upper(), "z", frente, 1, a + 0.17, 1.02,
+    for i, nombre in enumerate(NOMBRES_CANDIDATOS):
+        o.letrero(apellido(nombre).upper(), "z", frente, 1, 7.62 + (3 - i) * 0.5, 1.02,
                   0.045, BLANCO)
-        o.letrero(f"{votos} %", "z", frente, 1, a + 0.17,
-                  1.18 + votos / 30.0, 0.05, BLANCO)
-    o.letrero("−10", "z", frente, 1, 9.12, 2.25, 0.11, ROJO_TITULAR)
     o.letrero("CIVITAS", "z", frente, 1, 5.72, 2.55, 0.1, AZUL_OSPINA)
     o.letrero("40 000 compartidos", "z", frente, 1, 5.72, 2.2, 0.07, BLANCO)
     o.letrero("«De la Estrella quiere cerrar", "z", frente, 1, 5.72, 1.45, 0.06, BLANCO)
@@ -2992,7 +3043,53 @@ MATERIALES_CAMPANA = {
 }
 
 
+def encuesta_muro(votos=ENCUESTA_PANTALLA, cambio=CAIDA_PANTALLA):
+    """La intencion de voto del muro de pantallas del comando.
+
+    votos: los cuatro porcentajes en el orden de juego.CANDIDATOS.
+    cambio: lo que ha subido o bajado De la Estrella desde ayer.
+
+    Antes las barras eran parte de la obra, con numeros fijos, y la hoja
+    que sale al mirarlas con E daba los de la Partida: si el capitulo 2
+    habia movido la encuesta, el muro y la hoja no cuadraban. Ahora el
+    juego llama aqui al entrar y el muro dice lo mismo que la Partida.
+    """
+    cont = _ACTUAL.get("contenedor_muro")
+    if cont is None or cont.isEmpty():            # no esta montado el comando
+        return
+    from ursina import destroy
+    for e in _ACTUAL.pop("muro_encuesta", ()):
+        if e in _ENTIDADES:                       # si no, ya se fue con el escenario
+            _ENTIDADES.remove(e)
+            destroy(e)
+    zs = Z_SALAS + 0.1
+    antes = len(_ENTIDADES)
+    tope = max(40.0, max(votos))                  # la mas alta no pisa el titulo
+    letreros = []
+    for i, (v, barra) in enumerate(zip(votos, ("barra_azul", "barra_roja",
+                                               "barra_amarilla", "barra_verde"))):
+        a = 7.45 + (3 - i) * 0.5
+        alto = max(0.03, 1.15 * v / tope)
+        base, rug, met, emi = MATERIALES_CAMPANA[barra]
+        _pieza(cont, "cube", _material((*base, 1), rug, met, (*emi, 1)),
+               (0.34, alto, 0.01), (a + 0.17, 1.12 + alto / 2, zs + 0.055))
+        letreros.append((f"{v:.0f} %", a + 0.17, 1.18 + alto, zs + 0.07, 180, 0.05, BLANCO))
+    cambio = int(round(cambio))
+    if cambio:
+        verbo = "CAE" if cambio < 0 else "SUBE"
+        puntos = "PUNTO" if abs(cambio) == 1 else "PUNTOS"
+        titular = f"DE LA ESTRELLA {verbo} {abs(cambio)} {puntos}"
+        letreros.append((("−" if cambio < 0 else "+") + str(abs(cambio)), 9.12, 2.25,
+                         zs + 0.07, 180, 0.11, ROJO_TITULAR if cambio < 0 else AZUL_OSPINA))
+    else:
+        titular = f"DE LA ESTRELLA, EN {votos[0]:.0f} %"
+    letreros.append((titular, 10.92, 2.15, zs + 0.07, 180, 0.065, BLANCO))
+    _letreros(letreros)
+    _ACTUAL["muro_encuesta"] = _ENTIDADES[antes:]
+
+
 def _campana(mundo):
+    _ACTUAL["contenedor_muro"] = mundo
     caras = {}
 
     def poner(mat, x0, x1, y0, y1, z0, z1):
@@ -3017,6 +3114,8 @@ def _campana(mundo):
     for z in (-12.0, 1.5):
         poner("panel_calido", -2.0, 1.0, yj - 0.03, yj - 0.005, z - 0.25, z + 0.25)
     _volcar_obra(mundo, OBRA_CAMPANA, MATERIALES_CAMPANA, caras)
+    _ACTUAL.pop("muro_encuesta", None)            # las del montaje anterior ya no existen
+    encuesta_muro()
     _ciudad_abajo(mundo)
     _ascensor(mundo)
     _billar(mundo)

@@ -191,7 +191,7 @@ MATERIALES = {
     "escudo": ((0.10, 0.12, 0.14), 0.2, 0.6, None),
 }
 # Los muñecos de fondo (mundo._muneco) piden estos nombres.
-for _n, _c in {**M.ROPA, **M.PIEL}.items():
+for _n, _c in {**M.ROPA, **M.PIEL, **M.PELO}.items():
     MATERIALES[_n] = (_c, 0.9, 0, None)
 MATERIALES.update({
     "pantalon": ((0.04, 0.05, 0.09), 0.9, 0, None),
@@ -462,14 +462,15 @@ def _cebra(t, x0, x1, z0, z1, a_lo_largo_de_x):
             z += 1.0
 
 
-def _fachada(t, azar, eje, plano, signo, a0, a1, alto, desde=1.2):
-    """Ventanas de una cara de edificio; encendidas unas si y otras no."""
+def _fachada(t, azar, eje, plano, signo, a0, a1, alto, desde=1.2, pesos=(5, 2, 4)):
+    """Ventanas de una cara de edificio; encendidas unas si y otras no.
+    pesos: cuantas calidas, frias y apagadas."""
     y = desde
     while y + 1.5 < alto - 0.4:
         a = a0 + 0.9
         while a + 1.1 < a1 - 0.6:
             mat = azar.choices(("ventana_calida", "ventana_fria", "ventana_apagada"),
-                               (5, 2, 4))[0]
+                               pesos)[0]
             t.o.pared(mat, eje, plano, signo, a, a + 1.1, y, y + 1.5, 0, 0.06)
             a += 2.6
         y += 3.2
@@ -701,7 +702,82 @@ def _obra_base():
     # --- postes para los carteles en las aceras de la avenida ---
     for z in (-26.0, -14.0, 2.0, 22.0, 34.0):
         _farola(t, 30.8, z, 5.0)
+    _alrededores(t, random.Random(58))
     return t
+
+
+# Lo que ocupa la plaza de verdad (edificios, callejones, escalinata), con
+# margen: las manzanas de fuera no entran aqui.
+_DENTRO = (-54.0, 64.0, -84.0, 82.0)
+# La rejilla de las manzanas de fuera: calles cada CUADRA metros, alineadas
+# con la avenida (x = 36) y la calle sur (z = -36) para que estas sigan.
+CUADRA = 34.0
+HASTA = 260.0                         # hasta donde hay ciudad
+SUELO_LEJOS = 700.0                   # el suelo, casi hasta el cilindro del cielo
+
+
+def _alrededores(t, azar):
+    """La ciudad de alrededor, para que la plaza no flote.
+
+    Sin esto el asfalto acababa a 4 m del limite y, mirando desde arriba o
+    al fondo de una calle, debajo del mapa se veia el cielo: la plaza
+    parecia una isla colgada. Ahora el suelo sigue hasta casi el cilindro
+    del cielo (mas lejos, el cilindro lo taparia) y alrededor hay manzanas
+    con ventanas que la niebla va comiendo con la distancia. Nada de esto
+    se pisa: queda fuera de LIMITES y no bloquea.
+
+    Aqui van el suelo y los edificios; las ventanas las pone cada estado
+    (_ventanas_alrededores): encendidas en la pacifica y casi todas a
+    oscuras en la caotica, que es una ciudad que ha cerrado las persianas.
+    """
+    o = t.o
+    # Por debajo del asfalto de la plaza (que va a 0,003) para no pelear con el.
+    o.caja("asfalto", -SUELO_LEJOS, SUELO_LEJOS, -0.06, -0.01, -SUELO_LEJOS, SUELO_LEJOS)
+    # La avenida y la calle sur siguen hasta perderse.
+    for z in range(-int(HASTA), int(HASTA), 5):
+        if not _DENTRO[2] < z < _DENTRO[3]:
+            o.caja("linea_amarilla", 35.9, 36.1, -0.01, 0.0, z, z + 2.5)
+    for x in range(-int(HASTA), int(HASTA), 5):
+        if not _DENTRO[0] < x < _DENTRO[1]:
+            o.caja("linea_calle", x, x + 2.5, -0.01, 0.0, -36.1, -35.9)
+    n = int(HASTA / CUADRA) + 1
+    for i in range(-n, n):
+        for j in range(-n, n):
+            # La manzana entre dos calles; la acera, 2 m dentro de la calle,
+            # y el edificio otros 2 m dentro de la acera.
+            x0, z0 = 36.0 + i * CUADRA + 6.0, -36.0 + j * CUADRA + 6.0
+            x1, z1 = x0 + CUADRA - 12.0, z0 + CUADRA - 12.0
+            cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
+            lejos = math.hypot(cx, cz)
+            if lejos > HASTA:
+                continue
+            if x1 > _DENTRO[0] and x0 < _DENTRO[1] and z1 > _DENTRO[2] and z0 < _DENTRO[3]:
+                continue
+            o.caja("bordillo", x0 - 2, x1 + 2, -0.01, 0.15, z0 - 2, z1 + 2)
+            # A veces dos edificios en la manzana: el perfil no sale de cajas iguales.
+            partes = [(x0, x1)] if azar.random() < 0.6 else [(x0, cx - 0.5), (cx + 0.5, x1)]
+            for a0, a1 in partes:
+                alto = azar.uniform(12.0, 26.0) if lejos < 120 else azar.uniform(16.0, 48.0)
+                mat = azar.choice(("fachada_1", "fachada_2", "fachada_3", "fachada_4",
+                                   "piedra_crema"))
+                o.caja(mat, a0, a1, 0, alto, z0, z1)
+                o.caja("marco_metal", a0 - 0.3, a1 + 0.3, alto, alto + 0.6, z0 - 0.3, z1 + 0.3)
+                _MANZANAS.append((a0, a1, z0, z1, alto, cx, cz))
+
+
+_MANZANAS = []                        # los edificios de fuera, para sus ventanas
+
+
+def _ventanas_alrededores(t, azar, pesos):
+    """Las ventanas de la ciudad de fuera, con las luces de un estado. Solo
+    en las caras que miran hacia la plaza: las otras no se ven nunca y
+    serian miles de piezas de mas."""
+    for a0, a1, z0, z1, alto, cx, cz in _MANZANAS:
+        for eje, plano, signo, b0, b1, hacia in (
+                ("x", a0, -1, z0, z1, cx > 0), ("x", a1, 1, z0, z1, cx < 0),
+                ("z", z0, -1, a0, a1, cz > 0), ("z", z1, 1, a0, a1, cz < 0)):
+            if hacia:
+                _fachada(t, azar, eje, plano, signo, b0, b1, alto, pesos=pesos)
 
 
 # ===================================================================
@@ -748,6 +824,7 @@ def _obra_pacifica():
     for xf in (-10.0, 10.0):
         o.caja("maceta", xf - 0.35, xf + 0.35, ALTO_TARIMA, ALTO_TARIMA + 0.5, 37.3, 38.0)
         t.esfera("flor_amarilla", xf, ALTO_TARIMA + 0.75, 37.65, 0.4, 8, 4)
+    _ventanas_alrededores(t, random.Random(59), (5, 2, 4))    # la ciudad, encendida
     return t
 
 
@@ -814,6 +891,8 @@ def _obra_caotica():
         t.girada("patrulla", x, z, 1.9, 4.6, 0.25, 1.05, giro, bloquea=True)
         t.girada("patrulla_franja", x, z, 1.95, 4.0, 0.55, 0.75, giro)
         t.girada("cristal_coche", x, z, 1.7, 2.3, 1.05, 1.55, giro)
+    # La ciudad de fuera, casi a oscuras: persianas bajadas.
+    _ventanas_alrededores(t, random.Random(60), (1, 1, 9))
     return t
 
 
@@ -831,7 +910,7 @@ def _munecos(nodo, estado):
         for x0, x1, z0, z1 in ((-14.0, -7.0, 22.0, 34.0), (7.0, 14.0, 22.0, 34.0)):
             for _ in range(int((x1 - x0) * (z1 - z0) / 2.2)):
                 M._muneco(azar.uniform(x0, x1), azar.uniform(z0, z1), azar, caras,
-                          azar.choice(pancartas))
+                          azar.choice(pancartas), rumbo=0.0)     # de cara a la tarima
             zonas.append((x0, x1, z0, z1))
     else:
         pancartas = ("pancarta_protesta", "pancarta_negra", None, None)
@@ -1357,7 +1436,8 @@ def _pasillo():
                 k += 1
                 if k % 3 == 0:                        # gente detras de la valla
                     M._muneco(cx - dz * 0.9 * lado, cz + dx * 0.9 * lado, azar, caras,
-                              "pancarta_protesta" if k % 9 == 0 else None)
+                              "pancarta_protesta" if k % 9 == 0 else None,
+                              rumbo=math.degrees(math.atan2(dz * lado, -dx * lado)))  # a la ruta
     nodo = _PLAZA["nodos"]["caotica"].attachNewNode("pasillo")
     t.volcar(nodo)
     for nombre, lista in caras.items():
@@ -1402,7 +1482,8 @@ def preparar_persecucion(eventos):
             en_contra = abs(bz - az) > abs(bx - ax)
             for k in range(3 if en_contra else 1):
                 M._muneco((k - 1) * 0.7 if en_contra else 0.0, 0.0, azar, caras,
-                          "pancarta_protesta" if k == 1 else None)
+                          "pancarta_protesta" if k == 1 else None,
+                          rumbo=0.0)      # la pieza entera ya se gira hacia donde corre
             for nombre, lista in caras.items():
                 if lista:
                     base, rug, met, emi = MATERIALES[nombre]
@@ -1599,12 +1680,9 @@ def _publico_final(nodo, grupos, semilla):
             x, z = azar.uniform(x0, x1), azar.uniform(z0, z1)
             p = azar.choice(pancartas)
             if p == "chaleco":
-                M._muneco(x, z, azar, caras, None)
-                caras["chaleco"].extend(M._caras_caja(x - 0.26, x + 0.26, 1.05, 1.5,
-                                                      z - 0.17, z + 0.17))
-                caras["casco_obra"].extend(M._caras_esfera(x, 1.83, z, 0.15))
+                M._muneco(x, z, azar, caras, None, ropa="chaleco", casco="casco_obra")
             else:
-                M._muneco(x, z, azar, caras, p)
+                M._muneco(x, z, azar, caras, p, rumbo=0.0)       # de cara a la tarima
     for nombre, lista in caras.items():
         if lista:
             base, rug, met, emi = mats[nombre]
@@ -1623,6 +1701,13 @@ def final(cual, ganador, segundo):
     nodo = _PLAZA["nodo"].attachNewNode("plaza_final")
     vivo = {"confeti": [], "banderas": [], "t": 0.0, "humo": []}
     g, s = f"pancarta_c{ganador}", f"pancarta_c{segundo}"
+    if base == "caotica":
+        # La gente de la plaza caotica (los que protestan pegados a la
+        # tarima, los antidisturbios de detras) no es la de este final: cada
+        # final caotico trae la suya, colocada para contar lo que paso.
+        vivo["publico"] = list(_PLAZA.get("publico", {}).get("caotica", ()))
+        for e in vivo["publico"]:
+            e.enabled = False
     todas = tuple(f"pancarta_c{i}" for i in range(4))
     # La LED de la tarima: quien gano.
     tex = M._textura(f"led_final_{cual}_{ganador}", _pintar_final(cual, ganador), 640, 320,
@@ -1637,8 +1722,18 @@ def final(cual, ganador, segundo):
     # Dos banderas grandes del ganador a los lados de la tarima, ondeando.
     cartel = M._textura(f"cartel_{ganador}", _pintar_cartel(ganador), 300, 420)
     for x in (-8.5, 8.5):
-        M._pieza(nodo, "cube", M._material((0.3, 0.3, 0.32, 1), 0.4, 0.9), (0.08, 6.5, 0.08),
-                 (x, 3.25, 36.6))
+        caido = cual == "desastre" and x > 0
+        poste = M._pieza(nodo, "cube", M._material((0.3, 0.3, 0.32, 1), 0.4, 0.9),
+                         (0.08, 6.5, 0.08), (x, 3.25, 36.6))
+        if caido:
+            # En las ruinas un poste esta vencido y su bandera, en el suelo:
+            # hasta la fiesta del que gana esta rota.
+            poste.rotation_z = -62
+            poste.position = (x + 2.6, 1.6, 36.6)
+            b = _lamina(nodo, cartel, (x + 4.6, 0.2, 35.6), 2.1, 2.9, (x + 4.6, -5.0, 35.6))
+            b.rotation_x = 90
+            b.rotation_y = 25
+            continue
         b = _lamina(nodo, cartel, (x + (1.1 if x < 0 else -1.1), 5.2, 36.6), 2.1, 2.9,
                     (x, 5.2, 0.0))
         vivo["banderas"].append(b)
@@ -1696,7 +1791,7 @@ def final(cual, ganador, segundo):
             for k in range(3):
                 vivo["humo"].append(M._destello_suelto(
                     (x, 3.0 + k * 2.8, z), 5 + k * 2.5, (0.14, 0.13, 0.14), 0.55))
-        _publico_final(nodo, [(-5.0, 5.0, 29.0, 34.5, 3.2, (g, None))], 65)
+        _ruinas(nodo, vivo, g)
     # El confeti, en las tintas del ganador y blanco, sobre la tarima y la
     # pista. En la ciudad partida y en la de ruinas no hay fiesta.
     if cual in ("paz", "reconstruccion"):
@@ -1712,6 +1807,119 @@ def final(cual, ganador, segundo):
             vivo["confeti"].append((e, azar.uniform(0.7, 1.4), azar.uniform(0, 6.28)))
     _PLAZA["final"] = (nodo, vivo)
     return nodo
+
+
+def _pintar_sin_senal(img):
+    """Una LED rota: nieve, franjas y «SIN SEÑAL»."""
+    azar = random.Random(67)
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(8, 8, 10, 255))
+    for _ in range(900):
+        x, y, g = azar.randrange(w), azar.randrange(h), azar.randrange(20, 90)
+        d.rectangle((x, y, x + azar.randrange(2, 9), y + 1), fill=(g, g, g, 255))
+    for _ in range(5):
+        y = azar.randrange(h)
+        d.rectangle((0, y, w, y + azar.randrange(3, 14)), fill=(70, 14, 12, 255))
+    d.text((w / 2, h / 2), "SIN SEÑAL", font=M._letra(int(h * 0.2)),
+           fill=(150, 150, 150, 255), anchor="mm")
+
+
+def _pintar_toque(img):
+    """La pantalla de la torre en las ruinas."""
+    d, (w, h) = ImageDraw.Draw(img), img.size
+    d.rectangle((0, 0, w, h), fill=(26, 4, 4, 255))
+    d.rectangle((0, 0, w, h * 0.2), fill=(200, 24, 18, 255))
+    d.text((w * 0.04, h * 0.1), "AVISO OFICIAL", font=M._letra(int(h * 0.09)),
+           fill=(255, 255, 255, 255), anchor="lm")
+    d.text((w / 2, h * 0.5), "TOQUE DE QUEDA", font=M._letra(int(h * 0.2)),
+           fill=(255, 120, 90, 255), anchor="mm")
+    d.text((w / 2, h * 0.74), "Desde las 20:00 · no salga de casa",
+           font=M._letra(int(h * 0.07), False), fill=(230, 226, 220, 255), anchor="mm")
+
+
+def _ruinas(nodo, vivo, g):
+    """El final malo: Ciudad Nova vuelta nada, y aun asi unos pocos celebran.
+
+    Tiene que verse de un vistazo que se perdio: coches quemados y
+    volcados, barricadas, cascotes por toda la plaza, pintadas de «FRAUDE»,
+    las pantallas de los lados sin senal y la de la torre anunciando toque
+    de queda. Y que se gano igual: un punado de fieles apretados al pie de
+    la tarima, una fila de antidisturbios guardandolos y, detras, la plaza
+    entera de espaldas o protestando.
+    """
+    azar = random.Random(65)
+    t = _Taller()
+    # Coches quemados; dos volcados de lado (la cabina hacia arriba ya no dice «coche»).
+    for x, z, giro in ((-17.0, 24.0, 40.0), (18.0, 19.0, 110.0), (-21.0, -4.0, 75.0),
+                       (24.0, -14.0, 20.0), (3.0, -22.0, 95.0)):
+        _coche(t, x, z, giro, "quemado", bloquea=False)
+    for x, z, giro in ((12.5, 27.5, 30.0), (-12.0, 13.0, 140.0)):
+        t.girada("quemado", x, z, 1.0, 4.3, 0.0, 1.8, giro)
+        t.girada("rueda", x, z, 1.3, 0.6, 0.3, 0.9, giro)
+    # Barricadas a medio arder cerrando las bocas de la plaza.
+    for x, z, giro in ((-24.0, 10.0, 80.0), (26.0, 4.0, 100.0), (0.0, -27.0, 5.0),
+                       (-16.0, -18.0, 35.0), (17.0, -22.0, 150.0)):
+        for k in range(4):
+            t.girada(azar.choice(("caja_madera", "contenedor", "quemado", "valla_metal")),
+                     x + azar.uniform(-1.6, 1.6), z + azar.uniform(-0.6, 0.6),
+                     azar.uniform(1.0, 2.2), azar.uniform(0.5, 1.0), 0,
+                     azar.uniform(0.5, 1.3), giro + azar.uniform(-25, 25))
+        t.girada("brasas", x, z, 2.4, 1.2, 0, 0.06, giro)
+        for tam in (1.8, 3.4):
+            vivo["humo"].append(M._destello_suelto((x, 1.0, z), tam, (1.0, 0.40, 0.10), 0.9))
+        for k in range(3):
+            vivo["humo"].append(M._destello_suelto((x, 3.2 + k * 2.8, z), 5 + k * 2.5,
+                                                   (0.12, 0.11, 0.12), 0.6))
+    # Cascotes, cristales y panfletos por toda la plaza (la pista tambien:
+    # aqui ya no baila nadie).
+    for _ in range(260):
+        t.girada(azar.choice(("escombro", "escombro", "quemado", "linea_calle")),
+                 azar.uniform(-28, 28), azar.uniform(-28, 36), azar.uniform(0.15, 0.7),
+                 azar.uniform(0.1, 0.5), 0, azar.uniform(0.03, 0.22), azar.uniform(0, 180))
+    # Bancas y papeleras volcadas, farolas caidas.
+    for _ in range(10):
+        x, z = azar.uniform(-24, 24), azar.uniform(-24, 28)
+        t.girada("banca_madera", x, z, 1.8, 0.5, 0, 0.5, azar.uniform(0, 180))
+    for x, z, giro in ((-10.0, 20.5, 70.0), (10.0, -12.0, 15.0), (-20.0, 0.5, 120.0)):
+        t.girada("hierro", x, z, 0.14, 5.0, 0.0, 0.16, giro)
+        t.girada("ventana_apagada", x, z, 0.5, 0.5, 0.0, 0.3, giro)
+    # La fila de antidisturbios entre los fieles y el resto: escudos hacia la plaza.
+    x = -9.5
+    caras = {n: [] for n in MATERIALES}
+    while x < 9.6:
+        if not -2.6 < x < 0.2:                    # el hueco por donde mira Mateo
+            caras["uniforme"].extend(M._caras_caja(x - 0.25, x + 0.25, 0.0, 1.45, 22.0, 22.35))
+            caras["casco"].extend(M._caras_esfera(x, 1.62, 22.17, 0.16))
+            caras["escudo"].extend(M._caras_caja(x - 0.3, x + 0.3, 0.3, 1.4, 21.7, 21.75))
+        x += 0.8
+    for k, v in caras.items():
+        if v:
+            t.poner(k, v)
+    t.volcar(nodo)
+    # Pintadas: en el faldon de la tarima y en una lona entre dos farolas.
+    rojo, negro = (200, 30, 22), (12, 10, 10)
+    tex = M._textura("pintada_fraude", _pintar_pancarta("FRAUDE", negro, rojo), 512, 128)
+    _lamina(nodo, tex, (5.5, 0.75, TARIMA[2] - 0.07), 5.0, 1.2, (5.5, 0.75, 0.0))
+    tex = M._textura("pintada_robaron", _pintar_pancarta("NOS ROBARON LA CIUDAD", negro,
+                                                         (235, 230, 220)), 1024, 128)
+    # Dos caras: una lamina se lee del reves por detras, y esta lona se ve
+    # desde el sur (la ciudad desde lo alto) y desde la tarima.
+    for z, hacia in ((11.5, 40.0), (11.44, -40.0)):
+        lona = _lamina(nodo, tex, (0.0, 2.6, z), 12.0, 1.5, (0.0, 2.6, hacia))
+        lona.setTwoSided(False)
+        lona.rotation_z = -4 if hacia > 0 else 4
+    # Las pantallas de los lados, muertas; la de la torre, el toque de queda.
+    sin = M._textura("led_sin_senal", _pintar_sin_senal, 320, 160, srgb=False)
+    for e in _PLAZA["pantallas"]["caotica"][1:3]:
+        e.setTexture(sin, 1)
+    _PLAZA["pantallas"]["caotica"][3].setTexture(
+        M._textura("led_toque", _pintar_toque, 640, 320, srgb=False), 1)
+    # Los fieles: pocos y apretados al pie de la tarima, con las banderas
+    # del que gano. El resto de la plaza, de espaldas a ellos, protesta.
+    _publico_final(nodo, [(-4.0, 4.0, 31.5, 35.5, 2.1, (g, None, None, None))], 65)
+    _publico_final(nodo, [(-13.0, 13.0, 13.0, 20.5, 2.1,
+                           ("pancarta_protesta", "pancarta_negra", None, None)),
+                          (16.0, 26.0, 2.0, 12.0, 3.0, ("pancarta_protesta", None, None))], 68)
 
 
 def vivir_final(dt):
@@ -1745,6 +1953,8 @@ def desmontar_final():
             e.enabled = True              # los fuegos que se apagaron
         else:
             M.destroy(e)                  # los que se encendieron
+    for e in vivo.get("publico", ()):
+        e.enabled = True
     if "pantallas" in vivo:
         luz, col = vivo["pantallas"]
         luz.node().setColor(col)

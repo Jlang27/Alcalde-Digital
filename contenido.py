@@ -1223,6 +1223,31 @@ FINALES = {
                  "repiten mentiras y casi nadie se atreve a salir.",
                  "Ganamos. Que los demás se acostumbren."),
 }
+# Lo que la escena final (cine_final) dice de quienes rodean al ganador, por
+# final: la tarima («equipo»), el que quedó segundo («perdedor», con
+# {segundo}) y, en las ruinas, los pocos que celebran («apoyo»).
+ESCENAS_FINAL = {
+    "paz": {
+        "equipo": "El equipo de campaña entero sube a la tarima a celebrarlo.",
+        "perdedor": "{segundo} también sube, y aplaude. Perdió la elección, no la ciudad.",
+    },
+    "polarizada": {
+        "equipo": "Cada uno con los suyos, a un lado del atril. En medio, nadie.",
+        "perdedor": "{segundo} no aplaude. Su mitad de la plaza, tampoco.",
+    },
+    "reconstruccion": {
+        "equipo": "Arriba se mezclan los dos equipos. Abajo, los voluntarios.",
+        "perdedor": "{segundo} levanta el puño junto a quien le ganó: hoy no hay bandos.",
+    },
+    "desastre": {
+        "apoyo": "Unos pocos todavía agitan su bandera. El resto de la plaza les "
+                 "grita desde detrás de los escudos.",
+        "equipo": "Dos escoltas, una fila de antidisturbios y un puñado de fieles: "
+                  "es lo que queda de la fiesta.",
+        "perdedor": "{segundo} grita «¡fraude!» desde la misma tarima. Ya nadie "
+                    "escucha a nadie.",
+    },
+}
 # El candidato que el juego defiende: el que gana si se decidió bien.
 CANDIDATO_PROPIO = "Abel de la Estrella"
 

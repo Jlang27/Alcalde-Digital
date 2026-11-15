@@ -18,7 +18,7 @@ RAIZ = os.path.dirname(os.path.dirname(AQUI))
 ESCENARIOS = (
     ("dia1.py",), ("turnos.py",), ("herencias.py",), ("colegio.py",),
     ("colegio_salida.py", "1"), ("campana.py",), ("campana.py", "pierde"),
-    ("kombat.py",), ("kombat.py", "pierde"), ("plaza_central.py",),
+    ("kombat.py",), ("kombat.py", "pierde"), ("plaza_central.py",), ("final.py",),
     ("plaza_duelo.py",), ("plaza_persecucion.py",),
     ("plaza_persecucion.py", "escapa"), ("sombras.py",), ("pausa.py",),
     # voces.py fuera: prueba audio.hay_voz y banco.VOCES_PEDIDAS, que nunca

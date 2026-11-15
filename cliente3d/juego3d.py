@@ -1281,6 +1281,12 @@ def iniciar_dia(indice):
     # Solo el capitulo 2 tiene escenario propio; los demas siguen en la
     # cafeteria hasta que se construya el suyo.
     mundo.cambiar_escenario(cl.mundo, ESCENARIO_DIA.get(indice, "cafeteria"))
+    # El muro de pantallas del comando dice la encuesta de la Partida (fuera
+    # de ese escenario la llamada no hace nada).
+    p = cl.partida
+    mundo.encuesta_muro([p.encuesta[n] for n in NOMBRES_CANDIDATOS],
+                        round(p.encuesta["Abel de la Estrella"])
+                        - round(p.encuesta_ayer["Abel de la Estrella"]))
     # La plaza del capitulo 5 es la que dejaron los dias anteriores.
     if cl.partida.estado_plaza is not None:
         plaza.estado(cl.partida.estado_plaza)
