@@ -1797,7 +1797,7 @@ def _levantar_muros(o, muros, alto, mat_muro, mat_marco, zocalos=()):
 def _placas(o, placas, mat="placa", tinta=(0.95, 0.92, 0.82)):
     """El rotulo encima de cada puerta: (texto, eje, plano, signo, centro)."""
     for texto, eje, plano, signo, centro in placas:
-        ancho = 0.12 * len(texto) + 0.3
+        ancho = 0.14 * len(texto) + 0.7
         o.pared(mat, eje, plano, signo, centro - ancho / 2, centro + ancho / 2,
                 2.38, 2.68, 0, 0.03)
         o.letrero(texto, eje, plano, signo, centro, 2.53, 0.17, tinta)
@@ -2559,8 +2559,9 @@ def _obra_campana():
     o.pared("tela_azul", "z", zs, 1, -3.9, -1.5, 0.45, 0.9, 0, 0.2)
     o.caja("madera_oscura", -3.4, -2.0, 0, 0.42, -3.1, -2.5, bloquea=True)
     o.pared("afiche_ospina", "z", zs, 1, 0.9, 3.3, 1.1, 2.7, 0, 0.02)
-    o.letrero("DE LA ESTRELLA", "z", zs, 1, 2.1, 2.2, 0.36, BLANCO)
-    o.letrero("ALCALDE", "z", zs, 1, 2.1, 1.6, 0.18, CREMA)
+    o.letrero("DE LA", "z", zs, 1, 2.1, 2.45, 0.24, BLANCO)
+    o.letrero("ESTRELLA", "z", zs, 1, 2.1, 2.10, 0.24, BLANCO)
+    o.letrero("ALCALDE", "z", zs, 1, 2.1, 1.60, 0.18, CREMA)
     _planta(o, -3.8, 4.4)
 
     # ================= SALA DE GUERRA =================
@@ -2637,10 +2638,15 @@ def _obra_campana():
     o.caja("volantes", -3.9, -3.45, 0, 0.7, -10.95, -10.55, bloquea=True)
     o.caja("volantes", -3.35, -2.9, 0, 0.35, -10.95, -10.55, bloquea=True)
     zb = Z_SERVICIOS + 0.1
+    ANCHO_AFICHE = 2.2
     for a in (4.2, 6.6):
-        o.pared("afiche_ospina", "z", zb, 1, a, a + 1.6, 1.1, 2.4, 0, 0.02)
-        o.letrero("DE LA ESTRELLA", "z", zb, 1, a + 0.8, 1.95, 0.22, BLANCO)
-        o.letrero("Un colegio mejor", "z", zb, 1, a + 0.8, 1.5, 0.08, CREMA)
+        c = a + ANCHO_AFICHE / 2              # centro real del afiche
+        o.pared("afiche_ospina", "z", zb, 1, a, a + ANCHO_AFICHE,
+                1.1, 2.7, 0, 0.02)
+        o.letrero("DE LA", "z", zb, 1, c, 2.45, 0.22, BLANCO)
+        o.letrero("ESTRELLA", "z", zb, 1, c, 2.10, 0.22, BLANCO)
+        o.letrero("UN COLEGIO", "z", zb, 1, c, 1.60, 0.08, CREMA)
+        o.letrero("MEJOR", "z", zb, 1, c, 1.45, 0.08, CREMA)
     o.caja("plastico_azul", 22.0, 22.45, 0, 1.1, -5.4, -4.95, bloquea=True)
     o.caja("agua", 22.07, 22.38, 1.1, 1.5, -5.33, -5.02)
     _planta(o, -3.8, -5.0)
