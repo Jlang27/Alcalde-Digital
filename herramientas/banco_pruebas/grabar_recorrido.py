@@ -8,6 +8,11 @@ video: assets/video/recorrido_<n>.mp4 y, por si el video no carga en algun
 PC, la foto assets/fotos/cap_<n>.jpg.
 
     venv-win\\Scripts\\python.exe herramientas/banco_pruebas/grabar_recorrido.py <1-5> [prueba]
+    venv-win\Scripts\python.exe herramientas/banco_pruebas/grabar_recorrido.py <paz|reconstruccion|desastre> [prueba]
+
+Con un final (contenido.FINALES) graba la plaza vestida para ese final
+(plaza.final) desde el plano «ciudad» de cine_final: los futuros posibles
+que la intro enseña tras los capitulos (recorrido_<final>.mp4, fin_<final>.jpg).
 
 Con «prueba» solo guarda el primer y el ultimo cuadro en capturas/, para
 afinar la camara sin grabar. Necesita GPU y ffmpeg (viene con
@@ -31,7 +36,9 @@ from banco import J, RAIZ, CAPTURAS                    # noqa: E402
 from ursina import application as ap, camera, Vec3     # noqa: E402
 from panda3d.core import Filename                      # noqa: E402
 
-CAP = int(_sys.argv[1])
+FINAL = None if _sys.argv[1].isdigit() else _sys.argv[1]
+CAP = 5 if FINAL else int(_sys.argv[1])
+NOMBRE = FINAL or str(CAP)
 PRUEBA = len(_sys.argv) > 2 and _sys.argv[2] == "prueba"
 SEGUNDOS = 3.4            # algo mas que el plano de la intro: sobra cola
 CUADROS = int(SEGUNDOS * FPS)
@@ -72,6 +79,16 @@ RECORRIDOS = {
         Vec3(0.0, 3.0, 41.0), Vec3(0.0, 3.2, 41.0), 54),
 }
 p0, p1, m0, m1, fov = RECORRIDOS[CAP]
+if FINAL:
+    import cine_final
+    import plaza
+    from contenido import CANDIDATO_PROPIO
+    from juego import NOMBRES_CANDIDATOS
+    # En paz gana el propio, como en el juego; en los otros, otro cualquiera.
+    propio = NOMBRES_CANDIDATOS.index(CANDIDATO_PROPIO)
+    ganador = propio if FINAL == "paz" else (propio + 1) % len(NOMBRES_CANDIDATOS)
+    plaza.final(FINAL, ganador, (ganador + 2) % len(NOMBRES_CANDIDATOS))
+    _n, _d, p0, p1, m0, m1, fov = cine_final.planos(FINAL)[0]
 
 # Sin interfaz: es un plano de cine. Se esconde el nodo entero.
 camera.ui.hide()
@@ -104,8 +121,8 @@ for _ in range(4):                 # que las lamparas se asienten en su sitio
     cuadro(0.0, _os.path.join(CAPTURAS, "_recorrido_tmp.png"))
 
 if PRUEBA:
-    cuadro(0.0, _os.path.join(CAPTURAS, f"recorrido_{CAP}_a.png"))
-    cuadro(1.0, _os.path.join(CAPTURAS, f"recorrido_{CAP}_b.png"))
+    cuadro(0.0, _os.path.join(CAPTURAS, f"recorrido_{NOMBRE}_a.png"))
+    cuadro(1.0, _os.path.join(CAPTURAS, f"recorrido_{NOMBRE}_b.png"))
 else:
     tmp = _tempfile.mkdtemp(prefix="recorrido_")
     for i in range(CUADROS):
@@ -116,14 +133,14 @@ else:
     from PIL import Image
     for carpeta in ("video", "fotos"):
         _os.makedirs(_os.path.join(RAIZ, "assets", carpeta), exist_ok=True)
-    salida = _os.path.join(RAIZ, "assets", "video", f"recorrido_{CAP}.mp4")
+    salida = _os.path.join(RAIZ, "assets", "video", f"recorrido_{NOMBRE}.mp4")
     _subprocess.run(
         [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error",
          "-framerate", str(FPS), "-i", _os.path.join(tmp, "%04d.png"),
          "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "21",
          "-preset", "slow", "-an", salida], check=True)
     Image.open(_os.path.join(tmp, f"{CUADROS // 2:04d}.png")).convert("RGB").save(
-        _os.path.join(RAIZ, "assets", "fotos", f"cap_{CAP}.jpg"), quality=88)
+        _os.path.join(RAIZ, "assets", "fotos", f"fin_{FINAL}.jpg" if FINAL else f"cap_{CAP}.jpg"), quality=88)
     _shutil.rmtree(tmp)
     print(f"grabado {salida} ({_os.path.getsize(salida) // 1024} KB)")
 informe()

@@ -33,14 +33,14 @@ J.cl.menu.mover(-J.cl.menu.seleccion)
 tecla("enter", 0.5)                       # Un jugador
 assert hasta_estado("intro", 20), estado()
 i = J.cl.intro
-assert all(v is not None for v in i.videos), "falta un video del recorrido"
+assert all(v is not None for v in i.videos.values()), "falta un video del recorrido"
 for (nombre, dura, *_r), inicio in zip(intro.PLANOS_INTRO, intro.INICIOS):
-    if not nombre.startswith("cap_") and nombre != "peatones":
+    if not nombre.startswith(("cap_", "fin_")) and nombre != "peatones":
         continue
     for sufijo, parte in (("a", 0.30), ("b", 0.92)):
         while estado() == "intro" and i.t < inicio + dura * parte:
             pasar(frames=1)
-        if nombre.startswith("cap_"):
+        if nombre.startswith(("cap_", "fin_")):
             assert i.cine is not None and i.cine.enabled, nombre
             assert len(i.rotulo_cap) == 5, nombre
         else:                             # de vuelta en la calle: nada encima

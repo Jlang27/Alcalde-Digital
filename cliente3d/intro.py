@@ -27,6 +27,7 @@ from ursina import (Entity, Text, Vec2, Vec3, camera, color, curve, destroy,
 import audio
 import estilo as E
 import mundo
+from contenido import FINALES
 from pantallas import CAPITULOS
 
 # (nombre, segundos, camara desde, camara hasta, mira desde, mira hasta,
@@ -42,8 +43,12 @@ from pantallas import CAPITULOS
 SEGUNDOS_RECORRIDO = 3.0
 _QUIETA = (Vec3(6.7, 1.50, -34), Vec3(6.7, 1.50, -34),
            Vec3(8.6, 1.40, -15), Vec3(8.6, 1.40, -15), 50)
+# Y tras los capitulos, los futuros posibles (contenido.FINALES), grabados
+# igual: la ciudad bien, destruida pero en paz, y destruida y en caos.
+FINALES_INTRO = ("paz", "reconstruccion", "desastre")
 _RECORRIDO = tuple((f"cap_{n + 1}", SEGUNDOS_RECORRIDO) + _QUIETA
-                   for n in range(len(CAPITULOS)))
+                   for n in range(len(CAPITULOS))) + tuple(
+    (f"fin_{k}", SEGUNDOS_RECORRIDO) + _QUIETA for k in FINALES_INTRO)
 
 PLANOS_INTRO = (
     # La ciudad desde el aire, entrando hacia las torres del centro.
@@ -152,8 +157,9 @@ class Intro:
         self.cine = None          # el rectangulo donde se ve el recorrido
         self.rotulo_cap = []      # el titulo del capitulo que esta en pantalla
         # Los videos se abren ya: abrirlos al cortar daria un tiron en el corte.
-        self.videos = [E.textura(f"video/recorrido_{n + 1}.mp4")
-                       for n in range(len(CAPITULOS))]
+        # «cap_3» -> recorrido_3.mp4, «fin_paz» -> recorrido_paz.mp4
+        self.videos = {p[0]: E.textura(f"video/recorrido_{p[0].split('_', 1)[1]}.mp4")
+                       for p in _RECORRIDO}
 
         self._barras()
         self._rotulos_del_decorado()
@@ -316,8 +322,8 @@ class Intro:
             chip.animate_scale(0.001, duration=0.25, delay=retraso + 1.1)
             self.piezas.append(chip)
 
-    def _recorrido(self, n):
-        """El plano del capitulo n (desde 0): su video a toda pantalla,
+    def _recorrido(self, nombre):
+        """El plano «cap_<n>» o «fin_<final>»: su video a toda pantalla,
         detras de las barras, y el titulo en el centro."""
         ancho = max(window.aspect_ratio, 16 / 9)
         if self.cine is None:
@@ -327,7 +333,7 @@ class Intro:
         for s in list(self.cine.animations):
             s.kill()
         self.cine.scale = (ancho, ancho * 9 / 16)
-        video = self.videos[n]
+        video = self.videos[nombre]
         if video is not None:
             pelicula = video._texture
             self.cine.texture = video
@@ -340,7 +346,7 @@ class Intro:
                 pelicula.setTime(0.0)
                 pelicula.play()
         else:
-            foto = E.textura(f"fotos/cap_{n + 1}.jpg")
+            foto = E.textura(f"fotos/{nombre}.jpg")
             self.cine.texture = foto
             self.cine.texture_scale = Vec2(1, 1)
             self.cine.color = color.white if foto else color.black
@@ -348,16 +354,20 @@ class Intro:
             self.cine.animate_scale(self.cine.scale * 1.07,
                                     duration=SEGUNDOS_RECORRIDO + 0.2,
                                     curve=curve.linear)
-        self._titulo_capitulo(n)
+        clave = nombre.split("_", 1)[1]
+        if nombre.startswith("cap_"):
+            n = int(clave) - 1
+            self._titulo_capitulo(f"CAPÍTULO {n + 1}", *CAPITULOS[n])
+        else:
+            self._titulo_capitulo("UN FINAL POSIBLE", *FINALES[clave][1:3])
 
-    def _titulo_capitulo(self, n):
+    def _titulo_capitulo(self, rotulo, titulo, lugar):
         self._quitar_titulo_capitulo()
-        titulo, lugar = CAPITULOS[n]
         # Una franja de sombra detras: el titular blanco tiene que leerse
         # igual sobre el neon de la azotea que sobre la pantalla de la tarima.
         sombra = E.banda(2.4, 0.29, (0, 0.008), color.rgba(0, 0, 0, 0), z=-0.45)
         sombra.animate_color(color.rgba(0, 0, 0, 175), duration=0.35, delay=0.15)
-        arriba = E.pequena(f"CAPÍTULO {n + 1}", (0, 0.098), E.LLERAS,
+        arriba = E.pequena(rotulo, (0, 0.098), E.LLERAS,
                            escala=0.86, origen=(0, 0))
         filo = E.banda(0.12, 0.0034, (0, 0.066), E.LLERAS, z=-0.6)
         grande = E.titular(titulo, (0, 0.0), 3.6, E.TEXTO, origen=(0, 0))
@@ -384,7 +394,7 @@ class Intro:
         self._quitar_titulo_capitulo()
         if self.cine is not None:
             self.cine.enabled = False
-        for video in self.videos:
+        for video in self.videos.values():
             if video is not None and hasattr(video._texture, "stop"):
                 video._texture.stop()
 
@@ -424,8 +434,8 @@ class Intro:
                 self.negro.color = color.rgba(0, 0, 0, 255)
                 self.negro.animate_color(color.rgba(0, 0, 0, 0),
                                          duration=NEGRO_CORTE)
-            if nombre.startswith("cap_"):
-                self._recorrido(int(nombre[4:]) - 1)
+            if nombre.startswith(("cap_", "fin_")):
+                self._recorrido(nombre)
                 self.cine.enabled = True
                 audio.efecto("pagina")
             elif self.cine is not None and self.cine.enabled:
