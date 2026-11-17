@@ -33,6 +33,23 @@ dentro del juego, así que marca la columna *Requiere crédito en pantalla*.
 | `assets/audio/ritmo_2.wav` | Música de la ronda 2 del duelo «El ritmo de la verdad» (capítulo 5), compuesta sobre la partitura de `ritmo.py` | Generado por el proyecto (`herramientas/componer_ritmo.py`) | Propia | No | A · 2026-11-08 |
 | `assets/audio/ritmo_3.wav` | Música de la ronda 3 del duelo «El ritmo de la verdad» (capítulo 5), compuesta sobre la partitura de `ritmo.py` | Generado por el proyecto (`herramientas/componer_ritmo.py`) | Propia | No | A · 2026-11-08 |
 | `assets/audio/persecucion.wav` | Música de la persecución, 165 bpm (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
+| `assets/audio/musica_final.ogg` | Cumbia de celebración de los finales felices: acordeón, guacharaca, tambora, llamador, piano y metales | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/musica_plaza.ogg` | La misma cumbia, suave y lejana, desde la tarima de la plaza pacífica (capítulo 5) | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/musica_final_sombra.ogg` | Piano y cuerdas en la menor de los finales oscuros | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/musica_kombat.ogg` | Música de Nova Kombat, 150 bpm (capítulo 4) | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/musica_billar.ogg` | Jazz de salón de la sala de juegos y el ascensor (capítulo 3) | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/musica_colegio.ogg` | Música de sigilo del colegio de noche (capítulo 2) | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/musica_campana.ogg` | Thriller político del comando de campaña (capítulo 3) | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/ambiente_plaza.ogg` | Gente en la plaza: murmullo, risas y palmas | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/ambiente_protesta.ogg` | Protesta: canto «¡FRAU-DE!», palmas, pitos y sirenas lejanas | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/ambiente_fiesta.ogg` | Aplausos y vítores del final | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/fx_ficha.wav / fx_ficha_robar.wav` | Ficha de dominó contra la mesa y robar del pozo | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/fx_dardo.wav` | Dardo que vuela y se clava | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/fx_ppt.wav` | Puño contra la palma tres veces y el gesto de piedra, papel o tijera | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/fx_gana.wav / fx_pierde.wav` | Jingles de ganar y perder un reto | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/fx_k_*.wav` | Nova Kombat: golpes ligero/medio/fuerte, bloqueo, caída, aire, gong de «¡PELEA!», remate y K.O. | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/fx_aterriza.wav` | Aterrizar tras un salto o una caída en la persecución | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
+| `assets/audio/fx_ovacion.wav` | Ovación al anunciarse el escrutinio | Generado por el proyecto (`herramientas/componer_espacios.py`) | Propia | No | A · 2026-11-17 |
 | `assets/audio/fx_golpe.wav` | Golpe al chocar (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
 | `assets/audio/fx_estrepito.wav` | Estructura metálica que cae (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |
 | `assets/audio/fx_silbido.wav` | Objeto que pasa volando (capítulo 5) | Generado por el proyecto (`herramientas/componer_persecucion.py`) | Propia | No | A · 2026-11-09 |

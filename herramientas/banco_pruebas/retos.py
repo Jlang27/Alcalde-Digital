@@ -12,6 +12,16 @@ import cafeteria as C
 from contenido import JUGADAS_BASE, JUGADAS_MAX
 
 
+def dejar_la_charla():
+    """Ganar un reto abre la charla con el vecino (ahora si te cuenta);
+    el dominó sale a veces ganado y a veces no: se cierra si la hay."""
+    while J.cl.dialogo is not None and J.cl.dialogo.modo == "lineas":
+        tecla("enter", 0.1)
+    if J.cl.dialogo is not None:
+        tecla("escape", 0.3)
+    assert estado() == "libre", estado()
+
+
 def retar(id_npc):
     junto_a(id_npc)
     assert J.cl.cerca == id_npc, f"cerca={J.cl.cerca}"
@@ -29,6 +39,12 @@ assert p.con_retos and p.reto_pendiente("cajero") == "ppt"
 
 # --- piedra, papel o tijera: se juega con 1-3 y se pierde a proposito ---
 r = retar("cajero")
+# Se prueba perder (y que ya no hable), no su IA: Don Rafa elige la mano
+# que gana a la tuya. Antes se adivinaba por su ultima mano y, segun el
+# azar global (los sonidos tambien lo gastan), a veces se le ganaba.
+_ia = r.juego
+_ia._mueve_ia = lambda: _ia.jugar(C.RIVAL, next(m for m, v in C.GANA_A.items()
+                                                  if v == _ia.elige[C.TU]))
 pasar(0.3)
 foto("reto_ppt_elegir")
 fotos = 0
@@ -64,12 +80,19 @@ for _ in range(400):
 foto("reto_domino_final")
 res_domino = r.juego.resultado
 pasar(4.0)
+dejar_la_charla()
 print("domino:", res_domino, p.retos["hernan"])
 
 # --- dardos: con la mira al centro (ratón quieto, flechas) ---
 r = retar("sofia")
 pasar(0.3)
 foto("reto_dardos")
+# Esc pausa el reto (antes no habia pausa en ningun minijuego) y lo devuelve
+tecla("escape", 0.3)
+assert estado() == "pausa", estado()
+foto("reto_pausa")
+tecla("escape", 0.4)
+assert estado() == "reto", estado()
 for _ in range(600):
     if r.juego.resultado is not None:
         break
@@ -81,6 +104,7 @@ for _ in range(600):
     pasar(0.2)
 foto("reto_dardos_final")
 pasar(4.0)
+dejar_la_charla()
 print("dardos:", p.retos["sofia"])
 
 # --- el tablero, con las jugadas ganadas ---

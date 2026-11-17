@@ -110,6 +110,40 @@ POSE_APUNTAR = {"RightArm": (0.55, 0.55, -0.35), "RightForeArm": (0.05, 1.0, 0.1
                 "LeftArm": (-0.15, 0.25, 0.9), "LeftForeArm": (-0.05, 0.3, 1.0)}
 POSE_SOLTAR = {"RightArm": (0.15, -0.1, 1.0), "RightForeArm": (0.05, -0.45, 1.0),
                "LeftArm": (-0.5, -0.6, 0.3), "LeftForeArm": (-0.3, -0.8, 0.3)}
+# El cuerpo en el salto (referencia: la huida por las azoteas de Detroit):
+# direcciones de cada hueso en (derecha, arriba, delante) del cuerpo, para la
+# pierna que va DELANTE a la izquierda (la otra se espeja). En el aire, la
+# rodilla de delante arriba y la de atras estirada con el talon alto, y los
+# brazos abiertos para equilibrarse; antes de tocar suelo, las piernas
+# bajan a buscarlo; al aterrizar, las rodillas ceden.
+PIERNAS = (("LeftUpLeg", "LeftLeg", "Hips"), ("LeftLeg", "LeftFoot", "LeftUpLeg"),
+           ("RightUpLeg", "RightLeg", "Hips"), ("RightLeg", "RightFoot", "RightUpLeg"))
+POSE_VUELO = {"LeftUpLeg": (-0.06, -0.3, 0.95), "LeftLeg": (0.0, -0.92, 0.38),
+              "RightUpLeg": (0.06, -0.82, -0.57), "RightLeg": (0.0, -0.3, -0.95),
+              "RightArm": (0.45, -0.15, 0.88), "RightForeArm": (0.15, 0.35, 0.92),
+              "LeftArm": (-0.6, -0.55, -0.4), "LeftForeArm": (-0.35, -0.3, 0.6)}
+POSE_BUSCA = {"LeftUpLeg": (-0.06, -0.75, 0.66), "LeftLeg": (0.0, -0.99, 0.1),
+              "RightUpLeg": (0.08, -0.95, -0.2), "RightLeg": (0.0, -0.8, -0.6),
+              "RightArm": (0.5, -0.3, 0.8), "RightForeArm": (0.2, 0.1, 0.97),
+              "LeftArm": (-0.55, -0.35, 0.6), "LeftForeArm": (-0.25, 0.0, 0.97)}
+POSE_CEDE = {"LeftUpLeg": (-0.1, -0.62, 0.78), "LeftLeg": (0.0, -0.9, -0.43),
+             "RightUpLeg": (0.12, -0.75, 0.25), "RightLeg": (0.0, -0.75, -0.66),
+             "RightArm": (0.4, -0.65, 0.65), "RightForeArm": (0.2, -0.2, 0.95),
+             "LeftArm": (-0.4, -0.65, 0.65), "LeftForeArm": (-0.2, -0.2, 0.95)}
+DESPEGUE = 0.09              # lo que tarda en pasar de la carrera a la pose de vuelo
+BUSCA_SUELO = 0.45           # a esta altura sobre el piso, bajando, estira las piernas
+
+
+def _espejo(pose):
+    """La misma pose con la otra pierna delante."""
+    cambio = {"Left": "Right", "Right": "Left"}
+    nueva = {}
+    for nombre, (x, y, z) in pose.items():
+        lado = "Left" if nombre.startswith("Left") else "Right"
+        nueva[cambio[lado] + nombre[len(lado):]] = (-x, y, z)
+    return nueva
+
+
 SUBIR_BRAZO = 0.18           # segundos hasta tener el brazo arriba
 BARRIDO_BRAZO = 0.14         # el golpe de lanzar
 VOLVER_BRAZO = 0.36          # y lo que tarda en bajar
@@ -140,6 +174,20 @@ CLIPS = {
 # PASA_SALTANDO era 0,3: el arranque y el final del salto (casi un tercio)
 # contaban como «en el suelo» y un salto a tiempo chocaba igual con la banca.
 ALTO_SALTO, DURA_SALTO, PASA_SALTANDO = 0.75, 0.62, 0.15
+# El salto es FISICO (referencia: la huida por las azoteas de Detroit):
+# impulso y gravedad que dan esa misma altura y ese mismo tiempo en el aire
+# (las reglas de la persecucion estan medidas con ellos), pero ahora se
+# cae de verdad: por el borde de una plataforma, a un piso mas bajo, y
+# el aterrizaje pesa segun lo rapido que se llega al suelo.
+GRAVEDAD_SALTO = 8 * ALTO_SALTO / DURA_SALTO ** 2      # ~15,6 m/s2: la de un juego
+IMPULSO_SALTO = 4 * ALTO_SALTO / DURA_SALTO            # ~4,8 m/s hacia arriba
+CAIDA_MINIMA = 0.35          # un escalon se baja andando; mas que esto, se cae
+# En el aire el cuerpo va hacia delante y las piernas siguen corriendo
+# (del tranco de un pie al del otro, a camara lenta); al tocar suelo las
+# rodillas ceden, el cuerpo se va hacia delante y la carrera pierde un
+# poco de velocidad un instante.
+INCLINA_AIRE, INCLINA_ATERRIZA = 11.0, 9.0             # grados
+ATERRIZAJE, HUNDE_ATERRIZA, FRENO_ATERRIZA = 0.28, 0.11, 0.78
 DURA_DESLIZ, VELOCIDAD_DESLIZ = 1.0, 5.8
 GIRO_RAIL = 5.0              # lo rapido que la camara de la persecucion dobla las esquinas
 PICADO_RAIL = 12.0           # y lo que mira hacia abajo, fijo
@@ -163,6 +211,16 @@ VELOCIDAD_DE = {
     "agachado_correr": VELOCIDAD_CORRER,
     "deslizar": VELOCIDAD_DESLIZ,
 }
+
+
+def _sonar(momento, volumen=1.0):
+    """Un efecto del jugador (si hay audio: el banco y las pruebas no lo
+    necesitan)."""
+    try:
+        import audio
+        audio.efecto(momento, volumen)
+    except Exception:
+        pass
 
 
 def _acercar(actual, objetivo, factor):
@@ -271,6 +329,8 @@ class Jugador:
         self.t_brazo = 0.0
         self._brazos = []               # (nombre, nodo controlado, base, hijo, padre)
         self._mano = None
+        self._aire = []                 # lo mismo para piernas y brazos en el salto
+        self._pierna_delante = "Left"
 
         self.pivote = None              # lo que sigue la camara, con retardo
         self.distancia = DISTANCIA
@@ -288,6 +348,16 @@ class Jugador:
         # el alto del piso en (x, z), para escaleras; None = plano.
         self.salto = None
         self.desliz = None
+        # La fisica del salto: altura absoluta en el aire (None = en el
+        # suelo), velocidad vertical, y el aterrizaje (tiempo que queda y
+        # su fuerza, 0..1.6).
+        self.y_aire = None
+        self.vy = 0.0
+        self.t_aire = 0.0             # segundos en el aire (saltando o cayendo)
+        self.aterriza = 0.0
+        self.fuerza_aterriza = 0.0
+        self._vuelo = {}              # clip -> (cuadro de un tranco, del otro, cuadros)
+        self._inclina = 0.0
         self.saltables = []
         self.deslizables = []
         self.suelo = None
@@ -379,7 +449,14 @@ class Jugador:
             self.trepa = 0.0
             self._animar("deslizar")              # recogido, como al saltar una valla
             return "trepa"
+        if self.y_aire is not None:
+            return None                           # ya cayendo: no se salta del aire
         self.salto = 0.0
+        self.y_aire = self.actor.getY()
+        self.vy = IMPULSO_SALTO
+        self.t_aire = 0.0
+        self.aterriza = 0.0
+        _sonar("k_aire", 0.35)
         return "salto"
 
     def _adelante(self):
@@ -417,10 +494,10 @@ class Jugador:
         return True
 
     def altura_salto(self):
-        if self.salto is None:
+        if self.y_aire is None:
             return 0.0
-        f = self.salto / DURA_SALTO
-        return ALTO_SALTO * 4 * f * (1 - f)
+        x, _, z = self.actor.getPos()
+        return max(0.0, self.y_aire - self._piso(x, z))
 
     def en_el_aire(self):
         return self.altura_salto() > PASA_SALTANDO
@@ -441,16 +518,201 @@ class Jugador:
             self.trepa += dt
             if self.trepa >= DURA_TREPAR:
                 self.trepa = None
-        if self.salto is not None:
-            self.salto += dt
-            if self.salto >= DURA_SALTO:
-                self.salto = None
         if self.desliz is not None:
             self.desliz += dt
             if self.desliz >= DURA_DESLIZ:
                 self.desliz = None
-        x, _, z = self.actor.getPos()
-        self.actor.setY(self._piso(x, z) + self.altura_salto() + self.altura_trepa())
+        x, y, z = self.actor.getPos()
+        piso = self._piso(x, z)
+        if self.y_aire is None and self.trepa is None and y - piso > CAIDA_MINIMA:
+            # Se acabo el suelo (el borde de una plataforma): a caer. Caer no
+            # es saltar (salto sigue en None): el hueco entre plataformas
+            # castiga al que cae en el sin haber saltado.
+            self.y_aire, self.vy, self.t_aire = y, 0.0, 0.0
+        if self.y_aire is not None:
+            self.t_aire += dt
+            if self.salto is not None:
+                self.salto += dt
+            self.vy -= GRAVEDAD_SALTO * dt
+            self.y_aire += self.vy * dt
+            if self.y_aire <= piso:
+                # Al suelo (o a un piso mas alto que se cruza subiendo).
+                self._aterrizar(max(0.0, -self.vy))
+                self.y_aire, self.vy, self.salto = None, 0.0, None
+        if self.aterriza > 0.0:
+            self.aterriza = max(0.0, self.aterriza - dt)
+        y = self.y_aire if self.y_aire is not None else piso + self.altura_trepa()
+        self.actor.setY(y - self._hundido())
+        self._pose_salto()
+
+    def _aterrizar(self, velocidad):
+        """Tocar suelo: cuanto mas rapido se llega, mas pesa (un salto normal
+        llega a ~4,8 m/s; caer de una plataforma, a mas)."""
+        k = min(1.6, velocidad / IMPULSO_SALTO)
+        if k < 0.25:
+            return                                # un escalon: ni se nota
+        self.fuerza_aterriza = k
+        self.aterriza = ATERRIZAJE * (0.7 + 0.3 * k)
+        self.temblor = max(self.temblor, 0.10 * k)
+        _sonar("aterriza", min(1.0, 0.45 + 0.35 * k))
+
+    def _hundido(self):
+        """Lo que ceden las rodillas al aterrizar (la cadera baja y vuelve)."""
+        if self.aterriza <= 0.0:
+            return 0.0
+        total = ATERRIZAJE * (0.7 + 0.3 * self.fuerza_aterriza)
+        f = 1.0 - self.aterriza / total
+        return HUNDE_ATERRIZA * self.fuerza_aterriza * math.sin(math.pi * f) * (1 - f)
+
+    def frena_aterrizaje(self):
+        """Factor de velocidad: tras un aterrizaje la carrera tarda un poco
+        en recuperarse."""
+        if self.aterriza <= 0.0:
+            return 1.0
+        total = ATERRIZAJE * (0.7 + 0.3 * self.fuerza_aterriza)
+        f = self.aterriza / total
+        return 1.0 - (1.0 - FRENO_ATERRIZA) * f * min(1.0, self.fuerza_aterriza)
+
+    def _huesos_salto(self):
+        """Piernas y brazos del salto, por huesos (como Nova Kombat, con
+        otra pose): se toman al despegar con la pose de carrera que llevan,
+        van a la de vuelo, buscan el suelo, ceden al aterrizar y se
+        devuelven al clip."""
+        en_aire = self.y_aire is not None and self.trepa is None and self.desliz is None
+        if not en_aire and self.aterriza <= 0.0:
+            if self._aire:
+                self._soltar_huesos(self._aire)
+                self._aire = []
+            return
+        if not self._aire:
+            if not en_aire:
+                return                    # un aterrizaje sin salto (escalon)
+            self._aire = self._tomar_huesos(PIERNAS + BRAZOS)
+            self._pierna_delante = "Right" if self._pierna_delante == "Left" else "Left"
+        vuelo = POSE_VUELO if self._pierna_delante == "Left" else _espejo(POSE_VUELO)
+        busca = POSE_BUSCA if self._pierna_delante == "Left" else _espejo(POSE_BUSCA)
+        cede = POSE_CEDE if self._pierna_delante == "Left" else _espejo(POSE_CEDE)
+        if en_aire:
+            x, _y, z = self.actor.getPos()
+            alto = self.y_aire - self._piso(x, z)
+            if self.t_aire < DESPEGUE:
+                desde, hasta, f = None, vuelo, self.t_aire / DESPEGUE
+            elif self.vy < 0 and alto < BUSCA_SUELO:
+                desde, hasta, f = vuelo, busca, 1.0 - max(0.0, alto) / BUSCA_SUELO
+            else:
+                desde, hasta, f = None, vuelo, 1.0
+        else:
+            total = ATERRIZAJE * (0.7 + 0.3 * self.fuerza_aterriza)
+            g = 1.0 - self.aterriza / total            # 0 al tocar, 1 recuperado
+            if g < 0.35:
+                desde, hasta, f = busca, cede, g / 0.35
+            else:
+                desde, hasta, f = cede, None, (g - 0.35) / 0.65
+        f = max(0.0, min(1.0, f))
+        self._orientar(self._aire, desde, hasta, f * f * (3 - 2 * f),
+                       180.0 - self.rumbo)
+
+    def _tomar_huesos(self, cadenas):
+        """Toma huesos con la pose que llevan ahora; el padre que no se toma
+        se lee (exposeJoint), el que se toma se compone a mano."""
+        self.actor.update(force=True)
+        huesos = {j.getName().split(":")[-1]: j for j in self.actor.getJoints()}
+        nombres = {c[0] for c in cadenas}
+        tomados = []
+        for nombre, hijo, padre in cadenas:
+            if not all(n in huesos for n in (nombre, hijo, padre)):
+                continue
+            base = LMatrix4f(huesos[nombre].getTransformState().getMat())
+            hacia_hijo = huesos[hijo].getTransformState().getMat().getRow3(3)
+            visto = (padre if padre in nombres else
+                     self.actor.exposeJoint(None, "modelRoot", huesos[padre].getName()))
+            control = self.actor.controlJoint(None, "modelRoot", huesos[nombre].getName())
+            control.setMat(base)
+            tomados.append((huesos[nombre].getName(), control, base, hacia_hijo, visto))
+        return tomados
+
+    def _soltar_huesos(self, tomados):
+        for nombre, _control, _base, _hijo, visto in tomados:
+            self.actor.releaseJoint("modelRoot", nombre)
+            if not isinstance(visto, str):
+                visto.removeNode()
+
+    def _orientar(self, tomados, desde, hasta, f, yaw):
+        """Lleva cada hueso de la pose desde a la pose hasta (None = la que
+        tenia al tomarlo), en f, con los ejes del cuerpo que mira a yaw."""
+        rad = math.radians(yaw)
+        ejes = (Vec3(math.cos(rad), 0, -math.sin(rad)), Vec3(0, 1, 0),
+                Vec3(math.sin(rad), 0, math.cos(rad)))
+        arriba = self.actor.getTop()
+        nuevas = {}
+        for nombre, control, base, hacia_hijo, visto in tomados:
+            corto = nombre.split(":")[-1]
+            padre = nuevas[visto] if isinstance(visto, str) else visto.getMat(self.actor)
+            inversa = LMatrix4f(padre)
+            inversa.invertInPlace()
+            hueso = base.xformVec(hacia_hijo).normalized()
+            en_actor = padre.xformVec(hueso).normalized()
+
+            def direccion(pose):
+                if pose is None or corto not in pose:
+                    return en_actor
+                d = Vec3(0, 0, 0)
+                for eje, k in zip(ejes, pose[corto]):
+                    d += eje * k
+                return self.actor.getRelativeVector(arriba, d).normalized()
+            d = (direccion(desde) * (1 - f) + direccion(hasta) * f).normalized()
+            giro = LMatrix3f()
+            rotate_to(giro, LVector3f(hueso), LVector3f(inversa.xformVec(d).normalized()))
+            m = LMatrix4f(base)
+            m.setUpper3(base.getUpper3() * giro)
+            control.setMat(m)
+            nuevas[corto] = m * padre
+
+    def _cuadros_vuelo(self, clip):
+        """(a, b, n): el cuadro del clip con un pie delante y el otro atras
+        (un tranco) y el siguiente con los pies al reves, en cuadros. En el
+        aire el clip se recorre de uno a otro: las piernas siguen corriendo."""
+        if clip in self._vuelo:
+            return self._vuelo[clip]
+        self._vuelo[clip] = None
+        import mundo
+        r = mundo._rastro(self.actor, clip)
+        if not r:
+            return None
+        n = len(r)
+        # El eje vertical es por el que la cadera esta mas lejos de los pies.
+        alto = max(range(3), key=lambda e: abs(r[0][2][e] - (r[0][0][e] + r[0][1][e]) / 2))
+        horiz = [e for e in range(3) if e != alto]
+        # El de avance: por el que los pies mas se separan a lo largo del clip.
+        eje = max(horiz, key=lambda e: max(abs(f[0][e] - f[1][e]) for f in r))
+        sep = [f[0][eje] - f[1][eje] for f in r]
+        a = max(range(n), key=lambda i: sep[i])
+        b = min(range(a, a + n), key=lambda i: sep[i % n])
+        self._vuelo[clip] = (a, b, n)
+        return self._vuelo[clip]
+
+    def _pose_salto(self):
+        """La postura del salto, encima del clip: piernas que corren en el
+        aire y el cuerpo hacia delante; al aterrizar, inclinado y cediendo."""
+        inclina = 0.0
+        clip = self.clip_puesto
+        if self.y_aire is not None and self.trepa is None and self.desliz is None:
+            f = min(1.0, self.t_aire / DURA_SALTO)
+            vuelo = self._cuadros_vuelo(clip) if clip in ("correr", "caminar") else None
+            if vuelo is not None:
+                a, b, n = vuelo
+                self.actor.pose(clip, (a + (b - a) * f) % n)
+            # sube inclinandose y llega casi recto, con las piernas por delante
+            inclina = INCLINA_AIRE * math.sin(math.pi * min(1.0, 0.25 + 0.75 * f))
+        elif self.aterriza > 0.0:
+            total = ATERRIZAJE * (0.7 + 0.3 * self.fuerza_aterriza)
+            f = 1.0 - self.aterriza / total
+            inclina = INCLINA_ATERRIZA * min(1.0, self.fuerza_aterriza) * math.sin(math.pi * f)
+        self._huesos_salto()
+        if abs(inclina - self._inclina) > 0.05 or (inclina == 0.0 and self._inclina != 0.0):
+            self._inclina = inclina
+            # Hacia delante: el actor gira sobre los pies (su origen).
+            self.actor.setP(-inclina)
 
     # ----------------------------------------------------------------
     #  modos
@@ -467,8 +729,14 @@ class Jugador:
         self.salir_de_cobertura()
         self.cancelar_lanzamiento()
         self.agachado = self.corriendo = self.moviendose = self.agachado_fijo = False
-        self.salto = self.desliz = self.trepa = None
-        self.lento = self.temblor = self.impulso = 0.0
+        self.salto = self.desliz = self.trepa = self.y_aire = None
+        self.lento = self.temblor = self.impulso = self.vy = self.aterriza = 0.0
+        if self._inclina:
+            self._inclina = 0.0
+            self.actor.setP(0)
+        if self._aire:
+            self._soltar_huesos(self._aire)
+            self._aire = []
         _raton(False)
         self._animar("quieto")
         # Los planos fijos de decision necesitan al personaje entero.
@@ -792,7 +1060,7 @@ class Jugador:
             self.impulso = 0.0
         if self.lento > 0.0:
             velocidad *= FACTOR_LENTO
-        velocidad *= self.factor
+        velocidad *= self.factor * self.frena_aterrizaje()
         x, _, z = self.actor.getPos()
         paso = velocidad * dt
         # Un eje cada vez: al chocar de lado con un mueble se desliza a lo
@@ -832,7 +1100,10 @@ class Jugador:
             x = max(x_min, min(x_max, x))
             z = max(z_min, min(z_max, z))
         antes = self.actor.getPos()
-        self.actor.setPos(x, self._piso(x, z) + self.altura_salto(), z)
+        y = self._piso(x, z) + self.altura_salto()
+        if self.y_aire is None and self.trepa is None and antes.y - y > CAIDA_MINIMA:
+            y = antes.y           # se acabo el suelo: la caida la lleva _avanzar_salto
+        self.actor.setPos(x, y, z)
         # Contra un muro no hay pasos: empujar la pared no hace ruido.
         self.moviendose = abs(antes.x - x) + abs(antes.z - z) > 1e-4
 

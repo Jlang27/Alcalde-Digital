@@ -798,6 +798,11 @@ def red(datos, animado=True):
         rellenos[v] = _nodo_red(pg, d, pos[v], t)
         nombre = d["nombre"] + (" · BOT" if d.get("bot_visto") else "")
         tam = TAM.get(d["tipo"], 0.028)
+        # Un recorte de papel detras del nombre: las aristas que bajan por
+        # la misma columna (Luis-Jorge, Caro-Ana) le pasaban por encima.
+        fondo_et = caja(pg, len(nombre) * 0.0066 + 0.006, 0.017,
+                        (pos[v][0], pos[v][1] - tam / 2 - 0.0145), E.PAPEL, Z_CAJA)
+        pg.aparecer(fondo_et, t + 0.1)
         et = texto(pg, nombre.upper(), (pos[v][0], pos[v][1] - tam / 2 - 0.007),
                    0.30, E.TINTA if d["conocido"] else E.TINTA_TENUE,
                    origen=(0, 0.5), gruesa=True)

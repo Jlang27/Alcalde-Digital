@@ -33,6 +33,7 @@ from banco import *
 from banco import J
 
 import versus
+from contenido import JUGADAS_BASE
 
 MODO = sys.argv[1] if len(sys.argv) > 1 else "kombat"
 CAPITULO = {"rumor": 0, "reto": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4,
@@ -170,7 +171,7 @@ try:
         tecla("enter", 0.3)                   # al tablero, y cerrar el dia
         tecla("left arrow", 0.1); tecla("enter", 0.6)
         tecla("enter", 0.5)
-        assert J.cl.tablero is not None and p.tablero["total"] == 1, p.tablero
+        assert J.cl.tablero is not None and p.tablero["total"] == JUGADAS_BASE, p.tablero   # perdio: solo las de base
         pasar(1.5)                            # que el corcho termine de colgarse
         foto("red_reto_anfitrion_tablero")
         tecla("space", 0.4)

@@ -313,7 +313,16 @@ class Reto:
             self.firma, self.est = firma, est
             if est["jugadas"] != self.jugadas:
                 self.jugadas, self.t_jugada = est["jugadas"], 0.0
-                audio.efecto({"ppt": "sello", "domino": "bola", "dardos": "toque"}[self.tipo])
+                # cada mesa con lo suyo (antes: el sello del cierre, una bola
+                # de billar y el toque del celular): las manos al ritmo de los
+                # punos que se agitan, la ficha contra la madera y el dardo
+                # que vuela y se clava
+                audio.efecto({"ppt": "ppt", "domino": "ficha", "dardos": "dardo"}[self.tipo])
+            aviso = est.get("aviso")
+            if aviso != getattr(self, "aviso_oido", None):
+                self.aviso_oido = aviso
+                if aviso and aviso.get("robadas"):
+                    audio.efecto("robar")             # del pozo del domino
             for e in self.vivas:
                 destroy(e)
             self.vivas.clear()
@@ -321,7 +330,7 @@ class Reto:
             if self._terminado(est):
                 self._pintar_resultado(est)
                 if not self.fin:
-                    audio.efecto("hecho" if self._gane(est) else "tiempo_agotado")
+                    audio.efecto("gana" if self._gane(est) else "pierde")
         getattr(self, f"_animar_{self.tipo}")(dt)
         if self.est and self._terminado(self.est):
             self.fin += dt
@@ -607,8 +616,12 @@ class Reto:
         self.clavados = []
         for x, y, _p, etq in est["clavados"]:
             px, py = self._a_pantalla(x, y)
+            # La punta esta en el centro de la imagen (_dardo): el dardo va
+            # centrado donde puntua. Desplazado (+0,0185) la punta quedaba
+            # 0,07 radios arriba a la derecha: se veia en el triple y contaba
+            # sencillo, o fuera.
             e = v(Entity(parent=camera.ui, model="quad", texture=_cache("dardo", _dardo),
-                         scale=0.075, position=(px + 0.0185, py + 0.0185, -0.04)))
+                         scale=0.075, position=(px, py, -0.04)))
             self.clavados.append(e)
         if est["clavados"] and self.t_jugada < 0.1:
             x, y, puntos, etq = est["clavados"][-1]

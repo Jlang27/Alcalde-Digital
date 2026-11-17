@@ -1042,6 +1042,7 @@ class Inventario:
     """
 
     X, Y, PASO = 0.60, -0.17, 0.05
+    ULTIMA = -0.37               # lo mas abajo que va la ultima fila
 
     def __init__(self):
         self.piezas = []
@@ -1053,10 +1054,13 @@ class Inventario:
         if not objetos:
             return
         a = self.piezas.append
-        a(E.pequena("LLEVAS   ·   CLIC PARA USAR", (self.X, self.Y), E.TEXTO_TENUE,
+        # Con muchos objetos sube: con cinco la ultima fila caia encima de
+        # la leyenda de abajo (su raya pasa por y = -0,418).
+        arriba = max(self.Y, self.ULTIMA + 0.05 + (len(objetos) - 1) * self.PASO)
+        a(E.pequena("LLEVAS   ·   CLIC PARA USAR", (self.X, arriba), E.TEXTO_TENUE,
                     escala=0.5))
         for k, (nombre, cantidad) in enumerate(objetos):
-            y = self.Y - 0.05 - k * self.PASO
+            y = arriba - 0.05 - k * self.PASO
             piezas, ancho = E.tecla(str(k + 1), "", self.X, y, escala=0.8)
             self.piezas += piezas
             texto = nombre if cantidad == 1 else f"{nombre}  ×{cantidad}"

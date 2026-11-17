@@ -103,7 +103,7 @@ class LlegadaCampana(EscenaDecision):
         self.nombre = protagonista
         super().__init__(actor, [])
         self.fin = DURACION_LLEGADA
-        audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.3)
+        audio.musica(audio.MUSICA_CAMPANA, fundido=1.5, nivel=0.3)
         self._poner_asesor(*CAMINO_ASESOR[0])
 
     def _poner_asesor(self, x, z):
@@ -278,7 +278,7 @@ class SubidaJuegos(EscenaDecision):
         mundo.abrir_ascensor(8, 0.0)
         mundo.abrir_ascensor(mundo.PISO_JUEGOS, 0.0)
         mundo.lampara_billar(True)
-        audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.25)
+        audio.musica(audio.MUSICA_BILLAR, fundido=1.5, nivel=0.25)   # el jazz de la sala de juegos, ya en el ascensor
         self._poner(actor, *DANIEL_LLAMA, 0)
         self._mirar_a(0, -1)
         self._anima("idle")

@@ -665,9 +665,11 @@ RONDAS_POR_NIVEL = 3
 CELULAR = "celular"                  # el «vecino» que eres tu mirando el telefono
 FUENTE_CELULAR = ("Tu celular", "la publicación de @NovaAlerta")
 JUGADAS_TABLERO = 3
-# Con los retos de la cafeteria (cafeteria.py) las jugadas se ganan: una
-# de base y lo que den los retos (1 por ganar, 2 por ganar holgado).
-JUGADAS_BASE, JUGADAS_MAX = 1, 5
+# Con los retos de la cafeteria (cafeteria.py) las jugadas se ganan: las
+# de siempre de base y, ENCIMA, lo que den los retos (1 por ganar, 2 por
+# ganar holgado). Con una de base, ganar un reto dejaba el tablero con 2,
+# menos que las 3 de antes de los retos: se ganaba y «no daba jugadas».
+JUGADAS_BASE, JUGADAS_MAX = JUGADAS_TABLERO, JUGADAS_TABLERO + 4
 # A que te reta cada uno antes de hablar. Si pierdes, ya no te habla.
 RETOS_CAPITULO_1 = {"cajero": "ppt", "hernan": "domino", "sofia": "dardos"}
 CONTACTOS = ("ana", "luis")          # a quienes puedes avisar sin prueba

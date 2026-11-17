@@ -1248,6 +1248,20 @@ class Partida:
                          for k, p in pesos.items())
             mover(nombre, round(cambio * PESO_INDICADORES, 1), "Cómo quedó la ciudad")
 
+    def motivos_en_puntos(self):
+        """Los motivos del dia en puntos enteros de la encuesta, cuadrados
+        con porcentajes(): los motivos se anotan en votos, pero la pagina
+        enseña la encuesta normalizada a 100, y lo que pierde uno lo ganan
+        los demas sin motivo anotado (salia Ruiz +1 sin explicar)."""
+        hoy, ayer = self.porcentajes(), self.porcentajes(self.encuesta_ayer)
+        lista = [(c, round(d), m) for c, d, m in self.motivos_encuesta if round(d)]
+        for c in NOMBRES_CANDIDATOS:
+            resto = (hoy[c] - ayer[c]) - sum(d for q, d, _m in lista if q == c)
+            if resto:
+                lista.append((c, resto, "Se reparte lo que pierden los demás" if resto > 0
+                              else "Pierde peso frente a los demás"))
+        return lista
+
     def porcentajes(self, encuesta=None):
         """La encuesta normalizada a 100, en enteros que suman 100."""
         encuesta = encuesta or self.encuesta

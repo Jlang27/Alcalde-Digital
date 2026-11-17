@@ -39,6 +39,18 @@ def arrancar_minijuego(clave, estados, tope=60.0):
     assert J.cl.minijuego == clave
 
 
+def pausa_y_vuelta(nombre, medir):
+    """Esc pausa el minijuego (su reloj no se mueve) y Esc lo devuelve."""
+    antes, valor = estado(), medir()
+    tecla("escape", 0.3)
+    assert estado() == "pausa", (nombre, estado())
+    foto(f"minijuegos_pausa_{nombre}")
+    pasar(1.0)
+    assert abs(medir() - valor) < 1e-6, (nombre, valor, medir())
+    tecla("escape", 0.4)
+    assert estado() == antes, (nombre, estado())
+
+
 arrancar()
 abrir_lista()
 foto("minijuegos_lista")
@@ -64,6 +76,7 @@ arrancar_minijuego("sigilo", ("libre",))
 assert J.cl.partida.sigilo is not None and J.mundo.escenario() == "rectoria"
 pasar(2.5)                            # el fundido de entrada
 foto("minijuegos_sigilo")
+pausa_y_vuelta("sigilo", lambda: J.cl.partida.sigilo.sospecha)
 
 # --- el billar: la hoja de reglas y a la mesa ---
 arrancar_minijuego("billar", ("aviso_papel",))
@@ -72,6 +85,7 @@ tecla("enter", 1.0)
 assert estado() == "billar" and J.cl.billar is not None, estado()
 pasar(1.5)
 foto("minijuegos_billar")
+pausa_y_vuelta("billar", lambda: J.cl.billar.p.reloj)
 
 # --- el duelo y la persecucion: la misma plaza, en sus dos estados ---
 arrancar_minijuego("duelo", ("aviso_papel",))
@@ -80,12 +94,15 @@ tecla("enter", 1.0)
 assert estado() == "duelo", estado()
 pasar(1.0)
 foto("minijuegos_duelo")
+pausa_y_vuelta("duelo", lambda: J.cl.duelo_t)
 arrancar_minijuego("persecucion", ("libre",))
 per = J.cl.partida.persecucion
 assert J.cl.partida.estado_plaza == "caotica" and per is not None and per.empezada
 assert J.cl.persigue
 pasar(1.0)
 foto("minijuegos_persecucion")
+pausa_y_vuelta("persecucion", lambda: per.restante)
+assert J.cl.persigue and J.cl.jugador.explorando
 
 # --- la pelea, entera: al acabar se vuelve a la lista ---
 arrancar_minijuego("kombat", ("aviso_papel",))
@@ -95,6 +112,7 @@ tecla("enter", 1.0)
 assert estado() == "kombat", estado()
 while J.cl.kombat.fase != "pelea":
     pasar(0.2)
+pausa_y_vuelta("kombat", lambda: J.cl.partida.kombat.reloj)
 J.cl.partida.kombat.reloj = 0.5
 t = 0.0
 while estado() == "kombat" and t < 30:

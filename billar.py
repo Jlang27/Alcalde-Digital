@@ -7,9 +7,14 @@ trituradora. Aqui solo estan las REGLAS y la FISICA; el cliente dibuja.
 Lo que se toma del 8 bolas de los moviles (y por que):
   - Las reglas del deporte: saque, mesa abierta, el grupo (lisas o rayadas)
     lo decide la primera bola que se mete, se repite turno al meter una
-    propia, faltas con BOLA EN MANO para el rival y la 8 al final, en la
-    tronera cantada. Meterla antes, en otra tronera o con la blanca, pierde.
-  - Reloj de tiro: si se acaba, es falta.
+    propia y la 8 al final, en la tronera cantada. Meterla antes, en otra
+    tronera o con la blanca, pierde.
+  - BOLA EN MANO para el rival solo con una falta de verdad: no tocar
+    ninguna bola, tocar primero una que no es tuya o meter la blanca. Y
+    solo ese turno: al tirar se acaba, la haya movido o no. El saque
+    flojo, el tiro sin banda y el reloj de tiro solo pierden el turno
+    (como falta de torneo daban bola en mano «porque si»).
+  - Reloj de tiro: si se acaba, pierdes el turno.
   - Apuntar alrededor de la blanca, potencia y efecto (alto, retroceso y
     lateral) desde el punto donde el taco toca la blanca.
 Lo que cambia para que quepa en la Feria: 9 bolas (4 lisas, 4 rayadas y
@@ -452,7 +457,7 @@ class Partida8:
         if self.fase == "apunta":
             self.reloj_tiro -= dt
             if self.reloj_tiro <= 0:
-                self._falta(self.turno, "tiempo")
+                self._pierde_turno(self.turno, "se le acabó el tiempo de tiro")
                 return
             if self.reloj <= 0:
                 self._por_reloj()
@@ -488,10 +493,13 @@ class Partida8:
             falta = "tocó primero una bola que no era suya"
         elif blanca:
             falta = "metió la blanca"
-        elif era_saque and not metidas and len(reg.tocaron_banda) < 4:
-            falta = "saque flojo"
-        elif not era_saque and not metidas and not reg.banda_tras_contacto:
-            falta = "ninguna bola tocó banda"
+        # Esto no da bola en mano: solo pasa el turno.
+        flojo = None
+        if falta is None and not metidas:
+            if era_saque and len(reg.tocaron_banda) < 4:
+                flojo = "saque flojo"
+            elif not era_saque and not reg.banda_tras_contacto:
+                flojo = "ninguna bola tocó banda"
 
         if ocho:
             if era_saque:
@@ -520,6 +528,8 @@ class Partida8:
             b.en_mesa, b.x, b.y = True, COCINA_X - 0.25, 0.0
         if falta is not None:
             return self._falta(quien, falta)
+        if flojo is not None:
+            return self._pierde_turno(quien, flojo)
         if era_saque and metidas:
             self.eventos.append(("saque_bueno",))
         suyas = set(self.suyas(quien)) if self.grupo[quien] else set(LISAS + RAYADAS)
@@ -536,6 +546,11 @@ class Partida8:
             x += 2 * R
         b.en_mesa, b.x, b.y = True, x, y
         b.parar()
+
+    def _pierde_turno(self, quien, motivo):
+        """Sin falta: el turno pasa al rival, que tira desde donde quedo."""
+        self.eventos.append(("pierde_turno", quien, motivo))
+        self._siguiente(self.rival(quien), None)
 
     def _falta(self, quien, motivo):
         self.faltas[quien] += 1

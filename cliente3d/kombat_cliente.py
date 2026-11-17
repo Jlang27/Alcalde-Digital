@@ -46,8 +46,11 @@ CLIPS_PELEA = {"guardia": "guardia", "andar": "guardia_andar", "puno": "puno",
 # Con peso: rodillas a ~135 grados, el pie de atras lejos, abierto y con
 # el talon levantado (RightFoot), el puno de delante a la altura de la
 # nariz y el de atras pegado a la mejilla con el codo contra las costillas.
+# El codo de atras, delante de las costillas y no pegado al costado: con el
+# brazo casi vertical (0,35 hacia delante) el antebrazo subia POR DENTRO
+# de la sudadera de JH777 y el brazo derecho se veia cortado en el codo.
 GUARDIA = {"LeftArm": (-0.05, -0.6, 0.8), "LeftForeArm": (0.05, 0.95, 0.3),
-           "RightArm": (0.08, -0.92, 0.35), "RightForeArm": (-0.3, 0.92, 0.25),
+           "RightArm": (0.12, -0.76, 0.64), "RightForeArm": (-0.32, 0.8, 0.5),
            "LeftUpLeg": (-0.2, -0.6, 0.78), "LeftLeg": (0.0, -0.96, -0.22),
            "RightUpLeg": (0.25, -0.82, -0.5), "RightLeg": (0.05, -0.62, -0.78),
            "LeftFoot": (-0.1, -0.45, 0.88), "RightFoot": (0.35, -0.7, 0.6)}
@@ -849,9 +852,12 @@ class Camara:
         ladeo = 0.0
         if self.final is not None:
             # Tras el plano del golpe final: de cerca, con los dos.
+            # Solo un poco hacia el que cae y nunca tan cerca que el que gana
+            # se salga: con 0,75 hacia el caido y 3,3 + sep * 0,35 de
+            # distancia, el ganador celebraba medio fuera del cuadro.
             v = self.final
-            medio += (max(-3.2, min(3.2, v.x)) - medio) * (0.55 if v is n else 0.75)
-            dist = min(dist, max(self.DIST_MIN - 0.4, 3.3 + sep * 0.35))
+            medio += (max(-3.2, min(3.2, v.x)) - medio) * 0.2
+            dist = min(dist, max(self.DIST_MIN - 0.4, (sep / 2 + 0.6) / self.TAN_ANCHO))
             alto += 0.08
         rapida = 4.0
         self.x += (medio - self.x) * k(rapida)
@@ -1058,7 +1064,8 @@ BOTS = ("bot_8812", "bot_0217", "nodo_fan", "@vecino_2291")
 class HudKombat:
     ANCHO = 0.78
 
-    def __init__(self):
+    def __init__(self, yo="santi"):
+        self.yo = yo
         self.piezas = []
         self.tmp = []
         self.chat = []
@@ -1091,17 +1098,20 @@ class HudKombat:
         a(E.banda(0.11, 0.005, (0, 0.358), E.LLERAS))
         self.reloj = E.titular("60", (0, 0.432), 1.8, E.TEXTO, origen=(0, 0.5))
         a(self.reloj)
-        # el medidor de verificacion de JH777, en tres tramos
+        # el medidor de quien lleva este PC, en tres tramos (en el de Nodo se
+        # veia el de JH777 y no sabia cuando tenia su replica)
         n_secundario = len(self.piezas)       # de aqui abajo: lo que se aparta
-        a(E.pequena("VERIFICACIÓN", (-0.86, -0.333), E.RESTREPO, escala=0.7))
+        tinta_m = E.GAITAN if yo == "nodo" else E.RESTREPO
+        a(E.pequena("DESINFORMACIÓN" if yo == "nodo" else "VERIFICACIÓN", (-0.86, -0.333),
+                    tinta_m, escala=0.7))
         self.medidor = []
         for k in range(3):
             x = -0.86 + k * 0.137
             a(E.banda(0.126, 0.022, (x + 0.063, -0.375), E.luz(28)))
-            m = E.banda(0.126, 0.022, (x + 0.063, -0.375), E.RESTREPO, z=E.Z_ADORNO - 0.01)
+            m = E.banda(0.126, 0.022, (x + 0.063, -0.375), tinta_m, z=E.Z_ADORNO - 0.01)
             self.medidor.append((x, m))
             a(m)
-        self.listo = E.pequena("I  RÉPLICA LISTA", (-0.43, -0.365), E.RESTREPO, escala=0.55)
+        self.listo = E.pequena("I  RÉPLICA LISTA", (-0.43, -0.365), tinta_m, escala=0.55)
         self.listo.enabled = False
         a(self.listo)
         # el directo: en vivo y el chat
@@ -1133,7 +1143,7 @@ class HudKombat:
                 e.x = (x0 + ancho / 2) if lado < 0 else (x0 + self.ANCHO - ancho / 2)
         self.reloj.text = str(int(math.ceil(pelea.reloj)))
         self.reloj.color = E.GAITAN if pelea.reloj < 10 else E.TEXTO
-        carga = pelea.santi.medidor
+        carga = (pelea.nodo if self.yo == "nodo" else pelea.santi).medidor
         for k, (x, m) in enumerate(self.medidor):
             f = max(0.0, min(1.0, carga * 3 - k))
             m.scale_x = max(0.0001, 0.126 * f)
@@ -1256,14 +1266,23 @@ CIERRE = 4.0
 TITULO_FIN = {"desenmascarado": ("¡DESENMASCARADO!", "la red fantasma ya tiene cara", None),
               "gano": ("VICTORIA", "Nodo cae, pero se escapa sin revelar quién es", None),
               "perdio": ("DERROTA", "el audio contra la Alcaldía sale en tu directo", None)}
+# Los mismos finales vistos desde Nodo (en red lo lleva el otro jugador): el
+# resultado de la Pelea se cuenta siempre desde JH777, y en el PC de Nodo
+# salia «VICTORIA» cuando le ganaban y «DERROTA» cuando ganaba el.
+TITULO_FIN_NODO = {"desenmascarado": ("DESENMASCARADO", "la red fantasma ya tiene cara: la tuya", None),
+                   "gano": ("DERROTA", "caes, pero escapas sin que vean quién eres", None),
+                   "perdio": ("VICTORIA", "tu audio contra la Alcaldía sale en su directo", None)}
 
 
 class Combate:
     """fase: presentacion -> pelea -> fin. actualizar() devuelve True cuando
     ya se puede cerrar el dia."""
 
-    def __init__(self, pelea, actor_santi, actor_nodo, aviso_sofia=False):
+    def __init__(self, pelea, actor_santi, actor_nodo, aviso_sofia=False, yo="santi"):
+        """yo: a quien lleva ESTE PC («santi» o, en red, «nodo»): de eso
+        dependen los carteles de ganar y perder."""
         self.pelea = pelea
+        self.yo = yo
         self.santi = Cuerpo(actor_santi)
         self.nodo = Cuerpo(actor_nodo)
         self.mascara = None
@@ -1271,7 +1290,7 @@ class Combate:
         self.contorno = Contorno(actor_santi, actor_nodo)
         self.proy = Proyectiles()
         self.vfx = kombat_vfx.Efectos()
-        self.hud = HudKombat()
+        self.hud = HudKombat(yo)
         self.aviso_sofia = aviso_sofia
         self.fase = "presentacion"
         self.t = 0.0
@@ -1279,9 +1298,10 @@ class Combate:
         self.t_fin = 0.0
         self.congelado = False
         self.vuelo = None
-        self.hud.anuncio("JH777 VS NODO", "si pierdes, transmites su audio contra la Alcaldía",
+        self.hud.anuncio("JH777 VS NODO", "si ganas, tu audio sale en su directo"
+                         if yo == "nodo" else "si pierdes, transmites su audio contra la Alcaldía",
                          E.GAITAN)
-        audio.musica(audio.MUSICA_PERSECUCION, fundido=1.0, nivel=0.7)
+        audio.musica(audio.MUSICA_KOMBAT, fundido=1.0, nivel=0.7)   # la suya, no la de la huida
         audio.ambiente(True, audio.AMBIENTE_CIUDAD_ALTO, fundido=1.5, nivel=0.5)
         for _ in range(3):
             self.hud.decir("golpe_santi")
@@ -1310,6 +1330,12 @@ class Combate:
             self.vuelo = Vuelo(self.mascara)
             self.mascara = None
 
+    def soltar_todo(self):
+        """Al pausar: lo que se soltara durante la pausa no llegaria, y al
+        volver el luchador seguiria andando o cubriendose solo."""
+        for nombre in set(TECLAS.values()):
+            self.pelea.soltar(nombre)
+
     # --- tiempo -------------------------------------------------------------
     def actualizar(self, dt):
         self.t += dt
@@ -1318,7 +1344,7 @@ class Combate:
             if self.t >= PRESENTACION - 1.0 and not getattr(self, "_pelea_dicha", False):
                 self._pelea_dicha = True
                 self.hud.anuncio("¡PELEA!", "", E.GAITAN, dura=0.6)
-                audio.efecto("estrepito")
+                audio.efecto("k_pelea")
             if self.t >= PRESENTACION:
                 self.fase = "pelea"
             self._pintar(dt)
@@ -1378,7 +1404,7 @@ class Combate:
         tipo = ev[0]
         p = self.pelea
         if tipo == "salto":
-            audio.efecto("silbido", 0.35)
+            audio.efecto("k_aire", 0.5)
             self.vfx.polvo(self._luchador(ev[1]).x, 3)
             return
         if tipo == "rebote":
@@ -1392,7 +1418,7 @@ class Combate:
         if tipo == "aterriza":
             x = self._luchador(ev[1]).x
             if ev[2] == "derribado":
-                audio.efecto("golpe", 0.7)
+                audio.efecto("k_caida", 0.9)
                 self.camara.golpe(0.5)
                 self.vfx.derribo(x, kombat_vfx.ROJO if ev[1] == "JH777" else kombat_vfx.AMARILLO)
             else:
@@ -1400,7 +1426,7 @@ class Combate:
             return
         if tipo == "ataque":
             _t, quien, mov = ev
-            audio.efecto("silbido", 0.6)
+            audio.efecto("k_aire", 0.7)
             if quien == "Nodo" and mov == "bulo":
                 self.hud.decir("bulo", bot=True)
                 if self.aviso_sofia:
@@ -1428,7 +1454,7 @@ class Combate:
                     y = max(0.3, min(2.0, punta.y))
             pecho = (rival.x, rival.y + 1.15 - (0.35 if rival.agachado and not rival.y else 0.0))
             if bloqueado:
-                audio.efecto("golpe", 0.5)
+                audio.efecto("k_bloqueo")
                 self.vfx.bloqueo(x, y, dirx)
                 self.camara.golpe(0.25)
                 if quien == "Nodo":
@@ -1437,7 +1463,8 @@ class Combate:
                 return
             fuerza = K.GOLPES[mov].fuerza if mov in K.GOLPES else 2
             grande = fuerza >= 3
-            audio.efecto("estrepito" if grande else "golpe", 0.6 + 0.15 * fuerza)
+            audio.efecto({1: "k_ligero", 2: "k_medio"}.get(fuerza, "k_fuerte"),
+                         0.75 + 0.08 * fuerza)
             if mov == "replica":
                 self.vfx.replica(x, y, dirx)
             else:
@@ -1469,7 +1496,8 @@ class Combate:
                 if random.random() < 0.4:
                     self.hud.decir("golpe_nodo")
                 if mov == "bulo":
-                    self.hud.cartel(-0.30, 0.25, "TE CREÍSTE EL BULO", E.GAITAN)
+                    self.hud.cartel(-0.30, 0.25, "¡SE CREYÓ EL BULO!" if self.yo == "nodo"
+                                    else "TE CREÍSTE EL BULO", E.GAITAN)
                     self.hud.decir("bulo", bot=True)
         elif tipo == "desmentido":
             audio.efecto("cristal", 0.8)
@@ -1478,19 +1506,22 @@ class Combate:
             self.hud.decir("desmentido")
             self.hud.espectadores += 2500
         elif tipo == "remate":
-            audio.efecto("alarma", 0.7)
+            audio.efecto("k_remate")              # (era la alarma de un coche)
             # Abajo, mas pequeño y despues del plano del impacto: antes
             # cruzaba el centro justo encima del golpe final.
-            self.hud.anuncio("¡DESENMASCÁRALO!", "acércate y golpea antes de que se levante",
+            self.hud.anuncio(*(("¡LEVÁNTATE!", "si te golpea en el suelo, te quita la careta")
+                               if self.yo == "nodo" else
+                               ("¡DESENMASCÁRALO!", "acércate y golpea antes de que se levante")),
                              E.RESTREPO, y=-0.30, escala=2.6, retraso=0.9)
             self.camara.golpe(0.8)
             self.vfx.remate(p.nodo.x, p.nodo.y + 1.2)
         elif tipo == "fin":
             res = ev[1]
-            titulo, abajo, _ = TITULO_FIN[res]
-            tinta = E.GAITAN if res == "perdio" else E.RESTREPO
+            titulo, abajo, _ = (TITULO_FIN_NODO if self.yo == "nodo" else TITULO_FIN)[res]
+            # verde si gana quien lleva este PC, rojo si pierde
+            tinta = E.GAITAN if (res == "perdio") != (self.yo == "nodo") else E.RESTREPO
             self.hud.anuncio(titulo, abajo, tinta)
-            audio.efecto("sello")
+            audio.efecto("k_ko")
             audio.parar_musica(fundido=1.5)
             if res == "perdio":
                 for _ in range(3):

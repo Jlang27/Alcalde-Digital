@@ -29,6 +29,22 @@ CREDITOS.md. El mapa de que suena en cada momento del dia 1:
 Y del dia 2, en el colegio: lluvia con sirena lejana todo el dia (y en
 su cinematica, un trueno). Lluvia y trueno los compone
 herramientas/componer_lluvia.py.
+
+Los demas espacios (herramientas/componer_espacios.py):
+
+  colegio ...................... sigilo: pulso grave, tic-tac y cuerdas
+  campana ...................... thriller: ostinato de piano y cuerdas
+  billar ....................... jazz de salon; tacazo, bolas y bandas
+  retos de la cafeteria ........ fichas, dardo que se clava, manos de
+                                 piedra-papel-tijera; jingle al ganar/perder
+  Nova Kombat .................. su musica, gong de «¡PELEA!», golpes
+                                 ligero/medio/fuerte, bloqueo, caida,
+                                 remate y K.O.
+  plaza pacifica ............... la cumbia lejos, en la tarima, y la gente
+  plaza caotica ................ tension y la protesta («¡FRAU-DE!»)
+  final ........................ cumbia y aplausos en los felices; piano y
+                                 cuerdas con la protesta en los oscuros;
+                                 una ovacion al anunciar el escrutinio
 """
 
 import os
@@ -63,6 +79,19 @@ AMBIENTE_LLUVIA = "ambiente_lluvia.wav"
 AMBIENTE_CIUDAD_ALTO = "ambiente_ciudad_alto.ogg"
 AMBIENTE_ESTUDIO = "ambiente_estudio.ogg"
 MUSICA_PERSECUCION = "persecucion.wav"      # 165 bpm, compuesta (componer_persecucion.py)
+# Cada espacio con su musica (herramientas/componer_espacios.py; antes
+# colegio, campana, azotea y plaza caotica compartian MUSICA_TENSION, la
+# pelea usaba la de la persecucion y el final la de la intro).
+MUSICA_FINAL = "musica_final.ogg"            # cumbia de celebracion
+MUSICA_FINAL_SOMBRA = "musica_final_sombra.ogg"
+MUSICA_PLAZA = "musica_plaza.ogg"            # la cumbia, lejos, desde la tarima
+MUSICA_KOMBAT = "musica_kombat.ogg"
+MUSICA_BILLAR = "musica_billar.ogg"          # jazz de salon
+MUSICA_COLEGIO = "musica_colegio.ogg"        # sigilo
+MUSICA_CAMPANA = "musica_campana.ogg"        # thriller politico
+AMBIENTE_PLAZA = "ambiente_plaza.ogg"        # gente paseando
+AMBIENTE_PROTESTA = "ambiente_protesta.ogg"  # «¡FRAU-DE!», pitos y sirenas
+AMBIENTE_FIESTA = "ambiente_fiesta.ogg"      # aplausos y vitores
 
 # (archivo, peso, variacion de tono). El peso es relativo al ajuste de
 # efectos; la variacion evita que una tecla repetida suene a metralleta.
@@ -112,6 +141,27 @@ EFECTOS = {
     "ding": ("fx_ascensor_ding.wav", 0.8, 0.0),
     "ascensor": ("fx_ascensor_motor.wav", 0.8, 0.0),
     "puertas_ascensor": ("fx_puertas_ascensor.wav", 0.7, 0.0),
+    # los retos de la cafeteria (herramientas/componer_espacios.py)
+    "ficha": ("fx_ficha.wav", 0.9, 0.07),
+    "robar": ("fx_ficha_robar.wav", 0.7, 0.06),
+    "dardo": ("fx_dardo.wav", 0.9, 0.05),
+    "ppt": ("fx_ppt.wav", 0.8, 0.02),
+    "gana": ("fx_gana.wav", 0.8, 0.0),
+    "pierde": ("fx_pierde.wav", 0.8, 0.0),
+    # Nova Kombat
+    "k_ligero": ("fx_k_ligero.wav", 0.8, 0.08),
+    "k_medio": ("fx_k_medio.wav", 0.9, 0.07),
+    "k_fuerte": ("fx_k_fuerte.wav", 1.0, 0.05),
+    "k_bloqueo": ("fx_k_bloqueo.wav", 0.8, 0.08),
+    "k_caida": ("fx_k_caida.wav", 0.9, 0.05),
+    "k_aire": ("fx_k_aire.wav", 0.5, 0.12),
+    # la persecucion: tocar suelo tras un salto o una caida
+    "aterriza": ("fx_aterriza.wav", 0.9, 0.08),
+    "k_pelea": ("fx_k_pelea.wav", 0.9, 0.0),
+    "k_remate": ("fx_k_remate.wav", 0.8, 0.0),
+    "k_ko": ("fx_k_ko.wav", 1.0, 0.0),
+    # el final
+    "ovacion": ("fx_ovacion.wav", 1.0, 0.0),
 }
 
 # Los efectos de interfaz suenan MUCHAS veces seguidas. A volumen de
@@ -300,6 +350,19 @@ def tiempo_musica():
     if sonido is None or not getattr(sonido, "playing", False):
         return None
     return sonido.time
+
+
+def pausar_musica(pausa=True):
+    """Detiene la musica donde va (y la retoma de ahi). Para el duelo del
+    capitulo 5: va pegado a la posicion de su cancion y, si ella siguiera
+    sonando durante la pausa, al volver las notas irian desfasadas."""
+    sonido = _musica["sonido"]
+    if sonido is None:
+        return
+    try:
+        sonido.pause() if pausa else sonido.resume()
+    except Exception:
+        pass
 
 
 def _ajustar_musica(duracion=0.0):

@@ -58,7 +58,11 @@ V = versus._V
 espera(lambda: V["dia"] == CAPITULO, 60, "el dia")
 pasar(0.5)
 foto(f"red_{MODO}_invitado_espera")
-assert MODO in ("rumor", "colegio", "reto") or (V["espera"] is not None and V["fase"] == "espera")
+# (el anfitrion abre el minijuego sin lo de antes: segun lo cargado que vaya
+# cada proceso, aqui se puede llegar ya jugando)
+YA_JUGANDO = {"billar": "billar", "persecucion": "huida", "kombat": "kombat", "duelo": "duelo"}
+assert (MODO in ("rumor", "colegio", "reto") or V["fase"] == YA_JUGANDO.get(MODO)
+        or (V["espera"] is not None and V["fase"] == "espera")), V["fase"]
 azar = random.Random(9)
 
 if MODO == "rumor":
@@ -98,10 +102,13 @@ elif MODO == "reto":
         if e and e["revelando"] and fotos == 0 and r.t_jugada > 0.9:
             fotos = 1
             foto("red_reto_invitado_mano")
-        if e and e["resultado"] is not None and fotos == 1:
+        if e and r._terminado(e) and fotos == 1:
             fotos = 2
             pasar(0.3)
             foto("red_reto_invitado_resultado")
+            # Don Rafa (el invitado) gano: en su PC tiene que salir GANASTE
+            # (antes lo veia como el protagonista y le salia PERDISTE)
+            assert r._gane(e), "el invitado gano y su cartel dice que perdio"
         pasar(0.2)
         tt += 0.2
     assert fotos == 2 and r.est["resultado"] == "perdio", (fotos, r.est)

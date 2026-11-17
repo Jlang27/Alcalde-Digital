@@ -277,9 +277,12 @@ class Tablero:
                 pon(Text(text=nombre.upper(), parent=caja, origin=(-0.5, 0),
                          position=(tx, 0.013, -0.01), scale=escala, color=E.TINTA,
                          **E.fuente_titular()))
-                pon(Text(text=f"vota {apellido(f['voto'])}", parent=caja,
-                         origin=(-0.5, 0), position=(tx, -0.017, -0.01),
-                         scale=0.56 * E.ESCALA_TEXTO, color=E.TINTA_TENUE))
+                # «vota De la Estrella» a tamano fijo se salia de la tarjeta
+                voto = f"vota {apellido(f['voto'])}"
+                pon(Text(text=voto, parent=caja,
+                         origin=(-0.5, 0), position=(tx, -0.015, -0.01),
+                         scale=min(0.56 * E.ESCALA_TEXTO, hueco / (len(voto) * 0.0125)),
+                         color=E.TINTA_TENUE))
             else:
                 escala = min(0.56, (ancho - 0.016) / (len(nombre) * 0.0176))
                 pon(Text(text=nombre.upper(), parent=caja, origin=(0, 0),
@@ -295,10 +298,11 @@ class Tablero:
             if f["tipo"] == "vecino" and estado in marca:
                 texto, tinta = marca[estado]
                 w = 0.014 + len(texto) * 0.0092
-                quad(w, 0.024, (ancho / 2 - w / 2 + 0.006, -alto / 2 + 0.004),
+                # colgando del borde de abajo: dentro pisaba la linea del voto
+                quad(w, 0.024, (ancho / 2 - w / 2 + 0.006, -alto / 2 - 0.004),
                      tinta, -0.012)
                 pon(Text(text=texto, parent=caja, origin=(0, 0),
-                         position=(ancho / 2 - w / 2 + 0.006, -alto / 2 + 0.004, -0.02),
+                         position=(ancho / 2 - w / 2 + 0.006, -alto / 2 - 0.004, -0.02),
                          scale=0.42, color=E.PAPEL, **E.fuente_titular()))
             if f["contacto"]:
                 pon(Text(text="TU CONTACTO", parent=caja, origin=(0.5, 0),

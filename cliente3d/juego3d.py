@@ -48,7 +48,7 @@ import tablero
 import minimapa
 from jugador import Jugador
 from contenido import INDICADORES_META, PERSONAJE_DEL_DIA, DUENO_PERSONAJE
-from contenido import CELULAR, FUENTE_CELULAR
+from contenido import CELULAR, FUENTE_CELULAR, JUGADAS_BASE
 from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        OCULTAS_CAPITULO_1, ORIGEN_JUGADOR, ORIGEN_RUMOR,
                        HECHOS, TEXTO_BANDERA, OBJETOS_CAPITULO_2,
@@ -750,6 +750,10 @@ def mover_confirmacion(paso):
 # ESC en mitad de la partida. Antes solo preguntaba «¿volver al menu?»:
 # para bajar el volumen habia que abandonar la partida.
 TITULO_PAUSA = "EL RELOJ DEL DÍA ESTÁ DETENIDO"
+# En los minijuegos tambien se pausa (Esc): lo que se detiene es la partida.
+TITULO_PAUSA_MINIJUEGO = {"duelo": "EL DUELO ESTÁ DETENIDO", "reto": "EL RETO ESTÁ DETENIDO",
+                          "billar": "LA PARTIDA ESTÁ DETENIDA",
+                          "kombat": "EL COMBATE ESTÁ DETENIDO"}
 OPCIONES_PAUSA = (("CONTINUAR", "seguir"),
                   ("AJUSTES", "ajustes"),
                   ("VOLVER AL MENÚ", "menu"))
@@ -768,9 +772,17 @@ def abrir_pausa(retomar=False):
         return
     if not retomar:
         cl.antes_de_pausa = cl.estado
-        if cl.estado == "libre":
+        # En la persecucion no se cierra el modo libre: al volver se
+        # rehacia entero (leyenda, camara) a mitad de la carrera. Basta
+        # con que el estado no sea «libre»: update() ya no mueve a nadie.
+        cl.pausa_en_carrera = cl.estado == "libre" and cl.persigue
+        if cl.estado == "libre" and not cl.pausa_en_carrera:
             cerrar_libre()
             limpiar(cl.reloj_manana)
+        if cl.estado == "duelo":
+            audio.pausar_musica(True)          # la partitura va con ella
+        if cl.estado == "kombat" and cl.kombat is not None:
+            cl.kombat.soltar_todo()
         cl.tapados = [e for e in cl.hud + cl.opciones + cl.zonas + cl.marcas
                       + cl.modal if e.enabled]
         if cl.alerta is not None:
@@ -788,7 +800,9 @@ def abrir_pausa(retomar=False):
     t = E.titular("Pausa", (0, 0.268), 2.6, E.TEXTO, origen=(0, 0.5))
     t.z = -0.60
     c.append(t)
-    sub = E.pequena(TITULO_PAUSA, (0, 0.203), E.TEXTO_TENUE,
+    sub = E.pequena(TITULO_PAUSA_MINIJUEGO.get(cl.antes_de_pausa, TITULO_PAUSA)
+                    if not getattr(cl, "pausa_en_carrera", False) else "LA PERSECUCIÓN ESTÁ DETENIDA",
+                    (0, 0.203), E.TEXTO_TENUE,
                     escala=0.58, origen=(0, 0.5))
     sub.z = -0.60
     c.append(sub)
@@ -796,6 +810,9 @@ def abrir_pausa(retomar=False):
     for r in E.filete(0.62, (-0.31, 0.173), E.luz(70)):
         r.z = -0.60
         c.append(r)
+    # La franja de abajo, opaca: la leyenda del minijuego (que no se cierra
+    # al pausar) se transparentaba bajo la de la pausa y se mezclaban.
+    c.append(E.banda(2.4, 0.11, (0, -0.458), color.rgb32(5, 6, 9, 255), z=-0.55))
     c += E.leyenda((("flechas", "elegir"), ("enter", "abrir"),
                     ("esc", "seguir jugando")), -0.458, z=-0.60)
     pintar_pausa()
@@ -833,10 +850,13 @@ def cerrar_pausa(restaurar=True):
     cl.tapados = []
     audio.agachar(False)
     audio.efecto("volver")
-    if cl.antes_de_pausa == "libre":
+    if cl.antes_de_pausa == "duelo":
+        audio.pausar_musica(False)
+    if cl.antes_de_pausa == "libre" and not getattr(cl, "pausa_en_carrera", False):
         abrir_libre()
     else:
         cl.estado = cl.antes_de_pausa
+    cl.pausa_en_carrera = False
 
 
 def activar_pausa():
@@ -1321,8 +1341,8 @@ def iniciar_dia(indice):
 # ambiente). El colegio de noche lleva lluvia y una tension baja; la
 # oficina de campana, el murmullo de la ciudad de abajo.
 SONIDO_LUGAR = {
-    "rectoria": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_LLUVIA),
-    "campana": (audio.MUSICA_TENSION, 0.3, audio.AMBIENTE_CIUDAD_ALTO),
+    "rectoria": (audio.MUSICA_COLEGIO, 0.4, audio.AMBIENTE_LLUVIA),
+    "campana": (audio.MUSICA_CAMPANA, 0.32, audio.AMBIENTE_CIUDAD_ALTO),
     # El estudio: musica tranquila de directo y el tono de la sala. La
     # calle apenas se cuela por el vidrio, que es lo que hay dentro de un
     # cuarto con espuma acustica.
@@ -1336,9 +1356,10 @@ SONIDO_LUGAR = {
 def sonido_del_lugar():
     if mundo.escenario() == "plaza_central":
         # Musica tranquila en la pacifica; la tension, mas alta, en la caotica.
+        # Y la gente: paseando en la pacifica, protestando en la caotica.
         if plaza.estado() == "caotica":
-            return audio.MUSICA_TENSION, 0.5, audio.AMBIENTE_CALLE
-        return audio.MUSICA_CAFETERIA, 0.6, audio.AMBIENTE_CALLE
+            return audio.MUSICA_TENSION, 0.4, audio.AMBIENTE_PROTESTA
+        return audio.MUSICA_PLAZA, 0.5, audio.AMBIENTE_PLAZA
     return SONIDO_LUGAR.get(mundo.escenario(), (audio.MUSICA_CAFETERIA, 0.8,
                                                 audio.AMBIENTE_CAFETERIA))
 
@@ -1620,7 +1641,9 @@ def _jugadas(p):
     texto = f"{n} jugada{'s' if n != 1 else ''}"
     if p.con_retos:
         # se ganan en los retos de la cafeteria: que se sepa de donde salen
-        texto += " (una de base y las que ganaste en los retos)"
+        ganadas = n - JUGADAS_BASE
+        texto += (f" ({JUGADAS_BASE} de base y {ganadas} que ganaste en los retos)"
+                  if ganadas > 0 else " (las de base: no ganaste ningún reto)")
     return texto
 
 
@@ -1886,8 +1909,10 @@ TEXTO_BILLAR = (
     "guía. Mueve el ratón para apuntar (la rueda o A y D afinan), haz clic "
     "y arrastra hacia abajo para dar potencia y suelta para tirar; o "
     "mantén ESPACIO. Las flechas dan efecto. Meter la blanca o tocar "
-    "primero una bola ajena es falta y le da bola en mano al otro. Tres "
-    "minutos de partida: si se acaban, gana quien tenga menos bolas suyas.")
+    "primero una bola ajena (o ninguna) es falta y le da bola en mano al "
+    "otro, solo ese turno. Si se te acaba el tiempo de tiro, pierdes el "
+    "turno. Tres minutos de partida: si se acaban, gana quien tenga menos "
+    "bolas suyas.")
 FIN_BILLAR = {
     "mesa_limpia": ("MESA LIMPIA", "El expediente, a la trituradora",
                     "Le ganaste sin una sola falta. Rompes el expediente delante "
@@ -2851,6 +2876,17 @@ def pintar_reloj_manana():
     r.append(cifra)
     r += E.barra_voto(0.42, ya / max(total, 1), (0.400, 0.392), E.GAITAN,
                       grosor=0.010, col_riel=E.luz(30))
+    if p.con_retos:
+        # Lo que se lleva ganado en los retos, a la vista toda la manana
+        # (solo se decia en el cartel del reto y al abrir el tablero).
+        n = p.jugadas_ganadas()
+        jug = E.pequena(f"JUGADAS PARA EL TABLERO  {n}", (0.235, 0.381),
+                        E.LLERAS if n > JUGADAS_BASE else E.TEXTO_TENUE, escala=0.5)
+        r.append(jug)
+        if n != getattr(cl, "jugadas_pintadas", n):
+            jug.color = E.RESTREPO
+            jug.animate_color(E.LLERAS, duration=1.6, delay=0.4)
+        cl.jugadas_pintadas = n
     if p.rondas != cl.rondas_pintadas:
         # destello: lo que acaba de cambiar nace en rojo y se apaga
         for t in (hora, cifra):
@@ -2909,7 +2945,9 @@ def empezar_reto(id_npc):
     cl.estado = "reto"
     cl.con_quien = id_npc
     # en red el rival es el otro jugador: se le llama por su nombre
-    rival = cl.sesion.rival if versus.activo() else NPCS_CAPITULO_1[id_npc][0]
+    # (y por quien juega: el otro PC dice «Tú (Don Rafa)»)
+    npc = NPCS_CAPITULO_1[id_npc][0]
+    rival = f"{cl.sesion.rival} ({npc})" if versus.activo() else npc
     cl.reto = cafeteria_cliente.Reto(juego, "tu", "Tú", rival)
     audio.agachar(True)
 
@@ -3538,8 +3576,7 @@ def datos_encuesta(p):
             "faltan": faltan,
         })
     tinta_de = {c["nombre"]: c["tinta"] for c in candidatos}
-    motivos = [(c, d, m, tinta_de[c]) for c, d, m in p.motivos_encuesta
-               if abs(d) >= 1]
+    motivos = [(c, d, m, tinta_de[c]) for c, d, m in p.motivos_en_puntos()]
     memoria = [TEXTO_BANDERA[b] for b in p.banderas_del_dia
                if b in TEXTO_BANDERA]
 
@@ -4088,27 +4125,41 @@ def input(tecla):
         return
 
     elif cl.estado == "duelo":
-        # D F J K (o las flechas): un carril cada una. Esc no pausa: es un directo.
+        # D F J K (o las flechas): un carril cada una; Esc pausa (y la musica
+        # se detiene con el, para no desfasar las notas).
+        if tecla == "escape":
+            abrir_pausa()
+            return
         carril = TECLAS_DUELO.get(tecla)
         if carril is not None:
             pulsar_duelo(carril)
         return
 
     elif cl.estado == "reto":
-        # Sin pausa, como el billar: es una partida con alguien delante.
+        if tecla == "escape":
+            abrir_pausa()
+            return
         if cl.reto is not None:
             cl.reto.tecla(tecla)
         return
 
     elif cl.estado == "billar":
-        # Sin pausa, como la pelea: Esc solo suelta la potencia cargada.
+        # Esc pausa (la potencia cargada se suelta con el clic derecho).
+        if tecla == "escape":
+            if cl.billar is not None:
+                cl.billar.tecla("right mouse down")
+            abrir_pausa()
+            return
         if cl.billar is not None:
             cl.billar.tecla(tecla)
         return
 
     elif cl.estado == "kombat":
-        # Como el duelo, es un directo: Esc no pausa. Las teclas sostenidas
-        # (andar, bloquear) llegan tambien al soltarse («a up»).
+        # Esc pausa. Las teclas sostenidas (andar, bloquear) llegan tambien
+        # al soltarse («a up»).
+        if tecla == "escape":
+            abrir_pausa()
+            return
         if cl.kombat is not None:
             cl.kombat.tecla(tecla)
         return
@@ -4210,7 +4261,7 @@ def input(tecla):
                                                                 cl.actor.getZ()):
             capturar()
         elif tecla == "escape":
-            abrir_confirmacion("menu")
+            abrir_pausa()                 # como en cualquier otro sitio
         return
 
     elif cl.estado == "libre":

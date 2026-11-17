@@ -62,7 +62,9 @@ PERDEDOR = {
 }
 # El equipo, detras: (modelo de assets/npc, x, z, hacia donde mira, gesto).
 _FIESTA = (("npc1", -6.3, 41.4, (0.35, -1.0), "aplaude"),
-           ("npc2", -4.7, 42.0, (0.2, -1.0), "aplaude"),
+           # en -4,7 quedaba justo detras del perdedor en su plano y parecia
+           # ponerle la mano en el hombro
+           ("npc2", -3.4, 42.0, (0.2, -1.0), "aplaude"),
            ("cashier", 1.5, 41.7, (-0.2, -1.0), "aplaude"),
            ("npc3", 3.2, 42.1, (-0.3, -1.0), "aplaude"),
            ("npc4", 4.9, 41.4, (-0.4, -1.0), "aplaude"))
@@ -97,8 +99,9 @@ def planos(final):
                       Vec3(0, 1.6, 30), Vec3(0, 1.8, 32), 55))
     lista += [
         # Contrapicado desde la gente, por encima de las pancartas.
+        # (mirando a 3,2 la barra de cine cortaba el rotulo de la pantalla)
         ("tarima", 5.0, Vec3(GX, 3.5, 22.5), Vec3(GX, 3.5, 24.5),
-         Vec3(GX, 3.2, GZ), Vec3(GX, 3.25, GZ), 50),
+         Vec3(GX, 3.7, GZ), Vec3(GX, 3.75, GZ), 50),
         # La tarima entera: el ganador, su equipo y el perdedor.
         ("escenario", 5.5, Vec3(8.6, GY + 2.3, 31.2), Vec3(7.4, GY + 2.1, 32.4),
          Vec3(1.0, GY + 1.2, 40.6), Vec3(0.8, GY + 1.2, 40.6), 56),
@@ -202,9 +205,14 @@ class FinalCiudad(EscenaDecision):
         actor.setPos(MATEO[0], 0, MATEO[1])
         self._mirar_a(GX - MATEO[0], GZ - MATEO[1])
         self._anima("idle")
-        fiesta = final in ("paz", "reconstruccion")
-        audio.musica(audio.MUSICA_INTRO if fiesta else audio.MUSICA_TENSION,
-                     fundido=1.5, nivel=0.6)
+        # La fiesta, con cumbia y aplausos; los finales oscuros, con piano y
+        # cuerdas (en la polarizada la mitad aplaude; en el desastre, protesta).
+        self.fiesta = fiesta = final in ("paz", "reconstruccion")
+        audio.musica(audio.MUSICA_FINAL if fiesta else audio.MUSICA_FINAL_SOMBRA,
+                     fundido=1.5, nivel=0.6 if fiesta else 0.5)
+        audio.ambiente(True, {"desastre": audio.AMBIENTE_PROTESTA,
+                              "polarizada": audio.AMBIENTE_PLAZA}.get(final, audio.AMBIENTE_FIESTA),
+                       fundido=2.0, nivel=0.55 if fiesta else 0.45)
         self._posar(0.0)
 
     @staticmethod
@@ -238,7 +246,13 @@ class FinalCiudad(EscenaDecision):
         if "apoyo" in i and cruza(i["apoyo"] + 0.3):
             self._decir("", tx["apoyo"], 4.2, E.TEXTO)
         if cruza(i["tarima"] + 0.4):
-            audio.efecto("estrepito", 0.6)
+            # el anuncio: ovacion (a medias si la ciudad quedo partida); en
+            # el desastre, lo que se cae
+            final = self.datos["final"]
+            if final == "desastre":
+                audio.efecto("estrepito", 0.6)
+            else:
+                audio.efecto("ovacion", 1.0 if self.fiesta else 0.5)
             self._decir("ESCRUTINIO  ·  100 % DE LAS MESAS",
                         f"{d['ganador']}, {cargo_electo(d['ganador'])} de Ciudad Nova.", 4.2,
                         self.tinta)

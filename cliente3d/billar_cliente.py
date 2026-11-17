@@ -472,9 +472,11 @@ class Billar:
         camera.fov = FOV
         camera.position = (tx, mundo.YJ + mundo.ALTO_PANO + ALTO_CAMARA, tz)
         mundo.mirar((tx, mundo.YJ, tz + 0.001))
-        self.hud.anuncio("¡SAQUE!", "detrás de la línea: mueve la blanca y haz clic",
-                         dura=1.8)
-        audio.musica(audio.MUSICA_CAFETERIA, fundido=1.5, nivel=0.35)
+        # En red, si saca el otro, las instrucciones del saque no son para ti.
+        otro = (self.remoto or {}).get("nombre") or "el asesor"
+        self.hud.anuncio("¡SAQUE!", "detrás de la línea: mueve la blanca y haz clic"
+                         if partida.turno == yo else f"saca {otro}", dura=1.8)
+        audio.musica(audio.MUSICA_BILLAR, fundido=1.5, nivel=0.4)   # jazz de salon
         self._apuntar_al_rombo()
 
     # --- utilidades ---
@@ -730,6 +732,14 @@ class Billar:
                 quien_txt = ("FALTA TUYA" if quien == self.yo else
                              "FALTA DEL ASESOR" if quien == "asesor" else "FALTA DE ABEL")
                 self.hud.anuncio(quien_txt, motivo, E.GAITAN, dura=1.6)
+            elif tipo == "pierde_turno":
+                # sin falta: el turno pasa y nadie coge la blanca
+                _t, quien, motivo = ev
+                audio.efecto("volver", 0.6)
+                quien_txt = ("PIERDES EL TURNO" if quien == self.yo else
+                             "TURNO PERDIDO DEL ASESOR" if quien == "asesor" else
+                             "TURNO PERDIDO DE ABEL")
+                self.hud.anuncio(quien_txt, motivo, E.LLERAS, dura=1.4)
             elif tipo == "grupo":
                 _t, quien, g = ev
                 mio = g if quien == self.yo else ("rayadas" if g == "lisas" else "lisas")

@@ -106,7 +106,7 @@ class CineColegio:
         self.negro = E.velo(color.rgba(0, 0, 0, 1), z=-0.9)
         self.piezas += [self.rayo, self.negro]
         self.negro.animate_color(color.rgba(0, 0, 0, 0), duration=1.2)
-        audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.3)
+        audio.musica(audio.MUSICA_COLEGIO, fundido=1.5, nivel=0.35)
         audio.ambiente(True, audio.AMBIENTE_LLUVIA, fundido=1.0)
 
     # ---------------------------------------------------------------
@@ -398,3 +398,20 @@ class SalidaColegio(EscenaDecision):
     def _despues(self, t):
         if self.elegida == "guardar":
             self.actor.setPos(PARADA[0] - 0.9 * t, ACERA, PARADA[1])
+
+    def cerrar(self):
+        super().cerrar()
+        # La foto del cierre del dia es lo que quede en camara, y aqui no
+        # valia: el ultimo plano es un primer plano (salia el cuello de la
+        # camisa) y con «guardar» ella se va del cuadro (salia la calle
+        # vacia, casi negra). Se deja el plano de la farola, con el
+        # telefono en la mano y la fachada detras, mirando un poco a su
+        # derecha y arriba: el cierre recorta la mitad izquierda de la
+        # captura (cierre._foto_prensa) y ella tiene que caer ahi, con la cara.
+        _n, _d, _p0, p1, _m0, _m1, fov = PLANOS_SALIDA[1]
+        self.actor.setPos(PARADA[0], ACERA, PARADA[1])
+        self._mirar_a(0, -1)
+        self._anima("celular")
+        camera.fov = fov
+        camera.position = p1
+        mundo.mirar(Vec3(PARADA[0] + 0.42, 1.73, PARADA[1] - 0.19))

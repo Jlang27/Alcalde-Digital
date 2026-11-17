@@ -204,6 +204,9 @@ def _caida():
             k.pelea.nodo_humano = False
         if b is not None:
             b.remoto = None
+        if J.cl.reto is not None:
+            # el reto de la cafeteria se quedaba esperando su jugada para siempre
+            J.cl.reto.juego.rival_humano = False
         if p is not None and getattr(p, "duelo", None) is not None:
             p.duelo.rival_humano = False
         if p is not None and p.persecucion is not None:
@@ -577,7 +580,7 @@ def _duelo_servidor(cl, e, mensajes, p):
         return
     d = p.duelo
     if _V["duelo"] is not r:
-        _V["duelo"], _V["ronda"], _V["r_fin"] = r, None, False
+        _V["duelo"], _V["ronda"], _V["r_fin"], _V["r_barra"] = r, None, False, -1.0
         d.rival_humano = True
         e.enviar("r_ini", semilla=d.semilla)
     if cl.duelo_ronda != _V["ronda"]:
@@ -586,6 +589,12 @@ def _duelo_servidor(cl, e, mensajes, p):
     for m in mensajes:
         if m["t"] == "r_j":
             d.juicio_rival(m["j"])
+    # La barra es el tira y afloja de los dos y solo esta aqui la cuenta
+    # entera: en el otro PC subia con sus aciertos y nada mas (llegaba al
+    # tope tocando bien y luego le salia «GANA LA VERDAD»).
+    if abs(d.barra - _V.get("r_barra", -1.0)) > 0.004:
+        _V["r_barra"] = d.barra
+        e.enviar("r_b", b=round(d.barra, 3))
     if cl.duelo_fin is not None and not _V["r_fin"]:
         _V["r_fin"] = True
         e.enviar("r_fin", res=d.resultado(), mateo=round(d.precision(), 3),
@@ -670,7 +679,9 @@ def _duelo_red(enlace, semilla):
         protagonista."""
 
         def _juzgar(self, juicio):
+            barra = self.barra            # la barra la manda el protagonista (r_b)
             nombre = super()._juzgar(juicio)
+            self.barra = barra
             enlace.enviar("r_j", j=nombre)
             return nombre
     return DueloRed(semilla)
@@ -1076,7 +1087,7 @@ def _llega_k_ini(_m):
     azotea.caseton(False)
     pelea = PeleaRemota(_V["sesion"].enlace)
     pelea.nodo_humano = True
-    obj["combate"] = kombat_cliente.Combate(pelea, cl.actor, obj["nodo"])
+    obj["combate"] = kombat_cliente.Combate(pelea, cl.actor, obj["nodo"], yo="nodo")
     _V["fase"] = "kombat"
 
 
@@ -1146,13 +1157,20 @@ def fin_duelo_local():
         J.cl.ritmo.titulo("RESULTADO", "…", "contando los aciertos de los dos")
 
 
+def _llega_r_b(m):
+    """La barra que cuenta a los dos; aqui se pinta desde mi lado."""
+    p = J.cl.partida
+    if _V["fase"] == "duelo" and p is not None and hasattr(p, "duelo"):
+        p.duelo.barra = 1.0 - m["b"]
+
+
 def _llega_r_fin(m):
     if _V["fase"] not in ("duelo", "duelo_fin"):
         return
     _V["fase"] = "duelo_fin"
-    gane = m["res"] == "derrota"
     audio.efecto("sello")
-    J.cl.ritmo.titulo("RESULTADO", "GANA EL RUMOR" if gane else "GANA LA VERDAD",
+    J.cl.ritmo.titulo("RESULTADO", {"derrota": "GANA EL RUMOR",
+                                    "parcial": "LA VERDAD, POR POCO"}.get(m["res"], "GANA LA VERDAD"),
                       f"Tu precisión {m['rival'] * 100:.0f} %  ·  la de "
                       f"{_V['sesion'].rival} {m['mateo'] * 100:.0f} %")
 
@@ -1192,7 +1210,7 @@ def _llega_c_ini(m):
     if "reto" in obj:
         obj.pop("reto").cerrar()
     rival = _V["sesion"].rival
-    obj["reto"] = cafeteria_cliente.Reto(RetoRemoto(_V["sesion"].enlace, m["juego"]), "tu",
+    obj["reto"] = cafeteria_cliente.Reto(RetoRemoto(_V["sesion"].enlace, m["juego"]), "rival",
                                          f"Tú ({m['npc']})", rival, premio="envío")
     _V["fase"] = "reto"
     _avisar(f"{rival} quiere hablar con {m['npc']}: juegas tú por él", 3.5)
@@ -1220,7 +1238,7 @@ _RECIBE = {"c_ini": _llega_c_ini, "c_est": _llega_c_est, "c_fin": _llega_c_fin,
            "t_est": _llega_t_est, "t_ok": _llega_t_ok, "dia": _llega_dia, "hace": _llega_hace, "cierre": _llega_cierre, "fin": _llega_fin,
            "k_ini": _llega_k_ini, "k_est": _llega_k_est, "k_fin": _llega_cierra_minijuego,
            "b_ini": _llega_b_ini, "b_est": _llega_b_est, "b_fin": _llega_cierra_minijuego,
-           "r_ini": _llega_r_ini, "r_ronda": _llega_r_ronda, "r_fin": _llega_r_fin,
+           "r_ini": _llega_r_ini, "r_ronda": _llega_r_ronda, "r_fin": _llega_r_fin, "r_b": _llega_r_b,
            "r_cierra": _llega_cierra_minijuego,
            "g_ini": _llega_g_ini, "g_est": _llega_g_est, "g_fin": _llega_g_fin,
            "p_ini": _llega_p_ini, "p_est": _llega_p_est, "p_fin": _llega_p_fin}

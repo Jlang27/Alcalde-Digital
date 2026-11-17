@@ -66,8 +66,12 @@ class LlegadaPlaza(EscenaDecision):
         self.dichos = [(self.inicios[[p[0] for p in self.PLANOS].index(plano)] + t, quien,
                         texto, dura) for plano, t, quien, texto, dura in DICHOS[self.estado]]
         caos = self.estado == "caotica"
-        audio.musica(audio.MUSICA_TENSION if caos else audio.MUSICA_INTRO,
-                     fundido=1.5, nivel=0.35 if caos else 0.45)
+        # (la pacifica sonaba con la musica de la intro, compuesta contra
+        # sus tiempos; ahora, la cumbia que sale de la tarima)
+        audio.musica(audio.MUSICA_TENSION if caos else audio.MUSICA_PLAZA,
+                     fundido=1.5, nivel=0.35 if caos else 0.5)
+        audio.ambiente(True, audio.AMBIENTE_PROTESTA if caos else audio.AMBIENTE_PLAZA,
+                       fundido=1.5)
         actor.hide()
 
     def _pie_de_lugar(self):
