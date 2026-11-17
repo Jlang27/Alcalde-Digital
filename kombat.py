@@ -88,7 +88,23 @@ GOLPES = {
 BOTONES = ("ligero", "medio", "fuerte")
 # Proyectiles: (velocidad, daño, arranque desde que se lanza, enfriamiento)
 PROYECTILES = {"verificar": (5.5, 6.0, 0.18, 1.1), "bulo": (4.6, 5.0, 0.22, 1.6)}
-CONGELAR = {1: 0.05, 2: 0.07, 3: 0.10, 4: 0.11}     # hitstop por fuerza
+CONGELAR = {1: 0.05, 2: 0.075, 3: 0.12, 4: 0.14}    # hitstop por fuerza
+CONGELAR_FINAL = 0.10         # el golpe final: corto; la camara lenta del cliente lo alarga
+CONGELAR_DERRIBO = 0.09       # todo derribo: 5 fotogramas, ni el ligero menos ni el fuerte mas
+# Peso de los derribos (como en MKX): cuanto mas fuerte el golpe, mas alto
+# y mas lejos sale el que lo recibe, y lo fuerte bota una vez en el suelo.
+# Con su propia gravedad (30): un fuerte sale rasante y rapido, sube 0,8 m
+# y cae de golpe en ~0,47 s (con la de 20 el arco alto se leia ingravido).
+DERRIBO_VY, DERRIBO_VY_F = 5.2, 0.6      # vy = 5,2 + 0,6 * fuerza
+GRAVEDAD_DERRIBO = 30.0       # solo para el que vuela derribado: cae con peso
+DERRIBO_VX, DERRIBO_VX_F = 1.6, 0.6      # vx = 1,6 + 0,6 * fuerza
+# Giro de espaldas en el vuelo (grados de pitch: 0 de pie, 90 tumbado boca
+# arriba): lo da la regla para que los dos PC lo vean igual.
+GIRO_VUELO, GIRO_VUELO_F = 90.0, 15.0    # lo que gira hasta el primer toque
+BOTE = 2.8                    # m/s hacia arriba en el bote tras un fuerte
+PARED_VX = 1.5                # a partir de esta velocidad, rebota en la pared
+RETROCESO = 0.10              # lo que retrocede el que pega un fuerte (m)
+RETROCESO_BLOQUEO = 0.18      # ...y si se lo paran, mas: el bloqueo aleja
 
 # Los especiales, por teclas relativas a hacia donde mira el luchador.
 COMBOS = {
@@ -148,6 +164,12 @@ class Luchador:
         self.cadena = 0               # golpes encadenados del combo propio
         self.salto_golpe = False      # ya golpeo en este salto
         self.pendiente = None         # (boton, instante): el buffer de un golpe
+        self.rebota = False           # derribado por algo fuerte: bota al caer
+        self.pared = False            # ya rebotó en la pared en este vuelo
+        # Derribado: cuanto ha girado hacia atras (grados; 90 = tendido boca
+        # arriba) y a que ritmo. El cliente lo aplica al cuerpo.
+        self.giro = 0.0
+        self.giro_vel = 0.0
 
     @property
     def en_aire(self):
@@ -552,6 +574,7 @@ class Pelea:
         elif l.estado == "derribado":
             if not l.en_aire and l.t >= TUMBADO:
                 l.estado, l.t = "levantarse", 0.0
+                l.giro = l.giro_vel = 0.0
                 self.eventos.append(("levanta", l.nombre))
         elif l.estado == "levantarse":
             if l.t >= LEVANTAR:
@@ -611,10 +634,17 @@ class Pelea:
             if efecto == "mareo" and rival.mareo_usado:
                 efecto = None               # una vez por combo
             if efecto == "derribo":
+                # La replica es un escalon mas: es el golpe que mas lanza.
+                f = g.fuerza + (mov == "replica")
                 rival.estado, rival.t = "derribado", 0.0
-                rival.vy = max(rival.vy, 4.2)
-                rival.vx_aire = atacante.mira * 2.2
+                rival.vy = max(rival.vy, DERRIBO_VY + DERRIBO_VY_F * f)
+                rival.vx_aire = atacante.mira * (DERRIBO_VX + DERRIBO_VX_F * f)
                 rival.y = max(rival.y, 0.01)
+                rival.rebota, rival.pared = f >= 3, False
+                # El giro se reparte en lo que dura el vuelo hasta tocar suelo.
+                g_d = GRAVEDAD_DERRIBO
+                vuelo = (rival.vy + math.sqrt(rival.vy ** 2 + 2 * g_d * rival.y)) / g_d
+                rival.giro_vel = (GIRO_VUELO + GIRO_VUELO_F * f - rival.giro) / vuelo
             elif efecto == "mareo":
                 rival.mareo_usado = True
                 rival.estado, rival.t, rival.aturde = "mareado", 0.0, MAREO
@@ -626,9 +656,16 @@ class Pelea:
         empuje = g.empuje * (0.6 if bloqueado else 1.0)
         sobra = max(0.0, abs(rival.x + atacante.mira * empuje) - ANCHO_RING)
         rival.vx = atacante.mira * (empuje - sobra) * FRENO
+        # Un fuerte tambien echa atras al que lo da: el golpe «pesa» para
+        # los dos (y bloqueado aleja mas, que es lo que lo hace seguro).
+        retro = (RETROCESO_BLOQUEO if bloqueado else RETROCESO) if g.fuerza >= 3 else 0.0
         if not atacante.en_aire:
-            atacante.vx = -atacante.mira * sobra * FRENO
+            atacante.vx = -atacante.mira * (sobra + retro) * FRENO
         self.congelado = CONGELAR[g.fuerza] * (0.6 if bloqueado else 1.0)
+        if efecto == "derribo":
+            self.congelado = CONGELAR_DERRIBO      # 5 fotogramas, ni mas ni menos
+        if rival.vida <= 0:
+            self.congelado = CONGELAR_FINAL
         self.eventos.append(("golpe", atacante.nombre, mov, round(daño, 1), bloqueado,
                              rival.combo, efecto))
         if mov == "bulo" and not bloqueado:
@@ -637,7 +674,8 @@ class Pelea:
             if rival is self.nodo:
                 self.fase, self.t_remate = "remate", REMATE
                 rival.estado, rival.t = "aturdido", 0.0
-                rival.y = rival.vy = rival.vx = rival.vx_aire = 0.0
+                # Sin vx = 0: el ultimo golpe lo echa atras tambaleandose.
+                rival.y = rival.vy = rival.vx_aire = rival.giro = rival.giro_vel = 0.0
                 atacante.estado, atacante.t, atacante.mov = "quieto", 0.0, None
                 self.proyectiles.clear()
                 self.eventos.append(("remate",))
@@ -653,16 +691,38 @@ class Pelea:
             l.x += l.vx * dt
             l.vx *= frena
             if l.en_aire:
-                l.vy -= GRAVEDAD * dt
+                l.vy -= (GRAVEDAD_DERRIBO if l.estado == "derribado" else GRAVEDAD) * dt
+                l.giro += l.giro_vel * dt
                 l.y += l.vy * dt
                 l.x += l.vx_aire * dt
-                if l.y <= 0.0:
+                if l.y <= 0.0 and l.estado == "derribado" and l.rebota:
+                    # Un bote pequeño antes de quedar tendido: el cuerpo pesa.
+                    l.rebota = False
+                    l.y, l.vy = 0.0, BOTE
+                    l.vx_aire *= 0.45
+                    # En el bote se asienta: vuelve hacia tendido (90) con inercia.
+                    l.giro_vel = (90.0 - l.giro) / (2 * BOTE / GRAVEDAD_DERRIBO)
+                    self.eventos.append(("aterriza", l.nombre, l.estado))
+                    self.eventos.append(("rebote", l.nombre))
+                elif l.y <= 0.0:
                     l.y = l.vy = l.vx_aire = 0.0
+                    if l.estado == "derribado":
+                        l.giro, l.giro_vel = 90.0, 0.0
                     self.eventos.append(("aterriza", l.nombre, l.estado))
                     if l.estado in ("saltar", "atacar"):
                         l.estado, l.mov, l.t = "quieto", None, 0.0
                     elif l.estado == "derribado":
                         l.t = 0.0               # cuenta lo tumbado desde el suelo
+            # Lanzado contra el borde del ring: se estampa y rebota (una vez
+            # por vuelo), en vez de pararse en seco contra una pared invisible.
+            if (l.estado == "derribado" and l.en_aire and not l.pared
+                    and abs(l.x) > ANCHO_RING and abs(l.vx_aire) > PARED_VX):
+                l.pared = True
+                l.vx_aire *= -0.35
+                l.vx = 0.0
+                l.vy = max(l.vy, 1.2)
+                l.giro_vel *= -0.5            # el golpe contra la pared lo endereza
+                self.eventos.append(("pared", l.nombre, math.copysign(ANCHO_RING, l.x)))
             l.x = max(-ANCHO_RING, min(ANCHO_RING, l.x))
         # nadie atraviesa a nadie: se reparten la distancia que sobra
         s, n = self.santi, self.nodo
@@ -716,7 +776,7 @@ class Pelea:
         gana.estado, pierde.estado = "victoria", "caido"
         gana.t = pierde.t = 0.0
         for l in (gana, pierde):
-            l.y = l.vy = l.vx = l.vx_aire = 0.0
+            l.y = l.vy = l.vx = l.vx_aire = l.giro = l.giro_vel = 0.0
         self.eventos.append(("fin", resultado))
 
     def leer_eventos(self):
@@ -807,6 +867,28 @@ if __name__ == "__main__":
     assert p.nodo.vida == vida, "se le pego en el suelo"
     _hasta_libre(p, p.nodo)
     assert p.nodo.libre and p.nodo.combo == 0
+
+    # el peso del derribo: la replica lanza mas alto y mas lejos que el
+    # fuerte, los dos botan una vez, y contra el borde se rebota en la pared
+    def vuelo(mov, sx=0.0):
+        q = _quieta(sx=sx, nx=sx + 0.9)
+        q.santi.medidor = 1.0
+        q.ordenar(q.santi, mov)
+        alto, x0, evs = 0.0, q.nodo.x, []
+        for _ in range(150):
+            q.actualizar(1 / 60)
+            alto = max(alto, q.nodo.y)
+            vuelo.giro = max(vuelo.giro, q.nodo.giro)
+            evs += q.leer_eventos()
+        return alto, abs(q.nodo.x - x0), [e[0] for e in evs]
+    vuelo.giro = 0.0
+    a_f, d_f, ev_f = vuelo("fuerte")
+    a_r, d_r, ev_r = vuelo("replica")
+    assert a_r > a_f > 0.7 and d_r > d_f, (a_f, a_r, d_f, d_r)
+    assert 120 < vuelo.giro <= 180, vuelo.giro         # gira de espaldas, no tabla
+    assert ev_f.count("rebote") == 1 and ev_r.count("rebote") == 1, ev_f
+    _a, _d, ev_p = vuelo("replica", sx=ANCHO_RING - 1.9)
+    assert ev_p.count("pared") == 1, ev_p
 
     # ligero agachado marea; en el mismo combo no vuelve a marear
     p = _quieta()

@@ -174,6 +174,10 @@ while J.cl.estado == "kombat" and t < 75:
         foto_una("kombat_nodo_mareado")
     if n.estado == "derribado" and n.t > 0.25 and not n.en_aire:
         foto_una("kombat_nodo_derribado")
+    if n.estado == "derribado" and n.en_aire and n.t > 0.12:
+        foto_una("kombat_nodo_volando")
+    if n.estado == "recibir" and n.t > 0.05:
+        foto_una("kombat_nodo_recibe")
     if any(pr.tipo == "bulo" for pr in pelea.proyectiles):
         foto_una("kombat_bulo")
     if any(pr.tipo == "verificar" for pr in pelea.proyectiles):

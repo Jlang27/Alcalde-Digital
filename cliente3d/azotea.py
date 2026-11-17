@@ -278,6 +278,17 @@ def pc(estado):
                                 srgb=False), 1)
 
 
+def pelea(si):
+    """Durante Nova Kombat la ciudad se hunde en la niebla: a 3 m los
+    luchadores casi no la tienen y su silueta se recorta contra un fondo
+    mas oscuro (antes eran sombras negras perdidas entre las ventanas)."""
+    f = _ESTADO.get("niebla")
+    if f is not None:
+        f.setExpDensity(DENSIDAD * (2.6 if si else 1.0))
+        k = 0.6 if si else 1.0
+        f.setColor(LColor(NIEBLA[0] * k, NIEBLA[1] * k, NIEBLA[2] * k, 1))
+
+
 def caseton(visible):
     nodo = _ESTADO.get("caseton")
     if nodo is not None and not nodo.isEmpty():
@@ -469,6 +480,7 @@ def construir(cont):
     f.setColor(NIEBLA)
     f.setExpDensity(DENSIDAD)
     cont.getParent().setFog(f)
+    _ESTADO["niebla"] = f
 
 
 def _luces(cont):
