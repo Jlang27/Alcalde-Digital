@@ -762,9 +762,8 @@ class Camara:
         poco a poco: el azar por fotograma vibraba como una imagen rota;
       - empuje: en lo fuerte la camara se mete un momento hacia el golpe;
       - sube con el salto (si no, el que salta se sale por arriba);
-      - el que vuela derribado manda: se le sigue de cerca, a un tercio
-        del cuadro con aire por delante, con ladeo (dutch) y un bache al
-        tocar el suelo;
+      - el que cae derribado no se sigue: la camara se sacude al derribo
+        y otra vez, con un bache, al tocar el suelo;
       - el golpe final es un plano aparte (corte seco): a 3/4, baja, en
         contrapicado y con lente larga, el atacante en primer plano;
         congelacion, empujon y ladeo, y despues camara lenta.
@@ -823,7 +822,7 @@ class Camara:
                 l.nombre)
             if (l.estado == "derribado" and self.vy_antes.get(l.nombre, 0) < -1.5
                     and l.vy >= 0):
-                self.golpe(0.75)
+                self.golpe(1.0)
                 self.bache = 0.12
             self.vy_antes[l.nombre] = l.vy
 
@@ -845,24 +844,16 @@ class Camara:
         dist = max(self.DIST_MIN, min(self.DIST_MAX, (sep / 2 + self.MARGEN) / self.TAN_ANCHO
                                       + alto * 0.4))
         alto *= 0.5
+        # Al que cae no se le sigue (la camara se iba con el y mareaba): el
+        # plano se queda con los dos y la caida la cuenta la sacudida de _choques.
         ladeo = 0.0
-        vuela = next((l for l in (s, n) if l.estado == "derribado" and l.en_aire), None)
-        if vuela is not None:
-            # Se sigue al que vuela: mas cerca, a su altura y con el aire por
-            # delante (queda a un tercio del cuadro, del lado de donde viene).
-            hacia = 1 if vuela.vx_aire >= 0 else -1
-            dist = self.DIST_MIN + 0.3 + vuela.y * 0.5
-            cuerpo = vuela.x - vuela.mira * 0.5
-            medio = max(-3.6, min(3.6, cuerpo + hacia * dist * self.TAN_ANCHO / 3))
-            alto = vuela.y * 0.7
-            ladeo = 3.5 * hacia
         if self.final is not None:
             # Tras el plano del golpe final: de cerca, con los dos.
             v = self.final
             medio += (max(-3.2, min(3.2, v.x)) - medio) * (0.55 if v is n else 0.75)
             dist = min(dist, max(self.DIST_MIN - 0.4, 3.3 + sep * 0.35))
             alto += 0.08
-        rapida = 9.0 if vuela is not None else 4.0
+        rapida = 4.0
         self.x += (medio - self.x) * k(rapida)
         self.y += (alto - self.y) * k(rapida)
         self.dist += (dist - self.dist) * k(9.0 if self.final is not None else rapida)
