@@ -88,6 +88,7 @@ boton("a", 0.4)
 if estado() == "aviso_papel":         # «hablar cuesta tiempo», la primera vez
     foto("mando_aviso")
     boton("a", 0.5)
+ganar_reto()
 assert estado() == "dialogo", estado()
 for _ in range(20):
     if J.cl.dialogo.modo == "preguntas":

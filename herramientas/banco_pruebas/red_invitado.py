@@ -9,7 +9,7 @@ from banco import J
 import versus
 
 MODO = sys.argv[1]
-CAPITULO = {"rumor": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4,
+CAPITULO = {"rumor": 0, "reto": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4,
             "persecucion": 4}[MODO]
 
 
@@ -58,7 +58,7 @@ V = versus._V
 espera(lambda: V["dia"] == CAPITULO, 60, "el dia")
 pasar(0.5)
 foto(f"red_{MODO}_invitado_espera")
-assert MODO in ("rumor", "colegio") or (V["espera"] is not None and V["fase"] == "espera")
+assert MODO in ("rumor", "colegio", "reto") or (V["espera"] is not None and V["fase"] == "espera")
 azar = random.Random(9)
 
 if MODO == "rumor":
@@ -87,6 +87,26 @@ if MODO == "rumor":
         tt += 0.2
     assert entregas >= 4, entregas
     print("invitado: regue el rumor ·", entregas, "entregas")
+elif MODO == "reto":
+    espera(lambda: V["fase"] == "reto", 120, "el reto de Don Rafa")
+    r = V["obj"]["reto"]
+    fotos, tt = 0, 0.0
+    while V["fase"] == "reto" and tt < 120:
+        e = r.est
+        if e and e["resultado"] is None and e["elegi"] is None and not e["revelando"]:
+            tecla("1", 0.3)                   # piedra
+        if e and e["revelando"] and fotos == 0 and r.t_jugada > 0.9:
+            fotos = 1
+            foto("red_reto_invitado_mano")
+        if e and e["resultado"] is not None and fotos == 1:
+            fotos = 2
+            pasar(0.3)
+            foto("red_reto_invitado_resultado")
+        pasar(0.2)
+        tt += 0.2
+    assert fotos == 2 and r.est["resultado"] == "perdio", (fotos, r.est)
+    espera(lambda: V["fase"] == "rumor", 30, "volver al corcho")
+    print("invitado: le gane el reto por Don Rafa")
 elif MODO == "colegio":
     from ursina import held_keys
     import sigilo as S

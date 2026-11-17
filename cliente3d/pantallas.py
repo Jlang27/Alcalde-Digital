@@ -110,8 +110,10 @@ AYUDA = (
      "Un capítulo por día. Cada uno se juega distinto, pero todos terminan "
      "en una decisión que mueve la ciudad.",
      (("Día 1", "Cafetería. Llega un rumor y el barrio empieza a creerlo. "
-                "Investigas (cada charla 10 min, el celular 5) y a las 8:30 "
-                "frenas el rumor en el tablero."),
+                "Investigas (cada charla 10 min, el celular 5); antes de "
+                "hablar, cada vecino te reta (piedra, papel o tijera, dominó, "
+                "dardos): si pierdes no te habla, y lo que ganes son jugadas "
+                "para frenar el rumor en el tablero a las 8:30."),
       ("Día 2", "Colegio, de noche. Saca la propuesta del archivo sin que "
                 "te vean los vigilantes. Tres avisos y te echan."),
       ("Día 3", "Oficina de campaña. Una partida de billar con el asesor "

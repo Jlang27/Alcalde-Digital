@@ -10,6 +10,9 @@ dibujo (red/espejo.py). Una sola simulacion = nada que pueda divergir.
 
 LO QUE HACE EL DESINFORMADOR EN CADA CAPITULO
     1  riega el rumor por la red de vecinos        rumor.TableroRumor
+       ...y juega por cada vecino su reto          RetoRemoto
+       (piedra, papel o tijera, domino, dardos):
+       lo que gane son envios del rumor
     2  es el vigilante del colegio                 Jugador + sigilo.guardia_humano
     3  juega al billar por el asesor               Partida8Remota
     4  es Nodo en Nova Kombat                      PeleaRemota
@@ -59,7 +62,8 @@ PAPEL = {
     0: ("El primer rumor", "Estás delante de tu PC con la red de vecinos en pantalla. "
         "Inyecta el bulo cuenta a cuenta (flechas y Enter) antes de que el protagonista "
         "los convenza hablando con ellos. Los envíos se cargan solos y él te regala uno "
-        "con cada charla."),
+        "con cada charla. Antes de que hable con Don Rafa, Don Hernán o Sofía, juegas "
+        "por ellos su reto: si le ganas, no le hablan y te llevas envíos."),
     1: ("La propuesta", "Eres el vigilante del colegio: que no saque la propuesta. "
         "W A S D y el ratón. Tu linterna llega más lejos que nunca, pero andas más "
         "despacio que ella. Si la alumbras un rato, aviso; a los tres, fuera. Lo que "
@@ -98,7 +102,7 @@ def enchufar(juego):
 def empezar(sesion):
     _V.clear()
     _V.update(sesion=sesion, fase="espera", dia=None, partida=None, t=0.0,
-              kombat=None, billar=None, duelo=None, ronda=None, ev=[],
+              kombat=None, billar=None, duelo=None, reto=None, ronda=None, ev=[],
               estado=None, cierre=None, espera=None, obj={}, aviso=None,
               caido=False, adios=False, intento=None, t_intento=0.0)
     if sesion.anfitrion is not None:
@@ -163,6 +167,8 @@ def tecla(k):
     if fase == "rumor":
         if not k.endswith(" up"):
             _V["obj"]["rumor"].tecla(k)
+    elif fase == "reto":
+        _V["obj"]["reto"].tecla(k)
     elif fase == "kombat":
         _V["obj"]["combate"].tecla(k)
     elif fase == "billar":
@@ -312,6 +318,7 @@ def _protagonista(dt):
     if toca:
         _V["acumulado"] = 0.0
     _rumor_servidor(cl, e, mensajes, p, dt)
+    _reto_servidor(cl, e, mensajes, p)
     _pelea_servidor(cl, e, mensajes, toca)
     _billar_servidor(cl, e, mensajes, toca)
     _duelo_servidor(cl, e, mensajes, p)
@@ -460,6 +467,31 @@ def _rumor_servidor(cl, e, mensajes, p, dt):
     if firma != _V.get("firma_rumor") or _V["t_rumor"] >= 2.0:
         _V["firma_rumor"], _V["t_rumor"] = firma, 0.0
         e.enviar("t_est", **estado)
+
+
+def _reto_servidor(cl, e, mensajes, p):
+    """Dia 1: el reto de la cafeteria lo juega el otro por el vecino. Sus
+    jugadas pasan por el reto de verdad (que decide si valen) y se le
+    manda el estado visto desde su lado: sin la mano de quien protagoniza."""
+    r = cl.reto
+    if r is None:
+        if _V["reto"] is not None:
+            _V["reto"] = None
+            res = (p.retos.get(_V.pop("reto_npc", None)) or {})
+            e.enviar("c_fin", envios=res.get("puntos_rival", 0))
+        return
+    juego = r.juego
+    if _V["reto"] is not r:
+        _V["reto"], _V["reto_npc"], _V["firma_reto"] = r, cl.con_quien, None
+        e.enviar("c_ini", juego=juego.tipo, npc=J.NPCS_CAPITULO_1[cl.con_quien][0])
+    for m in mensajes:
+        if m["t"] == "c_j":
+            juego.jugar("rival", m.get("a"))
+    estado = juego.estado("rival")
+    firma = repr(estado)
+    if firma != _V["firma_reto"]:
+        _V["firma_reto"] = firma
+        e.enviar("c_est", e=estado)
 
 
 def _escuchar(objeto):
@@ -654,6 +686,8 @@ def _desinformador(dt):
     fase, obj = _V["fase"], _V["obj"]
     if fase == "rumor":
         obj["rumor"].actualizar(dt)
+    elif fase == "reto":
+        obj["reto"].actualizar(dt)
     elif fase == "kombat":
         combate = obj["combate"]
         if (combate.pelea.resultado == "desenmascarado" and combate.mascara is not None
@@ -1131,7 +1165,59 @@ def _llega_cierra_minijuego(_m):
                  f"{_V['sesion'].rival} está cerrando el día…")
 
 
-_RECIBE = {"t_est": _llega_t_est, "t_ok": _llega_t_ok, "dia": _llega_dia, "hace": _llega_hace, "cierre": _llega_cierre, "fin": _llega_fin,
+class RetoRemoto:
+    """El reto de la cafeteria visto desde el desinformador: el estado le
+    llega del protagonista y sus jugadas se envian (las juzga el de alla)."""
+
+    def __init__(self, enlace, tipo):
+        self.enlace, self.tipo, self.datos = enlace, tipo, None
+
+    def estado(self, _quien):
+        return self.datos
+
+    def jugar(self, _quien, accion):
+        self.enlace.enviar("c_j", a=list(accion) if isinstance(accion, tuple) else accion)
+        return True
+
+    def actualizar(self, _dt):
+        pass
+
+
+def _llega_c_ini(m):
+    import cafeteria_cliente
+    obj = _V["obj"]
+    _quitar_tarjeta()
+    if "rumor" in obj:                 # el corcho vuelve con el proximo t_est
+        obj.pop("rumor").cerrar()
+    if "reto" in obj:
+        obj.pop("reto").cerrar()
+    rival = _V["sesion"].rival
+    obj["reto"] = cafeteria_cliente.Reto(RetoRemoto(_V["sesion"].enlace, m["juego"]), "tu",
+                                         f"Tú ({m['npc']})", rival, premio="envío")
+    _V["fase"] = "reto"
+    _avisar(f"{rival} quiere hablar con {m['npc']}: juegas tú por él", 3.5)
+
+
+def _llega_c_est(m):
+    r = _V["obj"].get("reto")
+    if r is not None:
+        r.juego.datos = m["e"]
+
+
+def _llega_c_fin(m):
+    obj = _V["obj"]
+    if "reto" in obj:
+        obj.pop("reto").cerrar()
+    if _V["fase"] == "reto":
+        _V["fase"] = "espera"
+        _tarjeta("EN RED", "Vuelves a tu terminal", "Cargando la red de vecinos…")
+    if m.get("envios"):
+        _avisar(f"Ganaste el reto: +{m['envios']} envío{'s' if m['envios'] != 1 else ''} "
+                f"del rumor", 4.0)
+
+
+_RECIBE = {"c_ini": _llega_c_ini, "c_est": _llega_c_est, "c_fin": _llega_c_fin,
+           "t_est": _llega_t_est, "t_ok": _llega_t_ok, "dia": _llega_dia, "hace": _llega_hace, "cierre": _llega_cierre, "fin": _llega_fin,
            "k_ini": _llega_k_ini, "k_est": _llega_k_est, "k_fin": _llega_cierra_minijuego,
            "b_ini": _llega_b_ini, "b_est": _llega_b_est, "b_fin": _llega_cierra_minijuego,
            "r_ini": _llega_r_ini, "r_ronda": _llega_r_ronda, "r_fin": _llega_r_fin,
@@ -1147,6 +1233,8 @@ def _recoger_minijuegos():
     cl, obj = J.cl, _V.get("obj", {})
     if "rumor" in obj:
         obj.pop("rumor").cerrar()
+    if "reto" in obj:
+        obj.pop("reto").cerrar()
     if "combate" in obj:
         import azotea
         obj.pop("combate").cerrar()

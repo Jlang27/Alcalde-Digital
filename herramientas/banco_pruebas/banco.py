@@ -205,13 +205,22 @@ def junto_a(id_npc, dist=0.9):
     pasar(0.2)
 
 
+def ganar_reto():
+    """Si hay un reto de la cafeteria abierto, lo da por ganado (los
+    retos tienen su propia prueba: cafeteria.py y banco_pruebas/retos.py)."""
+    while estado() == "aviso_papel":
+        tecla("enter", 0.3)
+    if estado() == "reto":
+        J.cl.reto.juego.resultado = "gano"
+        pasar(J.cafeteria_cliente.FIN_TRAS + 0.5)
+
+
 def hablar(id_npc, preguntas):
     """Habla con un NPC y hace las preguntas por indice (desde 1)."""
     junto_a(id_npc)
     assert J.cl.cerca == id_npc, f"cerca={J.cl.cerca}"
     tecla("e", 0.3)
-    if estado() == "aviso_papel":
-        tecla("enter", 0.3)
+    ganar_reto()
     assert estado() == "dialogo", estado()
     for n in preguntas:
         while J.cl.dialogo is not None and J.cl.dialogo.modo == "lineas":

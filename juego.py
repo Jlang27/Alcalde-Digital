@@ -30,6 +30,7 @@ import random
 
 from estructuras import NodoHabilidad, NodoDecision, ArbolHabilidades
 from grafo import Grafo
+import cafeteria
 from contenido import (
     INDICADORES_INICIALES, INDICADORES_META, ROLES, PUBLICACIONES,
     EVENTOS_ALEATORIOS, RAMAS_DINAMICAS, INYECCIONES, INYECCIONES_DINAMICAS,
@@ -37,7 +38,7 @@ from contenido import (
     OPCIONES_CAPITULO_1, OCULTAS_CAPITULO_1, PISTAS_CAPITULO_1,
     VERTICES_CAPITULO_1, ARISTAS_CAPITULO_1, NIVEL_INICIAL, RONDAS_POR_NIVEL,
     ORIGEN_JUGADOR, ORIGEN_RUMOR, OPCION_POR_CAMINO,
-    CELULAR, JUGADAS_TABLERO, CONTACTOS, FAMILIAS_PRUEBA, VECINOS_TABLERO, RESISTE,
+    CELULAR, JUGADAS_TABLERO, JUGADAS_BASE, JUGADAS_MAX, RETOS_CAPITULO_1, CONTACTOS, FAMILIAS_PRUEBA, VECINOS_TABLERO, RESISTE,
     HECHOS, REVELA_POR_NODO, ENCUESTA_INICIAL, VOTOS_POR_NODO,
     OPCIONES_QUE_PROTEGEN, PERSONAJE_DEL_DIA, DUENO_PERSONAJE, DIA_SIGILO, DIA_CAMPANA, DIA_ESTUDIO, DIA_PLAZA, TENSION_PLAZA,
     RONDAS_CAPITULO_2, REGRESO_CAPITULO_2, DIFICULTAD_NODO, TACO_DANIEL, DIFICULTAD_ASESOR,
@@ -294,6 +295,12 @@ class Partida:
         self.compartidos = 0
         self.minutos = 0              # minutos de la manana gastados (10 por charla)
         self.tablero = None           # el tablero del dia 1 (ver abrir_tablero)
+        # Los retos de la cafeteria (cafeteria.py): los activa el cliente al
+        # jugar el dia de verdad; sin ellos (bots, tablero suelto) se habla
+        # sin reto y el tablero da JUGADAS_TABLERO, como siempre.
+        self.con_retos = False
+        self.retos = {}               # id_npc -> {"tipo", "gano", "puntos"}
+        self.reto = None              # (id_npc, reto en curso)
         self.tiempo_total = TIEMPO_ESCENA
         self.desenlace_red = None     # {"creyentes": [...], "protegidos": [...]}
 
@@ -664,6 +671,7 @@ class Partida:
         self.novedades = []
         self.minutos = 0
         self.tablero = None
+        self.retos, self.reto = {}, None
         if self.publicacion["id"] != CAPITULO_1:
             return
 
@@ -783,6 +791,8 @@ class Partida:
         """
         if self.pistas is None or self.manana_agotada() or self.tablero is not None:
             return []
+        if id_npc in self.retos and not self.retos[id_npc]["gano"]:
+            return []                 # te gano el reto: ya no te habla
         # el celular es un vecino mas: lo suyo son las pistas sin npc
         quien = None if id_npc == CELULAR else id_npc
         return [n for n in self.pistas.frontera()
@@ -938,6 +948,50 @@ class Partida:
         return [v for v in self.vecinos() if v in prof]
 
     # =============================================================
+    #  LOS RETOS DE LA CAFETERIA: antes de hablar, ganarle a cada uno
+    # =============================================================
+
+    def reto_pendiente(self, id_npc):
+        """El reto (tipo de cafeteria.RETOS) que hay que jugar antes de
+        hablar con id_npc, o None: ya se jugo, o hoy no hay retos."""
+        if (not self.con_retos or self.pistas is None or self.tablero is not None
+                or id_npc in self.retos or self.manana_agotada()):
+            return None
+        return RETOS_CAPITULO_1.get(id_npc)
+
+    def empezar_reto(self, id_npc):
+        tipo = self.reto_pendiente(id_npc)
+        if tipo is None:
+            return None
+        juego = cafeteria.crear(tipo, random.randrange(1 << 30))
+        # en red el rival es el segundo jugador (lo mueve versus)
+        juego.rival_humano = self.rumor_manual
+        self.reto = (id_npc, juego)
+        return juego
+
+    def terminar_reto(self):
+        """Anota el resultado del reto en curso y lo devuelve. Perderlo
+        cierra a ese NPC (preguntas_de); en red, lo que gana el otro son
+        envios del rumor."""
+        if self.reto is None or self.reto[1].resultado is None:
+            return None
+        id_npc, juego = self.reto
+        self.reto = None
+        res = {"tipo": juego.tipo, "gano": juego.resultado == "gano",
+               "puntos": juego.puntos(), "puntos_rival": juego.puntos("rival")}
+        self.retos[id_npc] = res
+        if self.rumor_manual:
+            self.envios_extra += res["puntos_rival"]
+        return res
+
+    def jugadas_ganadas(self):
+        """Las jugadas del tablero: con retos, segun cuanto se gano."""
+        if not self.con_retos:
+            return JUGADAS_TABLERO
+        ganadas = sum(r["puntos"] for r in self.retos.values())
+        return min(JUGADAS_MAX, JUGADAS_BASE + ganadas)
+
+    # =============================================================
     #  EL TABLERO: cortar la red, vecino por vecino
     # =============================================================
 
@@ -951,7 +1005,8 @@ class Partida:
             prof = self._regados()        # hasta donde lo llevo el otro jugador
         self.tablero = {"nivel": nivel, "alcanzados": set(prof),
                         "convencidos": set(), "avisados": set(), "cortadas": [],
-                        "jugadas": JUGADAS_TABLERO, "intentos": set()}
+                        "jugadas": self.jugadas_ganadas(), "intentos": set()}
+        self.tablero["total"] = self.tablero["jugadas"]
 
     def conocidos(self):
         """Los vertices que el jugador ya vio: los que tocan un hilo
@@ -1074,7 +1129,7 @@ class Partida:
                 "pruebas": [(i, f, FAMILIAS_PRUEBA[f], titulo)
                             for i, f, titulo in self.pruebas()],
                 "intentos": set(t["intentos"]),
-                "jugadas": t["jugadas"], "total": JUGADAS_TABLERO,
+                "jugadas": t["jugadas"], "total": t["total"],
                 "proximos": self._siguientes(), "creen": len(creen),
                 "vecinos": len(self.vecinos()), "hora": self.hora()}
 

@@ -9,6 +9,8 @@ minijuego del capitulo pedido, cada uno con su bot:
 
   rumor   capitulo 1: el invitado riega el rumor vecino a vecino con los
           envios que le da el reloj del anfitrion; avisar a un contacto lo frena
+  reto    capitulo 1: el anfitrion reta a Don Rafa y el invitado juega por el
+          (piedra contra tijera): le gana, Don Rafa ya no habla y son envios
 
   colegio capitulo 2: el invitado es el vigilante; anda (mas lento que ella),
           la pilla con la linterna, vuelve a su puesto y la ve escapar
@@ -33,7 +35,7 @@ from banco import J
 import versus
 
 MODO = sys.argv[1] if len(sys.argv) > 1 else "kombat"
-CAPITULO = {"rumor": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4,
+CAPITULO = {"rumor": 0, "reto": 0, "colegio": 1, "kombat": 3, "billar": 2, "duelo": 4,
             "persecucion": 4}[MODO]
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -145,6 +147,35 @@ try:
         tecla("2", 0.8)                   # Ignorar: se cierra el dia
         print("anfitrion: rumor · lo creen", len(p.creyentes()), "de", len(p.vecinos()),
               "· avisado", libres[0])
+    elif MODO == "reto":
+        junto_a("cajero")
+        assert J.cl.cerca == "cajero", J.cl.cerca
+        tecla("e", 0.3)
+        while estado() == "aviso_papel":
+            tecla("enter", 0.4)
+        assert estado() == "reto" and J.cl.reto.juego.rival_humano, estado()
+        r, extra = J.cl.reto, p.envios_extra
+        t = 0.0
+        while r.juego.resultado is None and t < 120:
+            if r.juego.elige["tu"] is None and r.juego.espera == 0:
+                tecla("3", 0.2)               # siempre tijera: la piedra del invitado gana
+            pasar(0.2)
+            t += 0.4
+        assert r.juego.resultado == "perdio", r.juego.ganadas
+        pasar(1.0)
+        foto("red_reto_anfitrion_resultado")
+        espera(lambda: estado() == "libre", 15, "volver a la cafeteria")
+        assert p.retos["cajero"]["gano"] is False and p.preguntas_de("cajero") == []
+        assert p.envios_extra == extra + 2, (p.envios_extra, extra)
+        tecla("enter", 0.3)                   # al tablero, y cerrar el dia
+        tecla("left arrow", 0.1); tecla("enter", 0.6)
+        tecla("enter", 0.5)
+        assert J.cl.tablero is not None and p.tablero["total"] == 1, p.tablero
+        pasar(1.5)                            # que el corcho termine de colgarse
+        foto("red_reto_anfitrion_tablero")
+        tecla("space", 0.4)
+        tecla("2", 0.8)
+        print("anfitrion: reto · Don Rafa gano en red · envios extra", p.envios_extra)
     elif MODO == "colegio":
         import math
         import sigilo as S

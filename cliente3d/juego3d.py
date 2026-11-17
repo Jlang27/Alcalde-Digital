@@ -37,6 +37,7 @@ import mando
 versus.enchufar(sys.modules[__name__])
 mando.J = sys.modules[__name__]        # mando.iniciar() conecta los mandos al abrir la ventana
 import billar_cliente
+import cafeteria_cliente
 import plaza
 import cine_colegio
 import estilo as E
@@ -135,6 +136,7 @@ class Cliente:
         self.rival = None             # el musico que canta el rumor
         self.kombat = None            # kombat_cliente.Combate del dia 4
         self.billar = None            # billar_cliente.Billar del dia 3
+        self.reto = None              # cafeteria_cliente.Reto del dia 1
         self.nodo = None              # su rival: el Actor de Nodo
         self.duelo_t = 0.0            # reloj del duelo (negativo: cartel de ronda)
         self.duelo_ronda = 0
@@ -1278,6 +1280,9 @@ def iniciar_dia(indice):
     # pasaba del 100 % y se salia de la pantalla.
     cl.partida.factor_tiempo = A.factor_tiempo()
     cl.partida.iniciar_dia(indice)
+    # Los retos de la cafeteria van en el dia jugado; el tablero suelto
+    # del menu «Minijuegos» da por hecha la manana y no los lleva.
+    cl.partida.con_retos = cl.minijuego is None
     # Solo el capitulo 2 tiene escenario propio; los demas siguen en la
     # cafeteria hasta que se construya el suyo.
     mundo.cambiar_escenario(cl.mundo, ESCENARIO_DIA.get(indice, "cafeteria"))
@@ -1606,8 +1611,17 @@ TEXTO_TABLERO = (
     "Esta es la red por la que baja el rumor, con lo que alcanzaste a "
     "descubrir. Elige a un vecino con las flechas y enséñale, con su número, "
     "la prueba que rebate lo que dice: si lo convences, deja de pasarlo. "
-    "Tienes tres jugadas y, después de cada una, el rumor avanza un nivel. "
+    "Tienes {jugadas} y, después de cada una, el rumor avanza un nivel. "
     "Tu jugada pública (Espacio) cierra el día.")
+
+
+def _jugadas(p):
+    n = p.tablero["total"]
+    texto = f"{n} jugada{'s' if n != 1 else ''}"
+    if p.con_retos:
+        # se ganan en los retos de la cafeteria: que se sepa de donde salen
+        texto += " (una de base y las que ganaste en los retos)"
+    return texto
 
 
 def opciones_publicas():
@@ -1628,7 +1642,8 @@ def abrir_tablero():
         cl.tablero = tablero.Tablero(p.estado_tablero(), *opciones_publicas())
 
     abrir_aviso_papel("8:30 · EMPEZÓ LA REUNIÓN" if tarde else f"{p.hora()} · EL TABLERO",
-                      "Corta la red del rumor", TEXTO_TABLERO, colgar)
+                      "Corta la red del rumor", TEXTO_TABLERO.format(jugadas=_jugadas(p)),
+                      colgar)
 
 
 def retomar_tablero():
@@ -2710,7 +2725,8 @@ def senalar_cercano():
     limpiar(cl.marca_hablar)
     if cerca is not None:
         nombre = NPCS_CAPITULO_1[cerca][0]
-        piezas, _ = E.tecla("e", f"hablar con {nombre}", -0.12, -0.36)
+        que = "retar a" if cl.partida.reto_pendiente(cerca) else "hablar con"
+        piezas, _ = E.tecla("e", f"{que} {nombre}", -0.12, -0.36)
         cl.marca_hablar += piezas
 
 
@@ -2855,6 +2871,12 @@ def abrir_dialogo(id_npc):
             "empieza la reunión de padres. Piensa bien a quién le preguntas.",
             lambda: abrir_dialogo(id_npc))
         return
+    tipo = cl.partida.reto_pendiente(id_npc)
+    if tipo is not None:
+        rotulo, titulo, cuerpo = cafeteria_cliente.REGLAS[tipo]
+        abrir_aviso_papel(rotulo, titulo.format(n=NPCS_CAPITULO_1[id_npc][0]), cuerpo,
+                          lambda: empezar_reto(id_npc))
+        return
     celular = id_npc == CELULAR
     if celular and not cl.partida.preguntas_de(CELULAR):
         cl.cola_avisos.append(("Ya miraste todo lo que tiene la publicación.",
@@ -2872,6 +2894,42 @@ def abrir_dialogo(id_npc):
     cl.dialogo.apuntar(x_en_pantalla(cl.npcs.get(cl.con_quien)))
     audio.agachar(True)
     mostrar_preguntas()
+
+
+# ===================================================================
+#  CAPITULO 1: LOS RETOS DE LA CAFETERIA (reglas en cafeteria.py)
+# ===================================================================
+
+def empezar_reto(id_npc):
+    """Tras la tarjeta de reglas: la mesa del reto sobre la cafeteria."""
+    juego = cl.partida.empezar_reto(id_npc)
+    if juego is None:
+        abrir_libre()
+        return
+    cl.estado = "reto"
+    cl.con_quien = id_npc
+    # en red el rival es el otro jugador: se le llama por su nombre
+    rival = cl.sesion.rival if versus.activo() else NPCS_CAPITULO_1[id_npc][0]
+    cl.reto = cafeteria_cliente.Reto(juego, "tu", "Tú", rival)
+    audio.agachar(True)
+
+
+def terminar_reto():
+    id_npc = cl.con_quien
+    res = cl.partida.terminar_reto()
+    cerrar_reto()
+    audio.agachar(False)
+    cl.con_quien = None
+    if res is not None and res["gano"]:
+        abrir_dialogo(id_npc)            # ganaste: ahora si te cuenta
+    else:
+        abrir_libre()                    # el cartel ya dijo que no te habla
+
+
+def cerrar_reto():
+    if cl.reto is not None:
+        cl.reto.cerrar()
+        cl.reto = None
 
 
 def abrir_aviso_papel(rotulo, titulo, cuerpo, despues):
@@ -3769,6 +3827,11 @@ def update():
             terminar_billar()
         return
 
+    if cl.estado == "reto" and cl.reto is not None:
+        if cl.reto.actualizar(time.dt):
+            terminar_reto()
+        return
+
     if cl.estado == "intro" and cl.intro is not None:
         if cl.intro.actualizar(time.dt):
             terminar_intro()
@@ -3950,6 +4013,7 @@ def volver_al_menu():
     cerrar_minijuegos()
     cerrar_kombat()
     cerrar_billar()
+    cerrar_reto()
     if cl.cine is not None:
         cl.cine.cerrar()
         cl.cine = None
@@ -4028,6 +4092,12 @@ def input(tecla):
         carril = TECLAS_DUELO.get(tecla)
         if carril is not None:
             pulsar_duelo(carril)
+        return
+
+    elif cl.estado == "reto":
+        # Sin pausa, como el billar: es una partida con alguien delante.
+        if cl.reto is not None:
+            cl.reto.tecla(tecla)
         return
 
     elif cl.estado == "billar":

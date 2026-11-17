@@ -16,8 +16,7 @@ def preguntar(quien, id_pista):
         junto_a(quien)
         assert J.cl.cerca == quien, f"cerca={J.cl.cerca}"
         tecla("e", 0.3)
-    if estado() == "aviso_papel":
-        tecla("enter", 0.3)
+    ganar_reto()
     assert estado() == "dialogo", estado()
     ids = [n.id for n in p.preguntas_de(quien)]
     tecla(str(ids.index(id_pista) + 1), 0.3)
@@ -57,6 +56,11 @@ foto("dia1_tablero_instrucciones")
 tecla("enter", 0.3)
 t = J.cl.tablero
 assert estado() == "juego" and t is not None and t.sel == "hernan", (estado(), t)
+# Las jugadas salen de los retos de la cafeteria (eso lo prueba retos.py);
+# este recorrido es el de las tres jugadas de siempre.
+assert p.tablero["total"] == p.jugadas_ganadas(), p.tablero
+p.tablero["jugadas"] = p.tablero["total"] = 3
+t.refrescar(p.estado_tablero(), *J.opciones_publicas())
 pasar(1.6); foto("dia1_tablero_1_inicio")
 
 # Jugada 1: la prueba de los bots convence a Hernan y corta sus hilos.

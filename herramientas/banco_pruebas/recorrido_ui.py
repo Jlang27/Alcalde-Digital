@@ -71,8 +71,7 @@ tirar("libre_hud")
 # --- hablar con alguien -------------------------------------------
 junto_a("cajero")
 tecla("e", 0.5)
-if estado() == "aviso_papel":
-    tecla("enter", 0.4)
+ganar_reto()
 pasar(0.4)
 tirar("dialogo")
 tecla("1", 1.0)
