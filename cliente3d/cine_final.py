@@ -222,7 +222,11 @@ class FinalCiudad(EscenaDecision):
             e.poner(pose)
 
     def actualizar(self, dt):
-        self._posar(self.t)
+        # Enter (EscenaDecision.saltar) lleva t a T_DECIDE, que aqui es
+        # infinito: asi se salta la escena. Las poses van con sin(t) y un
+        # seno de infinito tumbaba el juego al saltar el final; se posan en
+        # el ultimo instante de la escena.
+        self._posar(min(self.t, self.fin))
         return super().actualizar(dt)
 
     def _eventos(self, cruza):

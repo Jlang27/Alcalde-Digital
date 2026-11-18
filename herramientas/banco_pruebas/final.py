@@ -149,5 +149,15 @@ for final, banderas, indicadores in CASOS:
     J.limpiar(J.cl.diagrama)
     J.cl.estado = "juego"
 
+# Saltarla con Enter (lo que hace casi todo el mundo): T_DECIDE es infinito y
+# las poses van con sin(t); antes reventaba el juego justo al saltarla.
+J.abrir_final()
+assert estado() == "escena", estado()
+pasar(1.5)
+tecla("enter", 0.5)
+assert hasta_estado("final", 10), estado()
+J.limpiar(J.cl.diagrama)
+J.cl.estado = "juego"
+
 informe()
 print("final: todo bien")
