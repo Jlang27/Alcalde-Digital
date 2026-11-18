@@ -269,9 +269,16 @@ try:
         foto("red_persecucion_anfitrion_huye")
         # a una persona se la atrapa en cuanto se la alcanza, en cualquier fase
         assert per.fase < len(per.fases)
-        J.cl.actor.setPos(per.sx, J.plaza.suelo(per.sx, per.sz), per.sz)
-        pasar(frames=2)
-        tecla("e", 0.6)
+        # Ponerse encima y pulsar E en el MISMO cuadro: en el banco las
+        # posiciones del invitado llegan a saltos (cada proceso con su reloj
+        # fijo) y en dos cuadros el de la mochila se iba 6 m mas alla.
+        for _ in range(5):
+            J.cl.actor.setPos(per.sx, J.plaza.suelo(per.sx, per.sz), per.sz)
+            J.input("e")
+            if per.resultado == "capturado":
+                break
+            pasar(frames=1)
+        pasar(0.6)
         assert per.resultado == "capturado", (per.resultado, per.distancia)
         pasar(1.0)
         foto("red_persecucion_anfitrion_captura")

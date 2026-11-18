@@ -66,7 +66,9 @@ pasar(0.5)
 assert j.corriendo, "el gatillo derecho no corre"
 eje("right trigger", 0.0)
 eje("left stick y", 0.0)
-pasar(0.3)
+# Con la inercia de explorar (jugador.FRENADA_EXPLORAR) de la carrera a
+# parado tarda ~0,5 s, no un cuadro: se espera a que frene.
+pasar(0.7)
 assert not held_keys["w"] and not j.moviendose
 recorrido = math.hypot(a.getX() - x0, a.getZ() - z0)
 assert recorrido > 1.0, recorrido

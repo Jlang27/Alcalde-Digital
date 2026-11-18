@@ -80,9 +80,14 @@ GRAVEDAD = 9.8              # m/s2: la de verdad
 # (docs/animacion_persecucion.md), 0,45 m en ~0,6 s, que pasa lo bajo (por
 # encima de 0,15 m durante 0,5 s, unos 3 m a la carrera) y salva el hueco
 # de 2 m de las plataformas. Con 0,40 s no daria tiempo a nada de eso.
-ALTO_SALTO = 0.45           # m que sube el cuerpo en un salto a la carrera
-IMPULSO_SALTO = math.sqrt(2 * GRAVEDAD * ALTO_SALTO)    # 2,97 m/s hacia arriba
-TIEMPO_SALTO = 2 * IMPULSO_SALTO / GRAVEDAD             # 0,61 s en el aire (en llano)
+# Jugado a mano 0,45 m era muy bajo: quien salta al ver «¡SALTA!» (un poco
+# antes de tiempo) aterrizaba antes de la banca y chocaba, y los pies apenas
+# la pasaban. Con 0,70 m va 0,67 s por encima de lo saltable (4,2 m a la
+# carrera, antes 3) y se ve pasar por encima. El clip «saltar» sigue a la
+# fisica (jugador._cuadro_salto), asi que se ajusta solo.
+ALTO_SALTO = 0.70           # m que sube el cuerpo en un salto a la carrera
+IMPULSO_SALTO = math.sqrt(2 * GRAVEDAD * ALTO_SALTO)    # 3,70 m/s hacia arriba
+TIEMPO_SALTO = 2 * IMPULSO_SALTO / GRAVEDAD             # 0,76 s en el aire (en llano)
 # La arrancada: la velocidad se acerca a la punta como 1 - e^(-t/ARRANCADA):
 # 63 % en 1,1 s, 95 % en 3,3 s; al principio empuja a punta/ARRANCADA.
 # Frenar es mas rapido.
@@ -647,7 +652,7 @@ def _pruebas_fisica():
     se desliza frenando sin levantarse debajo de la persiana."""
     # La gravedad de verdad: 0,45 m de subida y ~0,6 s en el aire.
     assert abs(altura_de_salto(IMPULSO_SALTO / GRAVEDAD) - ALTO_SALTO) < 1e-9
-    assert 0.6 < TIEMPO_SALTO < 0.62
+    assert 0.74 < TIEMPO_SALTO < 0.77
     # La arrancada: de parado no esta a la punta enseguida, y no se pasa.
     v, t = 0.0, 0.0
     while v < 0.63 * 5.0:

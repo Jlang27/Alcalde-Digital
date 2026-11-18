@@ -962,7 +962,7 @@ def _huida_cliente(dt):
     g.choque = None
     x, z, rumbo = actor.getX(), actor.getZ(), 180.0 - actor.getH()
     per.mandar(x, z, rumbo)
-    for evento, dato in per.actualizar(dt, x, z, saltando=g.en_el_aire() or g.trepa is not None):
+    for evento, dato in per.actualizar(dt, x, z, saltando=g.en_el_aire() or g.salto is not None or g.trepa is not None):
         if evento == "fase":
             hud.avisar(f"FASE {dato} · {per.fases[dato - 1][1]}", E.LLERAS, 1.4)
             audio.musica(audio.MUSICA_PERSECUCION, nivel=J.NIVEL_FASE[dato - 1])

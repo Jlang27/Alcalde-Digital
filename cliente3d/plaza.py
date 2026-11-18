@@ -1314,7 +1314,7 @@ def vivir(dt):
         x, z, rumbo = _en_vuelta(vuelta, t * velocidad + k * 17.0)
         M.mover_actor(actor, x, z, rumbo, True, corriendo=caotica)
     luz = _PLAZA.get("led_mochila")
-    if luz is not None:
+    if luz is not None and not _PLAZA.get("antena_oculta"):
         luz.show() if int(t / 0.25) % 2 else luz.hide()
     if caotica:
         luces = {l.getName(): l for l in _PLAZA["luces"]["caotica"]}
@@ -1385,11 +1385,12 @@ def preparar_sospechoso():
     mochila = actor.attachNewNode("mochila")
     negro = M._material((0.02, 0.02, 0.025, 1), rugosidad=0.6)
     M._pieza(mochila, "cube", negro, (0.38, 0.5, 0.2), (0, 1.25, 0.2))
-    M._pieza(mochila, "cube", M._material((0.3, 0.3, 0.32, 1), 0.3, 1.0),
-             (0.02, 0.55, 0.02), (0.12, 1.75, 0.22))
+    _PLAZA["antena_mochila"] = M._pieza(mochila, "cube", M._material((0.3, 0.3, 0.32, 1), 0.3, 1.0),
+                                        (0.02, 0.55, 0.02), (0.12, 1.75, 0.22))
     _PLAZA["led_mochila"] = M._pieza(mochila, "cube", M._material(
         (0.1, 0, 0, 1), emision=(3.0, 0.1, 0.05, 1)), (0.05, 0.05, 0.05), (0.12, 2.04, 0.22))
     _PLAZA["mochila"] = mochila
+    _PLAZA["antena_oculta"] = False
     return actor
 
 
@@ -1591,6 +1592,14 @@ def entregar_mochila(actor_mateo, mano=None):
     mochila = _PLAZA.get("mochila")
     if mochila is None:
         return
+    # La antena y su LED asomaban por encima de la cabeza de Mateo mientras
+    # la sostiene (estan hechas para ir a la espalda, hacia arriba): en sus
+    # manos la mochila ya esta apagada y la antena, plegada.
+    _PLAZA["antena_oculta"] = True
+    for clave in ("antena_mochila", "led_mochila"):
+        pieza = _PLAZA.get(clave)
+        if pieza is not None:
+            pieza.hide()
     if mano is not None:
         mochila.wrtReparentTo(mano)
         return

@@ -464,11 +464,87 @@ def tictac(encendido):
     sonido.play()
 
 
+# ===================================================================
+#  VOCES (assets/voces/<id>.ogg|.wav; la hoja: herramientas/listar_voces.py)
+# ===================================================================
+
+CARPETA_VOCES = os.path.join(os.path.dirname(CARPETA), "voces")
+EXTENSIONES_VOZ = (".ogg", ".wav")
+PESO_VOZ = 1.0
+_voz = {"sonido": None, "id": None, "baja": False}
+
+
+def id_de_voz(bloque, indice, quien):
+    """El nombre del archivo de una linea: bloque_NN_primerapalabra, la
+    misma regla que herramientas/listar_voces.id_de_voz (el nombre es el
+    contrato entre la hoja con la que se graba y el juego)."""
+    import unicodedata
+    bruto = (quien or "voz").strip().split()[0].lower() if (quien or "").strip() else "voz"
+    bruto = unicodedata.normalize("NFKD", bruto)
+    limpio = "".join(c for c in bruto if c.isalnum() and not unicodedata.combining(c))
+    return f"{bloque}_{indice:02d}_{limpio or 'voz'}"
+
+
+def _ruta_voz(id_linea):
+    for ext in EXTENSIONES_VOZ:
+        ruta = os.path.join(CARPETA_VOCES, id_linea + ext)
+        if os.path.isfile(ruta):
+            return Path(ruta)
+    return None
+
+
+def hay_voz(id_linea):
+    """True si esa linea esta grabada."""
+    return _ruta_voz(id_linea) is not None
+
+
+def voz(id_linea, volumen=1.0):
+    """Dice una linea grabada. Si no hay archivo, calla y devuelve 0 (el
+    juego sigue con su subtitulo). Mientras suena, la musica baja como en
+    los dialogos y vuelve al acabar. Devuelve lo que dura la toma en
+    segundos (0 si no suena: sin ventana Panda3D no reproduce nada)."""
+    callar_voz()
+    ruta = _ruta_voz(id_linea)
+    if ruta is None:
+        return 0.0
+    try:
+        sonido = Audio(ruta, autoplay=False, loop=False)
+    except Exception:
+        return 0.0
+    sonido.volume = _volumen(PESO_VOZ * volumen, "efectos")
+    sonido.play()
+    _voz.update(sonido=sonido, id=id_linea)
+    dura = float(getattr(sonido, "length", 0.0) or 0.0)
+    if not _agachado["activo"]:
+        _voz["baja"] = True
+        agachar(True)
+        # La musica vuelve al acabar la toma (si nadie la bajo por otro motivo).
+        invoke(_fin_voz, sonido, delay=max(0.5, dura) + 0.1)
+    return dura
+
+
+def _fin_voz(sonido):
+    if _voz["sonido"] is sonido:
+        callar_voz()
+
+
+def callar_voz():
+    """Corta la linea que estuviera sonando (al saltar una escena)."""
+    sonido = _voz["sonido"]
+    _voz.update(sonido=None, id=None)
+    if sonido is not None:
+        _parar(sonido)
+    if _voz["baja"]:
+        _voz["baja"] = False
+        agachar(False)
+
+
 def callar_todo(fundido=0.0):
     """Para musica, ambiente y tic-tac. Para salir de una escena sin cabos."""
     parar_musica(fundido)
     ambiente(False, fundido=fundido)
     tictac(False)
+    callar_voz()
 
 
 def refrescar_volumen():

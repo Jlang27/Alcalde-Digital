@@ -15,6 +15,7 @@ Si no se separan, o no puedes mirar o no puedes hacer clic.
 """
 
 import math
+import os
 import random
 
 from panda3d.core import LMatrix3f, LMatrix4f, LVector3f, TransparencyAttrib, rotate_to
@@ -41,6 +42,17 @@ VELOCIDAD_GIRO = 10.0        # suavizado del giro del personaje
 # piernas seguian andando cuatro cuadros con el cuerpo ya parado, y al
 # soltar la tecla se notaba un lapso.
 GRACIA_PARADA = 0.07
+# Explorar con el mezclador (fuera de la persecucion): andar, correr y estar
+# quieto se mezclan segun la velocidad de verdad, con la fase de los pies
+# comun (arrancar, parar y pasar de andar a correr sin cortes), y el cuerpo
+# tiene inercia. Tiempos de la referencia (un detective que explora: de
+# parado a andando en ~0,4 s, se para en ~0,3 s). ALCALDE_EXPLORAR=0 vuelve
+# a los clips en bucle de siempre. Solo donde juego3d lo permite
+# (suave_permitido): no en el sigilo ni en la plaza caotica.
+EXPLORAR_SUAVE = os.environ.get("ALCALDE_EXPLORAR", "1") != "0"
+ARRANQUE_EXPLORAR = 0.4      # s hasta el 95 % de la velocidad pedida
+FRENADA_EXPLORAR = 0.3       # s hasta casi parado
+FUNDIDO_LOCOMOCION = 0.16    # lo que tarda cada peso en seguir a la velocidad
 SENSIBILIDAD = 42.0
 
 DISTANCIA = 4.3
@@ -135,6 +147,7 @@ POSE_CEDE = {"LeftUpLeg": (-0.1, -0.62, 0.78), "LeftLeg": (0.0, -0.9, -0.43),
              "RightUpLeg": (0.12, -0.75, 0.25), "RightLeg": (0.0, -0.75, -0.66),
              "RightArm": (0.4, -0.65, 0.65), "RightForeArm": (0.2, -0.2, 0.95),
              "LeftArm": (-0.4, -0.65, 0.65), "LeftForeArm": (-0.2, -0.2, 0.95)}
+FUNDIDO_DESPEGUE = 0.2       # de la carrera al clip «saltar» (ver _cuerpo)
 DESPEGUE = 0.09              # lo que tarda en pasar de la carrera a la pose de vuelo
 BUSCA_SUELO = 0.45           # a esta altura sobre el piso, bajando, estira las piernas
 
@@ -247,6 +260,21 @@ def _acercar(actual, objetivo, factor):
 def _angulo_corto(desde, hasta):
     """Diferencia de angulos por el camino corto, en grados."""
     return (hasta - desde + 180.0) % 360.0 - 180.0
+
+
+# Un muro de camara mas estrecho que esto por los dos lados es un poste, una
+# farola o un tronco (ver _distancia_util).
+DELGADO_CAMARA = 0.5
+# Y lo que se aparta de ellos: el aire que deja al poste, lo que anticipa
+# (en fracciones de la linea Mateo-camara: >1 es por detras de la camara),
+# lo mas que se aparta y lo rapido que llega.
+MARGEN_POSTE, ANTICIPA_POSTE, ESQUIVE_MAX, ESQUIVE_RAPIDEZ = 0.3, 1.5, 1.4, 9.0
+MARGEN_LENTE = 0.55
+
+
+def _delgado(rect):
+    x0, x1, z0, z1 = rect[:4]
+    return x1 - x0 < DELGADO_CAMARA and z1 - z0 < DELGADO_CAMARA
 
 
 def _choque(ox, oz, dx, dz, rect):
@@ -364,7 +392,11 @@ class Jugador:
         self.t_brazo = 0.0
         self._brazos = []               # (nombre, nodo controlado, base, hijo, padre)
         self._mano = None
-        self._aire = []                 # lo mismo para piernas y brazos en el salto
+        self._aire = []                 # lo mismo para piernas y brazos en el salto        # Explorar con el mezclador (ver EXPLORAR_SUAVE): None = clips en bucle.
+        self._suave = None
+        self.suave_permitido = False
+        self._vx_exp = self._vz_exp = 0.0
+
         self._pierna_delante = "Left"
 
         self.pivote = None              # lo que sigue la camara, con retardo
@@ -423,6 +455,7 @@ class Jugador:
         # camara sube por encima si se mete dentro o tapa a Mateo.
         self.obstaculos_camara = []
         self.alza = 0.0
+        self._esquive = 0.0           # lo que se aparta de lado de un poste (m)
         # En red, el vigilante que lleva una persona: anda mas lento que la
         # periodista y no corre ni se agacha (sigilo.PASO_HUMANO).
         self.factor = 1.0
@@ -479,7 +512,12 @@ class Jugador:
         # Lo de parkour solo se pasa haciendo lo que pide.
         trepando = self.trepa is not None
         ax, _ay, az = self.actor.getPos()
-        for lista, pasa in ((self.saltables, self.en_el_aire() or trepando),
+        # Lo saltable lo pasa cualquier salto en curso, no solo por encima de
+        # PASA_SALTANDO: en los primeros centimetros (0,04 s) pegado a la
+        # banca chocaba al despegar, se quedaba sin velocidad y saltaba en el
+        # sitio sin pasarla («salta muy bajo y no supera los obstaculos»).
+        for lista, pasa in ((self.saltables, self.en_el_aire() or trepando
+                             or self.salto is not None),
                             (self.trepables, trepando),
                             (self.agachables, self.agachado or self.desliz is not None),
                             (self.deslizables, self.desliz is not None)):
@@ -939,7 +977,11 @@ class Jugador:
         self.vel_x += math.cos(rad) * lado * CONTROL_AIRE * dt
         self.vel_z += -math.sin(rad) * lado * CONTROL_AIRE * dt
         mx, mz = self.vel_x * dt, self.vel_z * dt
-        hecho = self._desplazar(mx, mz, rodear=False)
+        # Rodear lo pequeño tambien en el aire: en el suelo la farola de
+        # antes de la banca se esquivaba sola, pero saltando con ella delante
+        # se estampaba, perdia toda la velocidad y caia en el sitio sin pasar
+        # la banca («salta muy bajo y no supera los obstaculos»).
+        hecho = self._desplazar(mx, mz, rodear=True)
         self._choque_frena(mx, mz, hecho, dt)
         self.moviendose = abs(hecho[0]) + abs(hecho[1]) > 1e-4
 
@@ -1219,6 +1261,7 @@ class Jugador:
     jadea = False                  # parado tras correr (lo pone la persecucion)
 
     def usar_animador(self, an):
+        self._soltar_suave(None)
         self.animador = an.activar()
         self._evento_cuerpo = []
         return self.animador
@@ -1256,7 +1299,9 @@ class Jugador:
         huesos = not an.tiene("saltar")
         for ev in eventos:
             if ev == "salto" and not huesos:
-                self._posar("saltar", self._marca("saltar", "despegue", 0.0), 0.11)
+                # 0,2 s de mezcla: con 0,11 los brazos subian de golpe en tres
+                # cuadros (el «tiron» al despegar); el salto dura 0,76 s.
+                self._posar("saltar", self._marca("saltar", "despegue", 0.0), FUNDIDO_DESPEGUE)
             elif ev == "cae" and an.tiene("caer"):
                 an.accion("caer", fundido=0.18, mantener=True)
             elif ev == "aterriza":
@@ -1433,10 +1478,38 @@ class Jugador:
         """Modo exploracion: el raton gira la camara."""
         self.explorando = True
         _raton(True)
+        self._tomar_suave()
+
+    def _tomar_suave(self):
+        """Pone el mezclador de explorar si se puede (ver EXPLORAR_SUAVE)."""
+        if (not EXPLORAR_SUAVE or not self.suave_permitido or self.fisica
+                or self.animador is not None or self._suave is not None):
+            return
+        nombres = self.actor.getAnimNames()
+        if "idle" not in nombres or "caminar" not in nombres:
+            return
+        import animador as AN
+        # un gesto pendiente (mundo.reaccionar) haria loop() por debajo
+        self.actor.gesto = None
+        self._suave = AN.Animador(self.actor).activar()
+        self._vx_exp = self._vz_exp = 0.0
+        self.estado = None
+
+    def _soltar_suave(self, clip="idle"):
+        if self._suave is None:
+            return
+        self._suave.soltar(clip)
+        self._suave = None
+        self._vx_exp = self._vz_exp = 0.0
+        self.clip_puesto = clip if clip and clip in self.actor.getAnimNames() else None
+        self.estado = "quieto" if clip == "idle" else None
 
     def desactivar(self):
         """Modo decision: el raton vuelve a ser cursor."""
         self.explorando = False
+        # Lo que sigue (charla, escena, cinematica) pone sus clips con
+        # loop(): el Actor vuelve al modo de siempre, en reposo.
+        self._soltar_suave("idle")
         self.salir_de_cobertura()
         self.cancelar_lanzamiento()
         self.agachado = self.corriendo = self.moviendose = self.agachado_fijo = False
@@ -1746,6 +1819,8 @@ class Jugador:
         self.pitch = max(PITCH_MIN, min(PITCH_MAX, self.pitch - dy * SENSIBILIDAD))
 
     def _caminar(self, avance, lado, dt):
+        if self._suave is not None:
+            return self._caminar_suave(avance, lado, dt)
         quieto = "agachado" if self.agachado else "quieto"
         self.moviendose = False
         if avance == 0 and lado == 0:
@@ -1848,11 +1923,119 @@ class Jugador:
         self.actor.setH(self.rumbo)
         self._animar(estado)
 
+    def _caminar_suave(self, avance, lado, dt):
+        """Como _caminar, con inercia: la velocidad (un vector) va hacia la
+        que piden las teclas en ARRANQUE_EXPLORAR al acelerar y en
+        FRENADA_EXPLORAR al frenar o cambiar de sentido; el cuerpo se mezcla
+        segun la velocidad que lleva de verdad (_locomocion_suave)."""
+        x, _, z = self.actor.getPos()
+        rad = math.radians(self.yaw)
+        frente = Vec3(math.sin(rad), 0, math.cos(rad))
+        derecha = Vec3(math.cos(rad), 0, -math.sin(rad))
+        d = frente * avance + derecha * lado
+        largo = math.hypot(d.x, d.z)
+        if largo > 1e-6:
+            d = Vec3(d.x / largo, 0, d.z / largo)
+            self.sin_andar = 0.0
+            if self.agachado:
+                velocidad = VELOCIDAD_AGACHADO
+            elif self.corriendo:
+                velocidad = VELOCIDAD_CORRER
+            else:
+                velocidad = VELOCIDAD
+            velocidad *= self.factor * (FACTOR_LENTO if self.lento > 0.0 else 1.0) * self.frena_aterrizaje()
+        else:
+            d, velocidad = None, 0.0
+            self.corriendo = False      # correr sin moverse no hace ruido
+            self.sin_andar += dt
+        tx = d.x * velocidad if d is not None else 0.0
+        tz = d.z * velocidad if d is not None else 0.0
+        acelera = tx * tx + tz * tz > self._vx_exp ** 2 + self._vz_exp ** 2 and (
+            tx * self._vx_exp + tz * self._vz_exp >= 0.0)
+        k = 1.0 - math.exp(-3.0 * dt / (ARRANQUE_EXPLORAR if acelera else FRENADA_EXPLORAR))
+        self._vx_exp += (tx - self._vx_exp) * k
+        self._vz_exp += (tz - self._vz_exp) * k
+        v = math.hypot(self._vx_exp, self._vz_exp)
+        if velocidad == 0.0 and v < 0.05:
+            self._vx_exp = self._vz_exp = 0.0
+            v = 0.0
+        self.moviendose = False
+        if v > 0.0:
+            antes_x, antes_z = x, z
+            nx = x + self._vx_exp * dt
+            if not self._bloqueado(nx, z):
+                x = nx
+            else:
+                self._vx_exp = 0.0            # contra la pared se frena en seco
+            nz = z + self._vz_exp * dt
+            if not self._bloqueado(x, nz):
+                z = nz
+            else:
+                self._vz_exp = 0.0
+            if d is not None and abs(x - antes_x) + abs(z - antes_z) < 1e-6:
+                # De frente contra algo pequeño (una farola): se rodea por el
+                # lado libre, siempre el mismo hasta pasarlo, como en _caminar.
+                # (Sin esto, con la inercia a cero se quedaba clavado.)
+                paso = velocidad * dt
+                lado = getattr(self, "_rodeo", None) or 1
+                for lado_libre in (lado, -lado):
+                    sx = x + derecha.x * paso * lado_libre
+                    sz = z + derecha.z * paso * lado_libre
+                    if not self._bloqueado(sx, sz):
+                        x, z = sx, sz
+                        self._rodeo = lado_libre
+                        break
+            else:
+                self._rodeo = None
+            if self.limites:
+                x_min, x_max, z_min, z_max = self.limites
+                x = max(x_min, min(x_max, x))
+                z = max(z_min, min(z_max, z))
+            self.actor.setPos(x, self._piso(x, z) + self.altura_salto(), z)
+            self.moviendose = abs(antes_x - x) + abs(antes_z - z) > 1e-4
+        # Mira hacia donde piden las teclas (al frenar, hacia donde iba).
+        hacia = d if d is not None else (Vec3(self._vx_exp, 0, self._vz_exp) if v > 0.3 else None)
+        if hacia is not None:
+            objetivo = 180.0 - math.degrees(math.atan2(hacia.x, hacia.z))
+            self.rumbo += _angulo_corto(self.rumbo, objetivo) * min(1.0, VELOCIDAD_GIRO * dt)
+            self.actor.setH(self.rumbo)
+        if self.agachado:
+            self._animar("agachado_andar" if v > 0.05 else "agachado")
+        elif v > 0.05:
+            self._animar("correr" if self.corriendo else "andar")
+        else:
+            self._animar("quieto")
+
+    def _locomocion_suave(self, estado):
+        """Los pesos del cuerpo segun la velocidad que lleva de verdad:
+        quieto -> andar -> correr (o agachado -> andar agachado), los ciclos
+        de pasos con la fase comun del mezclador."""
+        an = self._suave
+        v = math.hypot(self._vx_exp, self._vz_exp)
+        agachado = self.agachado or estado in ("agachado", "agachado_andar")
+        if agachado and an.tiene("agachado"):
+            base, paso, v_paso = "agachado", ("agachado_caminar" if an.tiene("agachado_caminar")
+                                              else "caminar"), VELOCIDAD_AGACHADO
+        else:
+            base, paso, v_paso = "idle", "caminar", VELOCIDAD
+        # los pasos entran enseguida al arrancar (a media velocidad de andar,
+        # ya del todo): si no, al arrancar se desliza en la pose de reposo
+        k = max(0.0, min(1.0, v / (0.5 * v_paso)))
+        pesos = {base: 1.0 - k, paso: k}
+        if not agachado and an.tiene("correr") and v > VELOCIDAD:
+            c = max(0.0, min(1.0, (v - VELOCIDAD) / (VELOCIDAD_CORRER - VELOCIDAD)))
+            pesos = {base: 1.0 - k, paso: k * (1.0 - c), "correr": k * c}
+        an.ciclos(pesos, velocidad=max(v, 0.25), fundido=FUNDIDO_LOCOMOCION)
+
     def _animar(self, estado):
         if self.animador is not None:
             # En la persecucion el cuerpo lo lleva el mezclador (_cuerpo):
             # aqui solo se apunta que hace.
             self.estado = estado
+            return
+        if self._suave is not None:
+            self.estado = estado
+            self._locomocion_suave(estado)
             return
         # No basta con mirar el estado: los gestos de mundo.reaccionar y
         # las rutinas de avanzar_rutinas tambien cambian el clip por
@@ -1936,6 +2119,14 @@ class Jugador:
                 # no tapa: acercarse por eso pegaba la camara a la espalda
                 # de Mateo a mitad del salto y le cortaba la cabeza.
                 continue
+            if self.rail is not None and _delgado(rect):
+                # Ni lo delgado (farolas, postes, troncos): a la carrera la
+                # camara del carril pasa junto a ellos un instante, y
+                # acercarse por eso la estampaba contra la espalda de Mateo
+                # (t 7,0 s, junto a la jardinera). Un poste que cruza por
+                # delante una decima de segundo se lee como cualquier camara
+                # en tercera persona; un golpe de camara, no.
+                continue
             t = _choque(origen.x, origen.z, dx, dz, rect)
             if t is not None:
                 util = min(util, max(DISTANCIA_MINIMA_MURO, t))
@@ -2017,6 +2208,7 @@ class Jugador:
         # Y nunca a ras de suelo: agachado y mirando hacia arriba se metia
         # por debajo de las mesas.
         pos.y = max(0.35, min(pos.y, self.techo))
+        pos = self._esquivar_postes(pos, rad, dt, inmediato)
         if self.pasillo is not None:
             pos = self._dentro_del_pasillo(pos)
         alza = self._alza_obstaculos(pos)
@@ -2038,11 +2230,53 @@ class Jugador:
                         random.uniform(-1, 1)) * self.temblor * 0.3
             self.temblor = max(0.0, self.temblor - dt * 0.8)
         camera.position = pos
-        camera.rotation = Vec3(pitch + PICADO * self.cerca + mirar_mas, self.yaw, 0)
+        # Apartada de un poste, sigue mirando a Mateo (gira lo que se aparto).
+        mirar_lado = -math.degrees(math.atan2(self._esquive, max(0.5, plano_cam)))
+        camera.rotation = Vec3(pitch + PICADO * self.cerca + mirar_mas, self.yaw + mirar_lado, 0)
         lente = (self.fov + (ABRIR_CORRER if self.corriendo else 0)
                  + ABRIR_CORRER * min(1.0, self.impulso / RAMPA_IMPULSO)
                  + ABRIR_CERCA * self.cerca - (CERRAR_APUNTAR if self.apuntando else 0))
         camera.fov = lente if inmediato else _acercar(camera.fov, lente, factor * 0.6)
+
+    def _esquivar_postes(self, pos, rad, dt, inmediato):
+        """La camara de la persecucion se aparta de lado de lo delgado (una
+        farola, un poste) que se le cruza entre ella y Mateo, en vez de
+        acercarse (se estampaba contra su espalda) o dejar que lo tape (asi
+        lo dejo «motor» y el poste lo ocultaba entero 0,3 s). Mira tambien
+        lo que esta un poco por detras de la camara: a la carrera entra en
+        la linea enseguida, y asi se aparta antes y sin tirones."""
+        rx, rz = math.cos(rad), -math.sin(rad)          # la derecha de la camara
+        objetivo = 0.0
+        if self.rail is not None:
+            px, pz = self.pivote.x, self.pivote.z
+            sx, sz = pos.x - px, pos.z - pz
+            largo2 = sx * sx + sz * sz
+            for rect in (self.muros if largo2 > 1e-4 else ()):
+                if not _delgado(rect):
+                    continue
+                x0, x1, z0, z1 = rect[:4]
+                cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
+                t = ((cx - px) * sx + (cz - pz) * sz) / largo2
+                # Cuanto mas cerca de la lente, mas aire: un poste a 0,3 m de
+                # la camara cruza media pantalla aunque no tape a Mateo.
+                radio = (0.5 * math.hypot(x1 - x0, z1 - z0) + MARGEN_POSTE
+                         + MARGEN_LENTE * max(0.0, min(1.0, t)))
+                if not (0.08 < t < ANTICIPA_POSTE):
+                    continue
+                # a que lado de la linea pivote-camara queda, y cuanto
+                lado = (cx - (px + sx * t)) * rx + (cz - (pz + sz * t)) * rz
+                if abs(lado) >= radio:
+                    continue
+                # El pivote no se mueve: apartar la camara s la mueve s*t
+                # a la altura del poste.
+                falta = (radio - abs(lado)) / max(0.35, min(1.0, t))
+                aparta = -math.copysign(falta, lado) if lado else falta
+                if abs(aparta) > abs(objetivo):
+                    objetivo = aparta
+            objetivo = max(-ESQUIVE_MAX, min(ESQUIVE_MAX, objetivo))
+        self._esquive = objetivo if inmediato else _acercar(
+            self._esquive, objetivo, min(1.0, ESQUIVE_RAPIDEZ * dt))
+        return Vec3(pos.x + rx * self._esquive, pos.y, pos.z + rz * self._esquive)
 
     def _dentro_del_pasillo(self, pos):
         """En la persecucion la camara no sale del pasillo: en las esquinas

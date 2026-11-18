@@ -87,7 +87,8 @@ en_pausa = lambda: False          # noqa: E731
 ACTIVO = True
 # Los secundarios de la tanda 3 llegaron sin tiempo para verlos en video:
 # apagados hasta probarlos (True los enciende; sin ellos, lo de antes).
-SECUNDARIOS = False
+# ALCALDE_SECUNDARIOS=1 los enciende sin tocar esto (para grabarlos).
+SECUNDARIOS = os.environ.get("ALCALDE_SECUNDARIOS") == "1"
 SIN_PROBAR = ("lanzar_atras", "correr_mirando", "esquivar", "esquivar_der", "jadear")
 REQUERIDOS = ("correr", "saltar", "vallar", "deslizar")
 
@@ -241,7 +242,9 @@ def info_ciclo(actor, clip):
     if control is None:
         return None
     marcas_de(actor, clip)                       # relee el JSON si cambio
-    clave = (clip, control.getAnim())
+    # Con el modelo en la clave: explorar mide el ciclo sin marcas y la
+    # persecucion con las suyas; sin el, la primera medida valia para las dos.
+    clave = (clip, control.getAnim(), getattr(actor, "modelo_animador", None))
     if clave in _CICLOS:
         return _CICLOS[clave]
     n = control.getNumFrames()

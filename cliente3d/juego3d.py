@@ -1527,6 +1527,11 @@ def abrir_libre():
     cl.jugador.coberturas = (cl.partida.sigilo.tapan_agachado
                              if p is not None and p.sigilo is not None else [])
     cl.jugador.encuadrar()
+    # Explorar con mezcla e inercia (jugador.EXPLORAR_SUAVE): no en el
+    # sigilo (asomarse y lanzar toman huesos de la pose agachada y su ritmo
+    # importa a los vigilantes) ni en la plaza caotica (el parkour lo lleva
+    # la persecucion).
+    cl.jugador.suave_permitido = p is None or (p.sigilo is None and p.persecucion is None)
     cl.jugador.activar()
     cl.aviso = pantallas.AvisoLibre(telefono=p is None or p.con_telefono,
                                     tablero=p is not None and p.pistas is not None)
@@ -2423,7 +2428,7 @@ def persecucion_paso(dt):
         cl.reloj_choque = REPETIR_CHOQUE
     j.choque = None
     eventos += p.actualizar(dt, cl.actor.getX(), cl.actor.getZ(),
-                            saltando=j.en_el_aire() or j.trepa is not None)
+                            saltando=j.en_el_aire() or j.salto is not None or j.trepa is not None)
     for evento, dato in eventos:
         if evento == "fase":
             nombre = p.fases[dato - 1][1]
@@ -2679,7 +2684,7 @@ class CuerpoSospechoso:
                 cuadro = d + (ap - d) * t / sube
             else:
                 cuadro = ap + (b - ap) * (1.0 - max(0.0, min(1.0, p.sy / PE.ALTO_SALTO)))
-            self._posar("saltar", cuadro)
+            self._posar("saltar", cuadro, 0.2)         # como Mateo: sin tiron al despegar
         elif tipo == "trepar":
             capa = an.accion_actual()
             if capa is not None and capa.clip == "vallar" and t >= PE.APOYO_VALLA:
