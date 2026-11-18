@@ -38,10 +38,12 @@ versus.enchufar(sys.modules[__name__])
 mando.J = sys.modules[__name__]        # mando.iniciar() conecta los mandos al abrir la ventana
 import billar_cliente
 import cafeteria_cliente
+import autos_vivos
 import plaza
 import cine_colegio
 import estilo as E
 import intro
+import prologo
 import mundo
 import pantallas
 import tablero
@@ -630,8 +632,16 @@ def abrir_intro():
     cl.carga.cerrar()
     cl.carga = None
     cl.estado = "intro"
-    audio.musica(audio.MUSICA_INTRO)
     cl.actor.hide()
+    if prologo.ACTIVO:
+        # El prologo de Abel (prologo.py) lleva su propia pista, para
+        # poder saltar en ella de los capitulos a los telefonos sin los
+        # planos de los finales: la del menu se va.
+        audio.parar_musica(0.6)
+        mundo.cambiar_escenario(cl.mundo, "ciudad")
+        cl.intro = prologo.montar(cl.mundo)
+        return
+    audio.musica(audio.MUSICA_INTRO)
     mundo.cambiar_escenario(cl.mundo, "ciudad")
     cl.intro = intro.Intro()
 
@@ -2458,6 +2468,8 @@ def persecucion_paso(dt):
             escapo(dato)
             return
     plaza.vivir_persecucion(dt, p.eventos)
+    # El coche cruzado se hunde en sus amortiguadores al trepar por el.
+    autos_vivos.vivir(dt, [cl.actor, cl.sospechoso])
     # El sospechoso, por su ruta (y por la escalera o las plataformas).
     x, z = cl.actor.getX(), cl.actor.getZ()
     remoto = versus.sospechoso_remoto()

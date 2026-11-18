@@ -41,6 +41,8 @@ from panda3d.core import (AmbientLight, DirectionalLight, Filename, Fog, LColor,
 from PIL import ImageDraw
 from ursina import application, color
 
+import autos
+import autos_vivos
 import mundo as M
 from contenido import (ESCALERAS_PLAZA, EVENTOS_PERSECUCION, RUTA_PERSECUCION_PLAZA,
                        ZONA_DUELO_PLAZA)
@@ -217,6 +219,7 @@ class _Taller:
     def __init__(self):
         self.o = M._Obra()
         self.caras = {}
+        self.autos = []          # (x, y, z, giro, estilo, vivo): autos_vivos.aparcados
 
     def caja(self, *a, **k):
         self.o.caja(*a, **k)
@@ -244,6 +247,8 @@ class _Taller:
 
     def volcar(self, nodo):
         M._volcar_obra(nodo, self.o, MATERIALES, self.caras)
+        if self.autos:
+            autos_vivos.aparcados(nodo, self.autos)
 
 
 def _arbol(t, x, z, alto=4.5):
@@ -276,8 +281,18 @@ def _papelera(t, x, z):
     t.caja("papelera", x - 0.22, x + 0.22, 0, 0.85, z - 0.22, z + 0.22, bloquea=True)
 
 
-def _coche(t, x, z, giro, mat, bloquea=True):
-    """Un coche aparcado (o cruzado): carroceria, cabina y ruedas."""
+def _coche(t, x, z, giro, mat, bloquea=True, vivo=False):
+    """Un coche aparcado (o cruzado): uno de los ocho modelos de autos.py
+    (con ALCALDE_AUTOS=0, carroceria, cabina y ruedas de cajas). vivo: el
+    de la persecucion, que se hunde cuando lo trepan (autos_vivos.vivir).
+    El rectangulo de bloqueo es el de siempre: las colisiones no cambian."""
+    if autos.ACTIVO:
+        if bloquea:
+            c, s = abs(math.cos(math.radians(giro))), abs(math.sin(math.radians(giro)))
+            r = (1.8 * c + 4.3 * s) / 2, (1.8 * s + 4.3 * c) / 2
+            t.o.solido((x - r[0], x + r[0], z - r[1], z + r[1]), 1.0)
+        t.autos.append((x, 0.0, z, giro, mat, vivo))
+        return
     t.girada(mat, x, z, 1.8, 4.3, 0.25, 1.0, giro, bloquea)
     t.girada("cristal_coche", x, z, 1.62, 2.2, 1.0, 1.5, giro)
     c, s = math.cos(math.radians(giro)), math.sin(math.radians(giro))
@@ -429,7 +444,7 @@ def _pieza_evento(t, tipo, objeto, rect):
             a = x0 + (x1 - x0) * k / 3
             t.caja("caja_madera", a, a + (x1 - x0) / 3 - 0.05, y, y + 0.5, z0, z1)
     elif objeto == "coche":               # el coche atravesado: hay que rodearlo
-        _coche(t, (x0 + x1) / 2, (z0 + z1) / 2, 90.0, "coche_2", bloquea=False)
+        _coche(t, (x0 + x1) / 2, (z0 + z1) / 2, 90.0, "coche_2", bloquea=False, vivo=True)
     elif objeto == "plataformas":         # el hueco entre las cajas: cinta en los bordes
         for zb in (z0, z1):
             _cinta(t, x0, x1, zb - 0.05, zb + 0.05, 1.0)
@@ -1199,6 +1214,7 @@ OBRAS = {"pacifica": _obra_pacifica(), "caotica": _obra_caotica()}
 def construir(mundo):
     """Monta la plaza entera colgada de mundo (el contenedor del escenario)
     y la deja en el estado pacifico."""
+    autos_vivos.soltar_vivos()
     OBRA_BASE.volcar(mundo)
     nodos = {e: mundo.attachNewNode(f"plaza_{e}") for e in OBRAS}
     zonas = {}
@@ -1611,6 +1627,7 @@ def entregar_mochila(actor_mateo, mano=None):
 def terminar_minijuego():
     """Cada uno vuelve a su sitio de la plaza (el rival, el sospechoso)."""
     _PLAZA.pop("sospechoso", None)
+    autos_vivos.calmar()
     if "pasillo" in _PLAZA:
         _PLAZA["pasillo"].hide()
     pulso(0.0)

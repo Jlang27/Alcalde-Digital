@@ -14,6 +14,7 @@ from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
                           Texture, TextureAttrib, TransparencyAttrib)
 from PIL import Image, ImageDraw, ImageFont
 
+import autos
 import luces
 import posproceso
 import ambiente
@@ -790,9 +791,11 @@ def _azotea(caja, azar, mallas):
                                             mz, mz + lado))
 
 
-def _edificios_ciudad(mundo, azar):
+def _edificios_ciudad(mundo, azar, manzanas=None):
     mallas = _mallas_vacias()
-    for caja, tienda, ciegas in _manzanas(azar):
+    if manzanas is None:
+        manzanas = _manzanas(azar)
+    for caja, tienda, ciegas in manzanas:
         x0, x1, z0, z1, alto = caja
         # Las torres altas van de vidrio; el barrio, de colores.
         fachada = "vidrio" if alto > 60 else azar.choice(FACHADAS)
@@ -1091,7 +1094,12 @@ def _pantallas(mundo):
     _ACTUAL["pantallas"] = piezas
 
 
-def _vehiculo(mundo, bus, carril, z, mats, pintura=None):
+# Modelo y color de cada carro del trafico: su propio azar, para no mover
+# el de la ciudad (los edificios y la gente salen donde siempre).
+_AZAR_AUTOS = random.Random(23)
+
+
+def _vehiculo(mundo, bus, carril, z, mats, pintura=None, vivo=False):
     """Un bus o un carro: un nodo que se mueve con sus piezas colgadas."""
     x, velocidad = CARRILES[carril]
     nodo = mundo.attachNewNode("bus" if bus else "carro")
@@ -1112,6 +1120,19 @@ def _vehiculo(mundo, bus, carril, z, mats, pintura=None):
                    (0, 2.20, -5.0 + i * 0.88 + (i % 3) * 0.08))
         _pieza(nodo, "cube", mats["ruta"], (2.0, 0.35, 0.05), (0, 3.0, 6.02))
         largo, alto_luz = 12.0, 0.75
+    elif autos.ACTIVO:
+        # Uno de los ocho modelos (autos.py); el taxi, un Sentra amarillo
+        # con su letrero. Modo "trafico": lo opaco en un solo material.
+        import autos_vivos
+        if pintura == "taxi":
+            nombre, tinte, extra = "sentra", autos_vivos.AMARILLO_TAXI, ("taxi",)
+        else:
+            (nombre, tinte), extra = autos_vivos.elegir(_AZAR_AUTOS), ()
+        # El piloto propio (para la luz de freno) solo si se mueve suelto:
+        # en los carriles fundidos se comparte el de todos.
+        auto = autos_vivos.Auto(nodo, nombre, tinte, "trafico", extra,
+                                propio_piloto=vivo)
+        return [nodo, velocidad, auto]
     else:
         _pieza(nodo, "cube", mats[pintura or f"carro_{carril % 3}"],
                (1.8, 1.0, 4.2), (0, 0.65, 0))
@@ -1125,7 +1146,10 @@ def _vehiculo(mundo, bus, carril, z, mats, pintura=None):
     return [nodo, velocidad]
 
 
-def _trafico(mundo, azar):
+def _trafico(mundo, azar, vivo=True):
+    """vivo: cada carro con su conductor (IDM de autos_vivos), la intro;
+    si no, todos a la velocidad del carril (se funden: _carriles)."""
+    _AZAR_AUTOS.seed(23)
     mats = {
         # Amarillo, azul y rojo, como los buses de la referencia.
         "bus_0": _material((0.60, 0.38, 0.02, 1), rugosidad=0.45,
@@ -1163,9 +1187,25 @@ def _trafico(mundo, azar):
                 # Uno de cada tres, taxi amarillo: es una ciudad colombiana.
                 pintura = "taxi" if azar.random() < 0.33 else None
                 vehiculos.append(_vehiculo(mundo, False, carril, z, mats,
-                                           pintura))
+                                           pintura, vivo))
             z += azar.uniform(22, 48)
-    _ACTUAL["vehiculos"] = vehiculos
+    if autos.ACTIVO and vivo:
+        # Cada carro acelera, frena y guarda distancia con el de delante
+        # (autos_vivos.mover); los buses, a la velocidad de su carril,
+        # porque la intro tiene un plano medido con ellos.
+        import autos_vivos
+        trafico = []
+        for nodo, velocidad, *auto in vehiculos:
+            auto = auto[0] if auto else None
+            carril = next(i for i, (x, v) in enumerate(CARRILES) if v == velocidad)
+            largo = auto.f.L if auto else 12.0
+            v0 = abs(velocidad) * (_AZAR_AUTOS.uniform(0.97, 1.08) if auto else 1.0)
+            trafico.append(autos_vivos.Vehiculo(nodo, carril, nodo.getX(), nodo.getZ(),
+                                                velocidad, largo, auto, v0))
+        _ACTUAL["trafico"] = trafico
+        _ACTUAL["azar_trafico"] = random.Random(31)
+        vehiculos = []
+    _ACTUAL["vehiculos"] = [v[:2] for v in vehiculos]
 
 
 # Gente animada en el mitin. Detras siguen los muñecos de cajas de
@@ -1420,7 +1460,10 @@ def seguir_cielo():
 
 def mover_trafico(dt):
     """Avanza buses y carros; al salir por un extremo vuelven a entrar."""
-    z_min, z_max = Z_TRAFICO
+    z_min, z_max = _ACTUAL.get("limites_trafico", Z_TRAFICO)
+    if _ACTUAL.get("trafico"):
+        import autos_vivos
+        autos_vivos.mover(_ACTUAL["trafico"], dt, z_min, z_max, _ACTUAL["azar_trafico"])
     for vehiculo in _ACTUAL.get("vehiculos", ()):
         nodo, velocidad = vehiculo
         z = nodo.getZ() + velocidad * dt
@@ -3157,7 +3200,10 @@ def _ciudad_abajo(mundo):
     _carteles_y_murales(quieto)
     _pantallas(quieto)
     _multitud(quieto, azar)
-    _trafico(ciudad, azar)
+    # Fundido por carril (ver _carriles): sin conductor propio. Desde ocho
+    # pisos no se ven las ruedas ni el cabeceo, y suelto cada carro son
+    # ~9 llamadas de dibujo: la ciudad del capitulo 3 volveria a doblar.
+    _trafico(ciudad, azar, vivo=False)
     # Dos patrullas en la acera del mitin: la manifestacion ya tiene policia.
     cuerpo = _material((0.02, 0.02, 0.025, 1), rugosidad=0.4, metalico=0.5)
     rojo = _material((0.02, 0.0, 0.0, 1), emision=(2.4, 0.1, 0.08, 1))
@@ -4224,7 +4270,8 @@ def cambiar_escenario(mundo, escenario):
             nodo.removeNode()
     if "en_mano" in _ACTUAL:
         _ACTUAL["en_mano"][0].removeNode()
-    for clave in ("vehiculos", "pantallas", "luz_pantalla", "cielo", "lluvia",
+    for clave in ("vehiculos", "trafico", "azar_trafico", "limites_trafico",
+                  "pantallas", "luz_pantalla", "cielo", "lluvia",
                   "sirenas", "fase_sirena", "luz_sirena", "reloj",
                   "luz_ambiente", "objetos", "usados", "arco", "en_mano",
                   "expediente", "pantallas_chat", "monitor_privado",
