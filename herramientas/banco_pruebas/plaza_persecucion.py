@@ -21,6 +21,7 @@ import banco
 from ursina import held_keys
 
 import juego
+import jugador as JU
 import persecucion as P
 import plaza
 
@@ -45,13 +46,20 @@ for _ in range(6):
     tecla("enter", 0.6)
 assert estado() == "libre", estado()
 j = J.cl.jugador
+# Las piezas de parkour se prueban con la fisica de la carrera (la de la
+# persecucion): llegando lanzado, como en la carrera de verdad. Con fisica
+# no se salta un hueco de 2 m desde parado, ni hace falta.
+j.fisica = P.FISICA
 
 
-def correr(desde, yaw, segundos, tecla_en=None, cuando=0.0, agachado=False):
-    """Pone a Mateo en desde, mirando a yaw, y corre (o va agachado)."""
+def correr(desde, yaw, segundos, tecla_en=None, cuando=0.0, agachado=False, lanzado=True):
+    """Pone a Mateo en desde, mirando a yaw, y corre (o va agachado). Lanzado:
+    llega ya a la carrera (la velocidad de la punta, hacia donde corre)."""
     J.cl.actor.setPos(desde[0], plaza.suelo(*desde), desde[1])
     j.yaw, j.rumbo = yaw, 180.0 - yaw     # la camara y Mateo, ya hacia donde corre
     J.cl.actor.setH(j.rumbo)
+    v = (JU.VELOCIDAD_AGACHADO if agachado else JU.PUNTA) if lanzado else 0.0
+    j.vel_x, j.vel_z = math.sin(math.radians(yaw)) * v, math.cos(math.radians(yaw)) * v
     held_keys["w"] = 1
     held_keys["control" if agachado else "shift"] = 1
     pasar(cuando)
@@ -85,6 +93,7 @@ if not ESCAPA:
     J.cl.actor.setPos(40.5, 0, -8.0)
     j.yaw, j.rumbo = 90.0, 90.0
     J.cl.actor.setH(j.rumbo)
+    j.vel_x, j.vel_z = JU.VELOCIDAD_CORRER, 0.0
     held_keys["w"] = 1
     pasar(0.1)
     J.input("c")

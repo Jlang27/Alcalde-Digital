@@ -1,0 +1,336 @@
+{
+ "formato": "alcalde-clips/1",
+ "fps": 30,
+ "convenio": "Marcas en CUADROS a 30 fps (pueden llevar decimales). Clips en el sitio: la cadera no avanza, el juego mueve el nodo. v_diseno = m/s a la que retrocede el pie (o la mano) apoyado: ritmo = v_real / v_diseno. Ciclos: fase 0 = el pie IZQUIERDO toca el suelo (contacto_izq). fase_salida: fase de «correr» (0..1) con la que empalma el final del clip.",
+ "obra": "Clips hechos por el proyecto con herramientas/animar_parkour.py, calcando poses y tiempos de la huida de Detroit: Become Human como referencia (nada del video entra en el juego).",
+ "ciudadano": {
+  "correr": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": true,
+   "v_diseno": 5.597,
+   "contacto_izq": 0.0,
+   "despegue_izq": 4.29,
+   "contacto_der": 9.0,
+   "despegue_der": 13.29
+  },
+  "agachado_correr": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": true,
+   "v_diseno": 5.597,
+   "contacto_izq": 0.0,
+   "despegue_izq": 6.3,
+   "contacto_der": 9.0,
+   "despegue_der": 15.3
+  },
+  "saltar": {
+   "cuadros": 24,
+   "fps": 30,
+   "duracion_s": 0.8,
+   "ciclo": false,
+   "v_diseno": 5.149,
+   "carga": 0,
+   "despegue": 3,
+   "apice": 12,
+   "busca_suelo": 21
+  },
+  "aterrizar": {
+   "cuadros": 11,
+   "fps": 30,
+   "duracion_s": 0.367,
+   "ciclo": false,
+   "v_diseno": 4.478,
+   "contacto": 0,
+   "hunde": 3,
+   "despega": 5,
+   "fase_salida": 0.5
+  },
+  "caer": {
+   "cuadros": 15,
+   "fps": 30,
+   "duracion_s": 0.5,
+   "ciclo": false,
+   "v_diseno": 0.0,
+   "paso": 3,
+   "cae": 8,
+   "busca_suelo": 14
+  },
+  "tropezar": {
+   "cuadros": 23,
+   "fps": 30,
+   "duracion_s": 0.767,
+   "ciclo": false,
+   "v_diseno": 2.519,
+   "impacto": 2,
+   "traspie": 6,
+   "recupera": 13,
+   "fase_salida": 0.5
+  },
+  "correr_mirando": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": true,
+   "v_diseno": 5.597,
+   "lado": "izq",
+   "contacto_izq": 0.0,
+   "contacto_der": 9.0
+  },
+  "lanzar_atras": {
+   "cuadros": 36,
+   "fps": 30,
+   "duracion_s": 1.2,
+   "ciclo": true,
+   "v_diseno": 5.597,
+   "suelta": 18,
+   "contacto_izq": 0.0,
+   "contacto_der": 9.0
+  },
+  "esquivar": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": false,
+   "v_diseno": 5.597,
+   "lado": "izq",
+   "quiebro": 9.0,
+   "contacto_izq": 0.0,
+   "contacto_der": 9.0
+  },
+  "esquivar_der": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": false,
+   "v_diseno": 5.597,
+   "lado": "der",
+   "quiebro": 9.0,
+   "contacto_izq": 0.0,
+   "contacto_der": 9.0
+  },
+  "jadear": {
+   "cuadros": 36,
+   "fps": 30,
+   "duracion_s": 1.2,
+   "ciclo": true,
+   "v_diseno": 0.0,
+   "inspira": 0,
+   "espira": 14.4
+  },
+  "agarrar": {
+   "cuadros": 19,
+   "fps": 30,
+   "duracion_s": 0.633,
+   "ciclo": false,
+   "v_diseno": 5.597,
+   "agarre": 7,
+   "alcance": 0.62,
+   "alcance_manos": 0.42,
+   "alto_agarre": 1.25,
+   "sostiene": 12,
+   "alcance_sostiene": 0.5
+  },
+  "atrapado": {
+   "cuadros": 27,
+   "fps": 30,
+   "duracion_s": 0.9,
+   "ciclo": false,
+   "v_diseno": 2.799,
+   "tiron": 3,
+   "traspie": 9,
+   "girado": 20
+  },
+  "vallar": {
+   "cuadros": 15,
+   "fps": 30,
+   "duracion_s": 0.5,
+   "ciclo": false,
+   "v_diseno": 4.702,
+   "despegue": 3,
+   "apoyo": 4,
+   "suelta": 8,
+   "contacto": 13,
+   "fase_salida": 0.5,
+   "alto": 1.05,
+   "mano_delante_m": 0.5
+  },
+  "deslizar": {
+   "cuadros": 43,
+   "fps": 30,
+   "duracion_s": 1.433,
+   "ciclo": false,
+   "v_diseno": 0.0,
+   "suelo": 6,
+   "levanta": 30,
+   "fase_salida": 0.1
+  }
+ },
+ "alcalde": {
+  "correr": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": true,
+   "v_diseno": 5.905,
+   "contacto_izq": 0.0,
+   "despegue_izq": 3.76,
+   "contacto_der": 9.0,
+   "despegue_der": 12.76
+  },
+  "agachado_correr": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": true,
+   "v_diseno": 5.905,
+   "contacto_izq": 0.0,
+   "despegue_izq": 6.12,
+   "contacto_der": 9.0,
+   "despegue_der": 15.12
+  },
+  "saltar": {
+   "cuadros": 24,
+   "fps": 30,
+   "duracion_s": 0.8,
+   "ciclo": false,
+   "v_diseno": 5.433,
+   "carga": 0,
+   "despegue": 3,
+   "apice": 12,
+   "busca_suelo": 21
+  },
+  "aterrizar": {
+   "cuadros": 11,
+   "fps": 30,
+   "duracion_s": 0.367,
+   "ciclo": false,
+   "v_diseno": 4.724,
+   "contacto": 0,
+   "hunde": 3,
+   "despega": 5,
+   "fase_salida": 0.5
+  },
+  "caer": {
+   "cuadros": 15,
+   "fps": 30,
+   "duracion_s": 0.5,
+   "ciclo": false,
+   "v_diseno": 0.0,
+   "paso": 3,
+   "cae": 8,
+   "busca_suelo": 14
+  },
+  "tropezar": {
+   "cuadros": 23,
+   "fps": 30,
+   "duracion_s": 0.767,
+   "ciclo": false,
+   "v_diseno": 2.657,
+   "impacto": 2,
+   "traspie": 6,
+   "recupera": 13,
+   "fase_salida": 0.5
+  },
+  "correr_mirando": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": true,
+   "v_diseno": 5.905,
+   "lado": "izq",
+   "contacto_izq": 0.0,
+   "contacto_der": 9.0
+  },
+  "lanzar_atras": {
+   "cuadros": 36,
+   "fps": 30,
+   "duracion_s": 1.2,
+   "ciclo": true,
+   "v_diseno": 5.905,
+   "suelta": 18,
+   "contacto_izq": 0.0,
+   "contacto_der": 9.0
+  },
+  "esquivar": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": false,
+   "v_diseno": 5.905,
+   "lado": "izq",
+   "quiebro": 9.0,
+   "contacto_izq": 0.0,
+   "contacto_der": 9.0
+  },
+  "esquivar_der": {
+   "cuadros": 18,
+   "fps": 30,
+   "duracion_s": 0.6,
+   "ciclo": false,
+   "v_diseno": 5.905,
+   "lado": "der",
+   "quiebro": 9.0,
+   "contacto_izq": 0.0,
+   "contacto_der": 9.0
+  },
+  "jadear": {
+   "cuadros": 36,
+   "fps": 30,
+   "duracion_s": 1.2,
+   "ciclo": true,
+   "v_diseno": 0.0,
+   "inspira": 0,
+   "espira": 14.4
+  },
+  "agarrar": {
+   "cuadros": 19,
+   "fps": 30,
+   "duracion_s": 0.633,
+   "ciclo": false,
+   "v_diseno": 5.905,
+   "agarre": 7,
+   "alcance": 0.62,
+   "alcance_manos": 0.42,
+   "alto_agarre": 1.25,
+   "sostiene": 12,
+   "alcance_sostiene": 0.5
+  },
+  "atrapado": {
+   "cuadros": 27,
+   "fps": 30,
+   "duracion_s": 0.9,
+   "ciclo": false,
+   "v_diseno": 2.953,
+   "tiron": 3,
+   "traspie": 9,
+   "girado": 20
+  },
+  "vallar": {
+   "cuadros": 15,
+   "fps": 30,
+   "duracion_s": 0.5,
+   "ciclo": false,
+   "v_diseno": 4.96,
+   "despegue": 3,
+   "apoyo": 4,
+   "suelta": 8,
+   "contacto": 13,
+   "fase_salida": 0.5,
+   "alto": 1.05,
+   "mano_delante_m": 0.5
+  },
+  "deslizar": {
+   "cuadros": 43,
+   "fps": 30,
+   "duracion_s": 1.433,
+   "ciclo": false,
+   "v_diseno": 0.0,
+   "suelo": 6,
+   "levanta": 30,
+   "fase_salida": 0.1
+  }
+ }
+}

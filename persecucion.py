@@ -59,6 +59,94 @@ ACCION = {"saltar": "¡SALTA!", "trepar": "¡TREPA!", "agacharse": "¡AGÁCHATE!
           "deslizar": "¡DESLÍZATE!", "bloqueo": "¡CAMBIA DE LADO!", "brecha": "¡SALTA!",
           "lanza": "¡ESQUIVA!", "cruza": "¡ESQUIVA!"}
 
+# ---------------------------------------------------------------------------
+#  LA FISICA DE LA CARRERA (referencia: la huida de Detroit: Become Human)
+# ---------------------------------------------------------------------------
+# La misma para los dos: Mateo la lleva el cliente (cliente3d/jugador.py
+# importa estas constantes) y al de la mochila, cuando lo lleva la maquina,
+# estas reglas (Persecucion._correr). Asi la maquina, la red (el de la
+# mochila es otro Jugador) y Mateo se mueven igual. Medidas de la referencia
+# en docs/animacion_persecucion.md («Física»); los clips de
+# assets/personajes/clips_persecucion.json estan hechos con estos tiempos.
+# Antes: gravedad «de juego» (15,6), arrancada instantanea, giros en seco,
+# vault en arco fijo de 1,3 m y deslizamiento a 5,8 m/s constantes.
+# Interruptor: False vuelve a la carrera de antes (velocidad constante y
+# sin gestos en las reglas; en el cliente, el movimiento de siempre).
+FISICA = True
+GRAVEDAD = 9.8              # m/s2: la de verdad
+# El salto: en la referencia, 0,40 s en el aire sobre un carrito (la cadera
+# sube 0,2 m: los pies pasan recogiendo las rodillas) y mas entre azoteas.
+# Una sola tecla para todo: lo que recomienda la especificacion
+# (docs/animacion_persecucion.md), 0,45 m en ~0,6 s, que pasa lo bajo (por
+# encima de 0,15 m durante 0,5 s, unos 3 m a la carrera) y salva el hueco
+# de 2 m de las plataformas. Con 0,40 s no daria tiempo a nada de eso.
+ALTO_SALTO = 0.45           # m que sube el cuerpo en un salto a la carrera
+IMPULSO_SALTO = math.sqrt(2 * GRAVEDAD * ALTO_SALTO)    # 2,97 m/s hacia arriba
+TIEMPO_SALTO = 2 * IMPULSO_SALTO / GRAVEDAD             # 0,61 s en el aire (en llano)
+# La arrancada: la velocidad se acerca a la punta como 1 - e^(-t/ARRANCADA):
+# 63 % en 1,1 s, 95 % en 3,3 s; al principio empuja a punta/ARRANCADA.
+# Frenar es mas rapido.
+ARRANCADA = 1.1             # la referencia arranca a ~5 m/s2 (6,3 / 1,1 = 5,7)
+FRENADA = 4.5               # m/s2: la frenada de la referencia (de carrera a paso en ~1,2 s)
+# Curvas: no se gira en seco. El giro maximo lo da la aceleracion lateral
+# que aguanta un pie que corre; y en un giro cerrado se frena, como quien
+# planta el pie en una esquina (asi las esquinas del pasillo se doblan sin
+# irse contra las vallas).
+ACELERACION_LATERAL = 13.0  # m/s2
+GIRO_MAXIMO = 7.0           # rad/s, parado o casi
+FRENA_GIRO = 0.8            # en un recorte de 90 grados pierde un 20 % (la referencia: 10-20 %)
+INCLINA_CURVA = 0.45        # que parte del angulo «fisico» se inclina el cuerpo
+INCLINA_MAXIMA = 13.0       # grados
+# El vault (trepar una valla con la mano): conserva el impulso y pierde algo
+# (la referencia sale a 0,85-0,9x; el cuerpo sube 0,35-0,4 m, no 1,3).
+# La mano apoya MANO_VALLA m antes del centro de la valla, APOYO_VALLA s
+# despues de empezar; el vault entero dura DURA_VALLA (al ritmo del clip).
+PIERDE_VALLA = 0.12
+VALLA_MINIMA = 3.6          # m/s: aunque se llegue despacio, la mano empuja
+APOYO_VALLA = 0.13
+DURA_VALLA = 0.45
+MANO_VALLA = 0.5             # la del clip «vallar» (mano_delante_m: la barra 0,5 m delante en el apoyo)
+# Deslizarse: entra rapido (se tira hacia delante), frena por rozamiento y
+# se levanta cuando ya va despacio (nunca debajo de la barrera).
+ENTRA_DESLIZ = 1.06         # el empujon al tirarse
+DESLIZ_MINIMO = 3.6         # m/s con los que entra aunque fuera mas despacio
+DESLIZ_MAXIMO = 6.2           # y no mas: con 7 llegaba a la valla alta de detras de la persiana
+CAE_DESLIZ = 0.2            # s hasta estar en el suelo
+ROCE_DESLIZ = 4.8           # m/s2 (la referencia da 3-5: ropa contra asfalto); con 4 se pasaba de largo
+LEVANTA_DESLIZ = 2.3        # m/s: por debajo se levanta
+DURA_LEVANTA = 0.32
+ARRASTRE_DESLIZ = 1.6       # m/s minimos mientras siga debajo de algo
+# Agachado se corre algo mas despacio.
+PIERDE_AGACHADO = 0.12
+# Caer: el aterrizaje amortigua segun lo rapido que se llega al suelo (un
+# salto normal llega a ~3,4 m/s; desde la plataforma de 1 m, a ~5,3).
+PIERDE_ATERRIZA = 0.2       # lo que se pierde de velocidad en una caida fuerte
+# Un golpe desequilibra: se queda con GOLPE_QUEDA de la velocidad y durante
+# TROPIEZO s no puede acelerar; luego se recupera como en la arrancada.
+GOLPE_QUEDA = 0.42
+TROPIEZO = 0.4
+
+
+def acercar_velocidad(v, punta, dt, arrancada=ARRANCADA, frenada=FRENADA):
+    """La velocidad hacia la punta: sube como la arrancada (exponencial) y
+    baja frenando (lineal). Estable con cualquier dt."""
+    if punta >= v:
+        return punta - (punta - v) * math.exp(-dt / arrancada)
+    return max(punta, v - frenada * dt)
+
+
+def altura_de_salto(t, impulso=IMPULSO_SALTO):
+    """Lo que ha subido un salto a los t segundos (puede ser negativo)."""
+    return impulso * t - 0.5 * GRAVEDAD * t * t
+
+
+def frenado_aterrizaje(velocidad_caida):
+    """Que parte de la velocidad se conserva al tocar suelo cayendo a esa
+    velocidad: tras un salto normal (~3 m/s) un 0,92; desde la plataforma de
+    1 m (~5,3 m/s) un 0,8 (la referencia: 0,85-0,9 y 0,8)."""
+    fuerza = max(0.0, min(1.0, (velocidad_caida - 1.5) / 3.8))
+    return 1.0 - PIERDE_ATERRIZA * fuerza
+
 
 def altura_en(x, z, escaleras):
     """Alto del suelo en (x, z): en un tramo, de su alto en z0 a su alto en
@@ -120,6 +208,16 @@ class Persecucion:
         self.motivo = None               # por que se escapo
         self.empezada = False
         self.t = 0.0
+        # La fisica del de la mochila (cuando lo lleva la maquina): su
+        # velocidad, lo que esta haciendo en un obstaculo (accion: dict con
+        # tipo, t, s del obstaculo...; None corriendo) y lo que sube en un
+        # salto sobre el suelo del que despego (sy, despego en despegue).
+        self.v = 0.0
+        self.accion = None
+        self.sy = 0.0
+        self.despegue = None
+        self._hechos = set()             # obstaculos ya pasados por la maquina
+        self._s_antes = None             # para la velocidad del humano
 
     # ---- geometria de la ruta ----
 
@@ -159,10 +257,11 @@ class Persecucion:
 
     def empezar(self):
         """Te vio: echa a correr, con VENTAJA metros. Mateo sale del
-        principio del pasillo (salida())."""
+        principio del pasillo (salida()). Los dos arrancan desde parados."""
         self.empezada = True
         self.s = min(self.largo, VENTAJA_HUMANO if self.humano else VENTAJA)
         self.sx, self.sz, self.rumbo = self.punto(self.s)
+        self.v, self.accion, self.sy, self.despegue = 0.0, None, 0.0, None
 
     def poner_humano(self, si=True):
         """En red: el sospechoso es el segundo jugador (o deja de serlo si
@@ -222,19 +321,20 @@ class Persecucion:
             eventos.append(("fase", fase))
         if self.humano:
             # No se le mueve: llega por mandar(). Si alcanza el final de la
-            # ruta, se perdio entre la gente.
+            # ruta, se perdio entre la gente. Su velocidad se apunta por si
+            # se desconecta: la maquina sigue desde ahi, sin frenazo.
+            if self._s_antes is not None and dt > 0:
+                self.v = 0.7 * self.v + 0.3 * max(0.0, (self.s - self._s_antes) / dt)
+            self._s_antes = self.s
+            self.accion, self.sy = None, 0.0
             if self.s >= self.largo - META:
                 self._escapar("meta", eventos)
         elif not self.acorralado:
-            velocidad = CANSADO if fase == len(self.fases) else VELOCIDAD
-            if self.distancia < CERCA:
-                velocidad += PANICO
-            elif self.distancia > ATRAS:
-                velocidad -= RESPIRO
-            self.s = min(self.largo, self.s + velocidad * dt)
+            self._correr(dt, fase)
             self.sx, self.sz, self.rumbo = self.punto(self.s)
             if self.s >= self.largo:
                 self.acorralado = True
+                self.accion, self.sy = None, 0.0
                 eventos.append(("acorralado", None))
         for ev in self.eventos:
             self._evento(ev, mx, mz, saltando, eventos)
@@ -245,6 +345,115 @@ class Persecucion:
         elif self.lejos >= GRACIA_LEJOS:
             self._escapar("lejos", eventos)
         return eventos
+
+    # ---- el de la mochila, cuando lo lleva la maquina ----
+
+    def _punta(self, fase):
+        """A lo que quiere ir: su ritmo, el cansancio de la ultima fase, el
+        panico si lo tienes encima y el respiro si te quedas atras."""
+        punta = CANSADO if fase == len(self.fases) else VELOCIDAD
+        if self.distancia < CERCA:
+            punta += PANICO
+        elif self.distancia > ATRAS:
+            punta -= RESPIRO
+        return punta
+
+    def _correr(self, dt, fase):
+        """Un paso de la maquina por la ruta, con la fisica de la carrera:
+        arranca, va hacia su punta y en cada obstaculo hace lo que pide en
+        el sitio justo (la cumbre del salto encima de lo bajo, la mano en la
+        valla, el pie en el borde del hueco, en el suelo antes de la
+        barrera). Lo que hace queda en accion, para que el cliente lo dibuje
+        con el clip que toca."""
+        punta = self._punta(fase)
+        if not FISICA:
+            self.v = punta
+            self.s = min(self.largo, self.s + punta * dt)
+            return
+        if self.accion is None:
+            self._planear()
+        a = self.accion
+        if a is None:
+            self.v = acercar_velocidad(self.v, punta, dt)
+        else:
+            a["t"] += dt
+            tipo = a["tipo"]
+            if tipo in ("saltar", "brecha"):
+                # En el aire ni acelera ni frena: lo que llevaba.
+                self.sy = altura_de_salto(a["t"])
+                if self.sy <= 0.0:
+                    self.v *= frenado_aterrizaje(IMPULSO_SALTO)
+                    self._acabar()
+            elif tipo == "trepar":
+                self.v = a["v"]
+                if a["t"] >= DURA_VALLA:
+                    self._acabar()
+            elif tipo == "deslizar":
+                if a["fase"] == "cae" and a["t"] >= CAE_DESLIZ:
+                    a["fase"] = "resbala"
+                if a["fase"] == "resbala":
+                    debajo = self.s < a["s_ob"] + a["medio"] + 0.6
+                    self.v = max(ARRASTRE_DESLIZ if debajo else 0.0, self.v - ROCE_DESLIZ * dt)
+                    if self.v <= LEVANTA_DESLIZ and not debajo:
+                        a["fase"], a["t_levanta"] = "levanta", a["t"]
+                elif a["fase"] == "levanta":
+                    self.v = acercar_velocidad(self.v, punta, dt)
+                    if a["t"] - a["t_levanta"] >= DURA_LEVANTA:
+                        self._acabar()
+            elif tipo == "agacharse":
+                self.v = acercar_velocidad(self.v, punta * (1.0 - PIERDE_AGACHADO), dt)
+                if self.s > a["s_ob"] + a["medio"] + 0.5:
+                    self._acabar()
+        self.s = min(self.largo, self.s + self.v * dt)
+
+    def _planear(self):
+        """Si el obstaculo de delante ya esta a la distancia de su gesto,
+        lo empieza."""
+        mejor = None
+        for ob in self.activos:
+            clave = (ob["id"], ob["tipo"])
+            if clave in self._hechos or ob["tipo"] not in ("saltar", "brecha", "trepar",
+                                                          "deslizar", "agacharse"):
+                continue
+            ds = ob["s"] - self.s
+            if ds < -1.0:
+                self._hechos.add(clave)          # ya quedo atras
+                continue
+            if mejor is None or ds < mejor[0]:
+                mejor = (ds, ob)
+        if mejor is None:
+            return
+        ds, ob = mejor
+        x0, x1, z0, z1 = ob["rect"][:4]
+        medio = min(x1 - x0, z1 - z0) / 2        # lo que mide a lo largo de la ruta
+        tipo = ob["tipo"]
+        v = max(self.v, 1.0)
+        if tipo == "saltar":
+            antes = v * IMPULSO_SALTO / GRAVEDAD          # la cumbre del arco, encima
+        elif tipo == "brecha":
+            antes = medio + 0.25                          # el pie en el borde
+        elif tipo == "trepar":
+            antes = MANO_VALLA + max(VALLA_MINIMA, v * (1 - PIERDE_VALLA)) * APOYO_VALLA
+        elif tipo == "deslizar":
+            antes = medio + v * CAE_DESLIZ + 0.5          # ya en el suelo al llegar
+        else:
+            antes = medio + 1.2                           # agachado antes de llegar
+        if ds > antes:
+            return
+        self._hechos.add((ob["id"], tipo))
+        a = {"tipo": tipo, "t": 0.0, "s_ob": ob["s"], "medio": medio, "id": ob["id"],
+             "objeto": ob.get("objeto"), "v0": self.v}
+        if tipo in ("saltar", "brecha"):
+            self.despegue, self.sy = (self.sx, self.sz), 0.0
+        elif tipo == "trepar":
+            a["v"] = max(VALLA_MINIMA, self.v * (1 - PIERDE_VALLA))
+        elif tipo == "deslizar":
+            self.v = max(DESLIZ_MINIMO, min(DESLIZ_MAXIMO, self.v * ENTRA_DESLIZ))
+            a["fase"] = "cae"
+        self.accion = a
+
+    def _acabar(self):
+        self.accion, self.sy, self.despegue = None, 0.0, None
 
     def _evento(self, ev, mx, mz, saltando, eventos):
         """Un evento del camino segun lo cerca que este Mateo."""
@@ -428,7 +637,79 @@ def _pruebas():
         p.actualizar(0.05, 0.0, 16.0)          # Mateo, esperando antes de lo que cae
     cae = next(e for e in p.eventos if e["tipo"] == "cae")
     assert cae["estado"] == "hecho" and p.proximo_aviso() == ACCION["saltar"], p.proximo_aviso()
+    _pruebas_fisica()
     print("persecucion: todo bien")
+
+
+def _pruebas_fisica():
+    """La maquina corre con la fisica de la carrera: arranca, salta con la
+    cumbre encima de lo bajo, apoya la mano en la valla, salva el hueco y
+    se desliza frenando sin levantarse debajo de la persiana."""
+    # La gravedad de verdad: 0,45 m de subida y ~0,6 s en el aire.
+    assert abs(altura_de_salto(IMPULSO_SALTO / GRAVEDAD) - ALTO_SALTO) < 1e-9
+    assert 0.6 < TIEMPO_SALTO < 0.62
+    # La arrancada: de parado no esta a la punta enseguida, y no se pasa.
+    v, t = 0.0, 0.0
+    while v < 0.63 * 5.0:
+        v, t = acercar_velocidad(v, 5.0, 1 / 30), t + 1 / 30
+    assert abs(t - ARRANCADA) < 0.05, t
+    assert acercar_velocidad(6.0, 3.0, 0.1) == 6.0 - FRENADA * 0.1
+    assert acercar_velocidad(3.0, 3.0, 5.0) == 3.0
+
+    ruta = ((0.0, 0.0), (0.0, 120.0))
+    eventos = ({"tipo": "saltar", "rect": (-3, 3, 19.8, 20.2), "objeto": "banca"},
+               {"tipo": "trepar", "rect": (-3, 3, 39.8, 40.2), "objeto": "valla_alta"},
+               {"tipo": "brecha", "rect": (-3, 3, 59.0, 61.0), "objeto": "plataformas"},
+               {"tipo": "deslizar", "rect": (-3, 3, 79.8, 80.2), "objeto": "persiana"},
+               {"tipo": "agacharse", "rect": (-3, 3, 99.8, 100.2), "objeto": "andamio"})
+    p = Persecucion(ruta, ((0, "UNO"),), eventos, tiempo=1e9)
+    p.empezar()
+    assert p.v == 0.0
+    p.actualizar(1 / 30, 0.0, -20.0)
+    assert 0.0 < p.v < 1.0, "arranco de golpe"
+    vistos, cumbre, apoyo, desliz = {}, None, None, []
+    while not p.acorralado:
+        p.actualizar(1 / 30, 0.0, p.s - 12.0)            # Mateo, doce metros detras
+        a = p.accion
+        if a is not None:
+            vistos.setdefault(a["tipo"], (p.s, p.v))
+            if a["tipo"] == "saltar" and cumbre is None and a["t"] >= IMPULSO_SALTO / GRAVEDAD:
+                cumbre = p.s
+            if a["tipo"] == "trepar" and apoyo is None and a["t"] >= APOYO_VALLA:
+                apoyo = p.s
+            if a["tipo"] == "deslizar":
+                desliz.append((p.s, p.v, a["fase"]))
+            if a["tipo"] == "brecha":
+                vistos["brecha_fin"] = p.s
+    assert set(vistos) >= {"saltar", "trepar", "brecha", "deslizar", "agacharse"}, vistos
+    assert abs(cumbre - 20.0) < 0.35, f"la cumbre del salto cae en {cumbre:.2f}, no encima"
+    assert abs(apoyo - (40.0 - MANO_VALLA)) < 0.3, f"la mano apoya en {apoyo:.2f}"
+    assert vistos["brecha"][0] <= 59.0 and vistos["brecha_fin"] > 61.0, "cayo en el hueco"
+    # el deslizamiento: entra rapido, frena por rozamiento y bajo la persiana
+    # (79,8..80,2) esta en el suelo, no levantandose
+    assert desliz[0][1] >= DESLIZ_MINIMO
+    bajo = [d for d in desliz if 79.6 < d[0] < 80.4]
+    assert bajo and all(f == "resbala" for _s, _v, f in bajo), bajo
+    velocidades = [v for _s, v, f in desliz if f == "resbala"]
+    assert velocidades[-1] < velocidades[0] - 1.0, "no frena"
+    # el vault pierde algo de velocidad, no toda
+    assert vistos["trepar"][1] < 6.2
+
+
+def _pruebas_maquina_que_vuelve():
+    """Si el humano se desconecta, la maquina sigue a la velocidad que el
+    llevaba (no arranca de cero en mitad de la carrera)."""
+    p = Persecucion(((0.0, 0.0), (0.0, 80.0)), ((0, "UNO"),), (), tiempo=1e9)
+    p.poner_humano()
+    p.empezar()
+    for k in range(1, 40):
+        p.mandar(0.0, VENTAJA_HUMANO + k * 5.0 / 30, 0.0)
+        p.actualizar(1 / 30, 0.0, 0.0)
+    assert 4.0 < p.v < 6.0, p.v
+    p.poner_humano(False)
+    s = p.s
+    p.actualizar(1 / 30, 0.0, 0.0)
+    assert (p.s - s) * 30 > 4.0, "la maquina arranco de cero"
 
 
 def _pruebas_humano():
@@ -467,4 +748,5 @@ def _pruebas_humano():
 
 if __name__ == "__main__":
     _pruebas_humano()
+    _pruebas_maquina_que_vuelve()
     _pruebas()

@@ -59,6 +59,8 @@ from contenido import (ROLES, ZONAS_CAPITULO_1, NPCS_CAPITULO_1,
                        LETRAS_RITMO, TEXTO_DUELO, FINAL_DUELO, TEXTO_SOSPECHOSO,
                        FINAL_PERSECUCION, OBJETIVOS_PERSECUCION)
 import ritmo
+import animador
+import persecucion as PE
 from persecucion import ANCHO_PASILLO, distancia_a_ruta
 from juego import (apellido, CANDIDATOS, NOMBRES_CANDIDATOS, Partida,
                    TIEMPO_INTERVENCION, MINUTOS_POR_RONDA, MINUTOS_MIRAR,
@@ -2316,7 +2318,11 @@ def _parkour_al_jugador():
     p = cl.partida
     activos = p.persecucion.activos if p is not None and p.persecucion is not None else []
     por_tipo = {t: [(*o["rect"], t) for o in activos if o["tipo"] == t]
-                for t in ("saltar", "trepar", "agacharse", "deslizar", "bloqueo")}
+                for t in ("saltar", "agacharse", "deslizar", "bloqueo")}
+    # Lo que se trepa lleva su alto: el vault sube lo que haga falta (el
+    # coche es mas alto que la valla para la que esta hecho el clip).
+    por_tipo["trepar"] = [(*o["rect"], "trepar", _alto_obstaculo(o))
+                          for o in activos if o["tipo"] == "trepar"]
     j = cl.jugador
     j.saltables, j.trepables = por_tipo["saltar"], por_tipo["trepar"]
     j.agachables, j.deslizables = por_tipo["agacharse"], por_tipo["deslizar"]
@@ -2341,7 +2347,19 @@ def empezar_persecucion():
     if cl.aviso is not None:
         cl.aviso.cerrar()
         cl.aviso = None
-    cl.jugador.con_impulso = True
+    j = cl.jugador
+    j.con_impulso = True
+    # La fisica de la carrera (persecucion.py) y, si el modelo trae los
+    # clips de la persecucion, el mezclador (animador.py); si no, lo de antes.
+    j.fisica, j.jadea = PE.FISICA, False
+    j.vel_x = j.vel_z = 0.0
+    # El contrato de los clips (clips_persecucion.json) va por modelo.
+    cl.actor.modelo_animador, cl.sospechoso.modelo_animador = "ciudadano", "alcalde"
+    if PE.FISICA and j.animador is None and animador.listo(cl.actor):
+        j.usar_animador(animador.Animador(cl.actor, "ciudadano"))
+    animador.en_pausa = lambda: cl.estado == "pausa"
+    cl.cuerpo_sosp = CuerpoSospechoso(cl.sospechoso)
+    cl.lado_antes = 0
     cl.reloj_choque = cl.jadeo = cl.pitido = 0.0
     # Lineal: la policia cierra las calles a los lados y Mateo sale del
     # principio del pasillo, con el sospechoso unos metros por delante.
@@ -2359,7 +2377,9 @@ def empezar_persecucion():
     # metros por delante, para doblar las esquinas antes de llegar), y
     # hacia delante siempre a la carrera.
     cl.jugador.rail = lambda px, pz: p.punto(p.proyectar((px, pz), p.s_mateo) + 4.0)[2]
-    cl.jugador.marcha = lambda px, pz: p.punto(p.proyectar((px, pz), p.s_mateo) + 0.8)[2]
+    # Con inercia la esquina se empieza a doblar antes (mas cuanto mas rapido).
+    cl.jugador.marcha = lambda px, pz: p.punto(p.proyectar((px, pz), p.s_mateo) + 0.8
+                                               + (0.3 * j.velocidad() if j.fisica else 0.0))[2]
     cl.jugador.siempre_corre = True
     plaza.preparar_persecucion(p.eventos)
     cl.hud_persecucion = pantallas.PersecucionHUD()
@@ -2389,7 +2409,13 @@ def persecucion_paso(dt):
                 eventos += p.chocar("brecha")
                 cl.reloj_choque = REPETIR_CHOQUE
             cl.actor.setPos(x, plaza.suelo(x, z0 - 2.5), z0 - 2.5)
+            j.parar()                     # vuelve a subir: desde parado
             hud.avisar("¡AL HUECO!", E.GAITAN, 0.8)
+    # Con algo encima (lo lanzado, lo que se cruza), apartarse es un paso de lado.
+    j.amenaza = p.proximo_aviso() == PE.ACCION["lanza"]
+    if j.amenaza and j.lado_input and not cl.lado_antes:
+        j.esquivar(j.lado_input)
+    cl.lado_antes = j.lado_input
     # Estrellarse contra algo de parkour a la carrera: golpe.
     cl.reloj_choque = max(0.0, cl.reloj_choque - dt)
     if j.choque is not None and j.corriendo and cl.reloj_choque <= 0.0:
@@ -2406,6 +2432,8 @@ def persecucion_paso(dt):
         elif evento == "aviso":
             desde = (p.sx, p.sz) if dato.get("desde") == "sospechoso" else None
             plaza.avisar_evento(dato, desde)
+            if desde is not None and cl.cuerpo_sosp is not None:
+                cl.cuerpo_sosp.lanzar()          # el gesto de tirarlo hacia atras
             if dato["tipo"] == "lanza":
                 audio.efecto("silbido")
         elif evento == "cae":
@@ -2426,28 +2454,14 @@ def persecucion_paso(dt):
             return
     plaza.vivir_persecucion(dt, p.eventos)
     # El sospechoso, por su ruta (y por la escalera o las plataformas).
-    actor = cl.sospechoso
     x, z = cl.actor.getX(), cl.actor.getZ()
-    y = plaza.suelo(p.sx, p.sz)
     remoto = versus.sospechoso_remoto()
     if remoto is not None:
         # En red lo lleva el otro jugador: va donde el lo tiene, con su salto
-        # y su clip (lo que hace la maquina por la ruta aqui no vale).
-        actor.setPos(remoto["x"], remoto["y"], remoto["z"])
-        actor.setH(remoto["h"])
-        versus.poner_clip(actor, remoto.get("clip"))
-    elif p.acorralado:
-        actor.setPos(p.sx, y, p.sz)
-        actor.setH(180.0 - math.degrees(math.atan2(x - p.sx, z - p.sz)))
-        if actor.getCurrentAnim() != "idle":
-            actor.loop("idle")
+        # y su cuerpo (lo que hace la maquina por la ruta aqui no vale).
+        cl.cuerpo_sosp.remoto(remoto)
     else:
-        alza, agachado = _parkour_sospechoso(p)
-        mundo.mover_actor(actor, p.sx, p.sz, p.rumbo, True, corriendo=not agachado)
-        if agachado and actor.getCurrentAnim() != "agachado_caminar"                 and "agachado_caminar" in actor.getAnimNames():
-            actor.setPlayRate(2.2, "agachado_caminar")
-            actor.loop("agachado_caminar")
-        actor.setY(y + alza)
+        cl.cuerpo_sosp.paso(p, dt, x, z)
     # Lo que se oye: Mateo jadea a la carrera y la mochila pita si esta cerca.
     cl.jadeo -= dt
     if j.corriendo and cl.jadeo <= 0.0:
@@ -2493,11 +2507,287 @@ def _parkour_sospechoso(p):
     return alza, agachado
 
 
+def _alto_obstaculo(ob):
+    """Lo alto que es lo que se cruza en la ruta (plaza.ALTO_OBSTACULO)."""
+    return plaza.ALTO_OBSTACULO.get(ob.get("objeto"), (0.0, 1.1))[1]
+
+
+def _suave(x):
+    x = max(0.0, min(1.0, x))
+    return x * x * (3.0 - 2.0 * x)
+
+
+def _angulo(desde, hasta):
+    """Diferencia de angulos por el camino corto, en grados."""
+    return (hasta - desde + 180.0) % 360.0 - 180.0
+
+
+class CuerpoSospechoso:
+    """El cuerpo del de la mochila en el PC del protagonista.
+
+    Donde va, a que velocidad y que hace en cada obstaculo lo deciden las
+    reglas (Persecucion: s, v, accion, sy); aqui solo se pone en el cuerpo.
+    Con los clips de la persecucion (animador.listo) va con el mezclador:
+    corre a la velocidad de verdad, salta con la fisica (la cumbre encima de
+    lo bajo), apoya la mano en la valla en el cuadro justo, se desliza por
+    debajo de la persiana, se agacha bajo el andamio, mira atras si lo tienes
+    cerca, tira lo que tira por encima del hombro, jadea acorralado y se
+    queda frenado al atraparlo. Sin esos clips, como antes (correr y un arco).
+    En red (remoto) pinta lo que manda el otro PC con el mismo mezclador."""
+
+    MIRA_CERCA = 9.0                  # m: con Mateo mas cerca, mira atras de vez en cuando
+
+    def __init__(self, actor):
+        self.actor = actor
+        self.an = (animador.Animador(actor, "alcalde").activar()
+                   if PE.FISICA and animador.listo(actor) else None)
+        self.h = actor.getH()
+        self.antes = None             # (tipo, id) de lo que hacia en el cuadro anterior
+        self.azar = random.Random(77)
+        self.mirar_en, self.mirando = 2.5, 0.0
+        self.peso_mira = 0.0
+        self.v_resbala = None
+        self.alabeo = 0.0
+
+    def soltar(self, clip="idle"):
+        if self.an is not None:
+            self.an.soltar(clip)
+            self.an = None
+        self.actor.setP(0)
+        self.actor.setR(0)
+
+    # ---- en red ----
+
+    def remoto(self, m):
+        a = self.actor
+        a.setPos(m["x"], m["y"], m["z"])
+        a.setH(m["h"])
+        a.setP(m.get("p", 0.0))
+        a.setR(m.get("rr", 0.0))
+        self.h = m["h"]
+        if self.an is not None and m.get("an"):
+            # solo lo nuevo: repintar cada cuadro con el ultimo mensaje
+            # (100-200 ms viejo) devolvia el vault y el tropiezo atras
+            if m is not getattr(self, "_ultimo", None):
+                self._ultimo = m
+                self.an.aplicar_red(m["an"])
+        elif self.an is not None:
+            # el otro PC no trae el mezclador (otra version): su clip, en ciclo
+            clip = m.get("clip") or "idle"
+            self.an.ciclo(clip if self.an.tiene(clip) else "idle",
+                          PE.VELOCIDAD if clip == "correr" else 0.0, fundido=0.2)
+        else:
+            versus.poner_clip(a, m.get("clip"))
+
+    # ---- la maquina ----
+
+    def _alto(self, p):
+        """La altura del cuerpo: el arco del salto sobre el suelo del que
+        despego, o el suelo (mas lo que le falte al clip en lo mas alto)."""
+        a = p.accion
+        if a is not None and a["tipo"] in ("saltar", "brecha") and p.despegue is not None:
+            return plaza.suelo(*p.despegue) + max(0.0, p.sy)
+        y = plaza.suelo(p.sx, p.sz)
+        if a is not None and a["tipo"] == "trepar":
+            alto = plaza.ALTO_OBSTACULO.get(a.get("objeto"), (0.0, 1.1))[1]
+            if self.an is not None and self.an.tiene("vallar"):
+                extra = max(0.0, alto - float(animador.marcas_de(self.actor, "vallar").get("alto", 1.05)))
+            else:
+                extra = alto + 0.15            # sin clip, el cuerpo entero salva la valla
+            cruce = PE.APOYO_VALLA + PE.MANO_VALLA / max(1.0, a["v"])
+            t = a["t"]
+            f = (0.5 * t / cruce if t <= cruce
+                 else 0.5 + 0.5 * (t - cruce) / max(0.05, PE.DURA_VALLA - cruce))
+            y += extra * math.sin(math.pi * max(0.0, min(1.0, f)))
+        return y
+
+    def paso(self, p, dt, mx, mz):
+        a = self.actor
+        if self.an is not None:
+            self.an.remoto = False
+        if p.acorralado:
+            # Contra los antidisturbios: se vuelve hacia Mateo, sin aire.
+            a.setPos(p.sx, plaza.suelo(p.sx, p.sz), p.sz)
+            objetivo = 180.0 - math.degrees(math.atan2(mx - p.sx, mz - p.sz))
+            self.h += _angulo(self.h, objetivo) * min(1.0, 6.0 * dt)
+            a.setH(self.h)
+            a.setR(0)
+            if self.an is not None:
+                self.an.quitar_accion(0.25)
+                self.an.ciclo("jadear" if self.an.tiene("jadear") else "idle", 0.0, fundido=0.4)
+            elif a.getCurrentAnim() != "idle":
+                a.loop("idle")
+            return
+        if self.an is None:
+            # Como antes: correr por la ruta y, en lo que pide, un arco o agachado.
+            alza, agachado = _parkour_sospechoso(p)
+            mundo.mover_actor(a, p.sx, p.sz, p.rumbo, True, corriendo=not agachado)
+            if (agachado and a.getCurrentAnim() != "agachado_caminar"
+                    and "agachado_caminar" in a.getAnimNames()):
+                a.setPlayRate(2.2, "agachado_caminar")
+                a.loop("agachado_caminar")
+            a.setY(plaza.suelo(p.sx, p.sz) + alza)
+            return
+        a.setPos(p.sx, self._alto(p), p.sz)
+        # La ruta dobla en seco en cada esquina: el cuerpo gira con su tiempo
+        # y se inclina hacia dentro, como Mateo.
+        objetivo = 180.0 - p.rumbo
+        giro = _angulo(self.h, objetivo) * min(1.0, 9.0 * dt)
+        self.h += giro
+        a.setH(self.h)
+        lateral = p.v * math.radians(-giro) / max(dt, 1e-4)
+        alabeo = math.degrees(math.atan2(lateral, PE.GRAVEDAD)) * PE.INCLINA_CURVA
+        alabeo = max(-PE.INCLINA_MAXIMA, min(PE.INCLINA_MAXIMA, alabeo)) if p.accion is None else 0.0
+        self.alabeo += (alabeo - self.alabeo) * min(1.0, 7.0 * dt)
+        a.setR(self.alabeo)
+        self._acciones(p, dt)
+        self._locomocion(p, dt, math.hypot(mx - p.sx, mz - p.sz))
+
+    def _posar(self, clip, cuadro, fundido=0.12):
+        n = self.actor.getAnimControl(clip).getNumFrames()
+        return self.an.accion_fase(clip, max(0.0, min(1.0, cuadro / max(1, n - 1))), fundido)
+
+    def _acciones(self, p, dt):
+        an, ac, acc = self.an, self.actor, p.accion
+        clave = (acc["tipo"], acc["id"]) if acc is not None else None
+        if clave != self.antes:
+            if self.antes is not None and self.antes[0] in ("saltar", "brecha"):
+                if an.tiene("aterrizar"):
+                    t0 = (animador.marca(ac, "aterrizar", "contacto", 0.0)
+                          / (ac.getAnimControl("aterrizar").getFrameRate() or 30.0))
+                    an.accion("aterrizar", fundido=0.05, t0=t0, peso=0.75, ritmo=1.15, salida=0.22)
+                elif an.tiene("saltar"):
+                    an.quitar_accion(0.12, fase=an.fase_tras("saltar"))
+            if acc is not None and acc["tipo"] == "trepar" and an.tiene("vallar"):
+                apoyo = animador.marca(ac, "vallar", "apoyo")
+                fps = ac.getAnimControl("vallar").getFrameRate() or 30.0
+                ritmo = (apoyo / fps) / PE.APOYO_VALLA if apoyo else 1.0
+                an.accion("vallar", fundido=0.08, ritmo=max(0.5, min(2.0, ritmo)), salida=0.2)
+            elif acc is not None and acc["tipo"] == "deslizar":
+                self.v_resbala = None
+            self.antes = clave
+        if acc is None:
+            return
+        tipo, t = acc["tipo"], acc["t"]
+        if tipo in ("saltar", "brecha") and an.tiene("saltar"):
+            n = ac.getAnimControl("saltar").getNumFrames()
+            d = animador.marca(ac, "saltar", "despegue", 0.0)
+            ap = animador.marca(ac, "saltar", "apice", 0.45 * (n - 1))
+            b = animador.marca(ac, "saltar", "busca_suelo", 0.8 * (n - 1))
+            sube = PE.IMPULSO_SALTO / PE.GRAVEDAD
+            if t < sube:
+                cuadro = d + (ap - d) * t / sube
+            else:
+                cuadro = ap + (b - ap) * (1.0 - max(0.0, min(1.0, p.sy / PE.ALTO_SALTO)))
+            self._posar("saltar", cuadro)
+        elif tipo == "trepar":
+            capa = an.accion_actual()
+            if capa is not None and capa.clip == "vallar" and t >= PE.APOYO_VALLA:
+                control = ac.getAnimControl("vallar")
+                apoyo = animador.marca(ac, "vallar", "apoyo", 0.0)
+                fin = animador.marca(ac, "vallar", "contacto", control.getNumFrames() - 1)
+                fps = control.getFrameRate() or 30.0
+                capa.ritmo = max(0.5, min(2.0, ((fin - apoyo) / fps)
+                                          / max(0.1, PE.DURA_VALLA - PE.APOYO_VALLA)))
+        elif tipo == "deslizar" and an.tiene("deslizar"):
+            n = ac.getAnimControl("deslizar").getNumFrames()
+            suelo = animador.marca(ac, "deslizar", "suelo", 0.25 * (n - 1))
+            levanta = animador.marca(ac, "deslizar", "levanta", 0.7 * (n - 1))
+            fase = acc["fase"]
+            if fase == "cae":
+                cuadro = suelo * min(1.0, t / PE.CAE_DESLIZ)
+            elif fase == "resbala":
+                if self.v_resbala is None:
+                    self.v_resbala = p.v
+                f = (self.v_resbala - p.v) / max(0.1, self.v_resbala - PE.LEVANTA_DESLIZ)
+                if p.s < acc["s_ob"] + acc["medio"] + 0.6:
+                    f = min(f, 0.9)                  # debajo de la persiana, tumbado
+                cuadro = suelo + (levanta - suelo) * max(0.0, min(1.0, f))
+            else:
+                f = (t - acc["t_levanta"]) / PE.DURA_LEVANTA
+                cuadro = levanta + (n - 1 - levanta) * max(0.0, min(1.0, f))
+            self._posar("deslizar", cuadro)
+            if fase == "levanta" and t - acc["t_levanta"] >= PE.DURA_LEVANTA - dt * 1.5:
+                an.quitar_accion(0.15, fase=an.fase_tras("deslizar"))
+
+    def _locomocion(self, p, dt, distancia):
+        an = self.an
+        v = max(0.5, p.v)
+        acc = p.accion
+        if acc is not None and acc["tipo"] == "agacharse":
+            an.ciclo("agachado_correr" if an.tiene("agachado_correr") else "agachado_caminar", v,
+                     fundido=0.25)
+            return
+        # Mira atras de vez en cuando si lo tienes cerca (no en un obstaculo).
+        self.mirar_en -= dt
+        if self.mirando > 0.0:
+            self.mirando -= dt
+        elif (self.mirar_en <= 0.0 and acc is None and distancia < self.MIRA_CERCA
+              and an.tiene("correr_mirando")):
+            self.mirando = self.azar.uniform(0.7, 1.15)
+            self.mirar_en = self.azar.uniform(1.6, 3.4) * (0.6 if distancia < 5.0 else 1.0)
+        objetivo = 1.0 if self.mirando > 0.0 and acc is None else 0.0
+        self.peso_mira += (objetivo - self.peso_mira) * min(1.0, 6.0 * dt)
+        corre = _suave((v - 2.0) / 1.6)
+        mira = self.peso_mira * corre
+        an.ciclos({"correr": corre * (1.0 - mira), "correr_mirando": mira,
+                   "caminar": 1.0 - corre}, v, fundido=0.22)
+
+    def lanzar(self):
+        """Lo que tira (la caja, la botella) sale por encima de su hombro."""
+        an = self.an
+        if an is None or not an.tiene("lanzar_atras"):
+            return
+        suelta = animador.marca(self.actor, "lanzar_atras", "suelta", None)
+        fps = self.actor.getAnimControl("lanzar_atras").getFrameRate() or 30.0
+        t0 = max(0.0, suelta / fps - 0.12) if suelta is not None else 0.0
+        an.accion("lanzar_atras", fundido=0.08, parte="tronco", t0=t0, salida=0.25)
+
+    def al_suelo(self):
+        """Quieto donde lo pillan, en el suelo (antes, si lo atrapaban a
+        media parabola, se quedaba flotando todo el dialogo)."""
+        p = cl.partida.persecucion
+        a = self.actor
+        a.setPos(p.sx, plaza.suelo(p.sx, p.sz), p.sz)
+        a.setR(0)
+        if self.an is not None:
+            self.an.quitar_accion(0.1)
+
+    def atrapado(self):
+        """Lo frenan por la mochila: el tiron, el traspie y se vuelve
+        («atrapado»: la cadera gira 75 grados a su derecha entre «traspie» y
+        «girado»; el nodo pone lo que falta para quedar de cara). Devuelve
+        los segundos hasta «traspie» y lo que dura el giro, o None sin clip."""
+        if self.an is None or not self.an.tiene("atrapado"):
+            if self.an is not None:
+                self.an.ciclo("jadear" if self.an.tiene("jadear") else "idle", 0.0, fundido=0.25)
+            return None
+        self.an.accion("atrapado", fundido=0.08, mantener=True)
+        self.an.ciclo("jadear" if self.an.tiene("jadear") else "idle", 0.0, fundido=0.25)
+        fps = self.actor.getAnimControl("atrapado").getFrameRate() or 30.0
+        traspie = animador.marca(self.actor, "atrapado", "traspie", 9.0) / fps
+        girado = animador.marca(self.actor, "atrapado", "girado", 20.0) / fps
+        return traspie, max(0.1, girado - traspie)
+
+
+# Lo que gira el nodo del atrapado (a su derecha) para quedar de cara a
+# Mateo: el clip ya gira la cadera 75 de los 180 (contrato de «clips»).
+GIRO_ATRAPADO = -105.0
+
+
 def capturar():
     """La captura, sin violencia: Mateo se lanza, lo frena por la mochila y
-    se la quita. Luego hablan: la pista de quien esta detras."""
-    from direct.interval.IntervalGlobal import Func as FuncIv, LerpPosInterval, Sequence
+    se la quita. Luego hablan: la pista de quien esta detras.
+
+    Con el clip «agarrar» (la persecucion con mezclador) Mateo llega justo
+    cuando sus manos alcanzan la mochila (la marca «agarre»), la mochila
+    pasa a su mano en ese cuadro y la sostiene; el de la mochila se queda
+    frenado («atrapado»), en el suelo, y luego se vuelve hacia el. Sin el
+    clip, como antes."""
+    from direct.interval.IntervalGlobal import (Func as FuncIv, LerpHprInterval,
+                                                LerpPosInterval, Sequence, Wait)
     cl.persigue = False
+    j = cl.jugador
     cerrar_libre()
     cl.estado = "juego"
     p = cl.partida.persecucion
@@ -2507,22 +2797,78 @@ def capturar():
     mx, my, mz = cl.actor.getPos()
     dx, dz = p.sx - mx, p.sz - mz
     largo = max(0.1, math.hypot(dx, dz))
-    destino = Vec3(p.sx - dx / largo * 0.75, plaza.suelo(p.sx, p.sz), p.sz - dz / largo * 0.75)
+    cuerpo = getattr(cl, "cuerpo_sosp", None)
+    if cuerpo is not None:
+        cuerpo.al_suelo()
+    else:
+        sosp.setY(plaza.suelo(p.sx, p.sz))
     cl.actor.setH(180.0 - math.degrees(math.atan2(dx, dz)))
-    sosp.setH(180.0 - math.degrees(math.atan2(-dx, -dz)))
-    animar("correr")
-    cl.captura = Sequence(LerpPosInterval(cl.actor, 0.35, destino),
-                          FuncIv(audio.efecto, "hecho"),
-                          FuncIv(plaza.entregar_mochila, cl.actor),
-                          FuncIv(animar, "celular"),
-                          FuncIv(mundo.reaccionar, sosp, "pensar"))
+    de_cara = 180.0 - math.degrees(math.atan2(-dx, -dz))
+    an = j.animador if j is not None else None
+    if an is not None and an.tiene("agarrar"):
+        fps = cl.actor.getAnimControl("agarrar").getFrameRate() or 30.0
+        agarre = animador.marca(cl.actor, "agarrar", "agarre", 0.4 * fps) / fps
+        # un palmo mas que el alcance del clip: el tiron de «atrapado» lo
+        # echa hacia Mateo y los cuerpos se metian uno en otro
+        alcance = float(animador.marcas_de(cl.actor, "agarrar").get("alcance", 0.62)) + 0.15
+        llega = max(0.25, min(0.6, agarre))
+        destino = Vec3(p.sx - dx / largo * alcance, plaza.suelo(p.sx, p.sz),
+                       p.sz - dz / largo * alcance)
+        # De espaldas a Mateo (la mochila hacia el) hasta que lo agarra.
+        sosp.setH(180.0 - math.degrees(math.atan2(dx, dz)))
+        an.accion("agarrar", fundido=0.08, ritmo=agarre / llega, mantener=True)
+        mano = mundo._pie(cl.actor, "RightHand")
+        mano = cl.actor.exposeJoint(None, "modelRoot", mano) if mano else None
+        cl.mano_captura = mano            # se suelta al acabar (cerrar_minijuegos)
+        giro = cuerpo.atrapado() if cuerpo is not None and cuerpo.an is not None             and cuerpo.an.tiene("atrapado") else None
+        if giro is not None:
+            # El clip ya gira la cadera 75 grados a su derecha: el nodo, lo que
+            # falta (105), en el mismo tramo (de «traspie» a «girado»).
+            cuerpo.atrapado_pendiente = True
+            traspie, dura = giro
+            vuelta = Sequence(Wait(traspie), LerpHprInterval(
+                sosp, dura, (sosp.getH() + GIRO_ATRAPADO, 0, 0)))
+        else:
+            vuelta = Sequence(Wait(0.7), LerpHprInterval(sosp, 0.7, (de_cara, 0, 0)))
+        if cuerpo is not None and cuerpo.an is not None and giro is not None:
+            # el clip «atrapado» empieza cuando lo agarra, no antes
+            cuerpo.an.quitar_accion(0.05)
+            cuerpo.an.ciclo("correr", PE.CANSADO, fundido=0.1)
+        cl.captura = Sequence(LerpPosInterval(cl.actor, llega, destino),
+                              FuncIv(audio.efecto, "hecho"),
+                              FuncIv(plaza.entregar_mochila, cl.actor, mano),
+                              FuncIv(cuerpo.atrapado) if giro is not None else Wait(0.0),
+                              vuelta)
+    else:
+        destino = Vec3(p.sx - dx / largo * 0.75, plaza.suelo(p.sx, p.sz), p.sz - dz / largo * 0.75)
+        sosp.setH(de_cara)
+        if j is not None and j.animador is not None:
+            j.soltar_animador("correr")
+        if cuerpo is not None:
+            cuerpo.soltar("idle")
+        animar("correr")
+        cl.captura = Sequence(LerpPosInterval(cl.actor, 0.35, destino),
+                              FuncIv(audio.efecto, "hecho"),
+                              FuncIv(plaza.entregar_mochila, cl.actor),
+                              FuncIv(animar, "celular"),
+                              FuncIv(mundo.reaccionar, sosp, "pensar"))
     cl.captura.start()
     # Por encima del hombro de Mateo: detras queda el pasillo, siempre
     # despejado (de lado, la camara podia caer dentro de un edificio).
     camera.fov = 46
-    camera.position = Vec3(mx - dx / largo * 2.6 + dz / largo * 0.7, destino.y + 1.75,
-                           mz - dz / largo * 2.6 - dx / largo * 0.7)
-    mundo.mirar(Vec3(p.sx, destino.y + 1.3, p.sz))
+    if an is not None and an.tiene("agarrar"):
+        # Los dos a 0,6 m: por encima del hombro, Mateo tapaba al otro. Se
+        # abre de lado (dentro del pasillo) y mira al punto entre los dos.
+        cx, cz = (destino.x + p.sx) / 2, (destino.z + p.sz) / 2
+        lado = 1.0 if distancia_a_ruta((cx + dz / largo, cz - dx / largo), p.ruta) <=             distancia_a_ruta((cx - dz / largo, cz + dx / largo), p.ruta) else -1.0
+        # plano fijo de perfil: los dos de lado, el atrapado a la vista
+        camera.position = Vec3(cx - dx / largo * 0.8 + dz / largo * 3.1 * lado, destino.y + 1.5,
+                               cz - dz / largo * 0.8 - dx / largo * 3.1 * lado)
+        mundo.mirar(Vec3(cx, destino.y + 1.2, cz))
+    else:
+        camera.position = Vec3(mx - dx / largo * 2.6 + dz / largo * 0.7, destino.y + 1.75,
+                               mz - dz / largo * 2.6 - dx / largo * 0.7)
+        mundo.mirar(Vec3(p.sx, destino.y + 1.3, p.sz))
     hud = cl.hud_persecucion
     hud.poner(p.restante, p.distancia, 1.0, p.progreso(), "CAPTURA", "", None)
     hud.avisar("¡MOCHILA RECUPERADA!", E.RESTREPO, 1.6)
@@ -2536,6 +2882,8 @@ def capturar():
 
 def escapo(motivo=None):
     cl.persigue = False
+    if cl.jugador is not None:
+        cl.jugador.jadea = True       # se para sin aire (si el modelo trae «jadear»)
     cerrar_libre()
     cl.estado = "juego"
     audio.efecto("tiempo_agotado")
@@ -2565,6 +2913,9 @@ def cerrar_minijuegos():
     cl.duelo_fin = None
     if cl.jugador is not None:
         cl.jugador.con_impulso = False
+        # la fisica de la carrera y el mezclador son solo de la persecucion
+        cl.jugador.fisica = cl.jugador.jadea = False
+        cl.jugador.soltar_animador("idle")
         cl.jugador.pasillo = None
         cl.jugador.rail = None
         cl.jugador.obstaculos_camara = []
@@ -2573,6 +2924,14 @@ def cerrar_minijuegos():
     if cl.captura is not None:
         cl.captura.finish()
         cl.captura = None
+    if getattr(cl, "cuerpo_sosp", None) is not None:
+        cl.cuerpo_sosp.soltar("idle")
+        cl.cuerpo_sosp = None
+    if getattr(cl, "mano_captura", None) is not None:
+        # la mano que sujetaba la mochila (y la mochila con ella): si no,
+        # al repetir la persecucion Mateo salia con la vieja en la mano
+        cl.mano_captura.removeNode()
+        cl.mano_captura = None
 
 
 def cerrar_minijuego():
@@ -4257,8 +4616,9 @@ def input(tecla):
             cl.jugador.saltar()
         elif tecla == "c":
             cl.jugador.deslizar()
-        elif tecla == "e" and cl.partida.persecucion.recuperar(cl.actor.getX(),
-                                                                cl.actor.getZ()):
+        elif (tecla == "e" and cl.jugador.y_aire is None and cl.jugador.trepa is None
+              and cl.persigue
+              and cl.partida.persecucion.recuperar(cl.actor.getX(), cl.actor.getZ())):
             capturar()
         elif tecla == "escape":
             abrir_pausa()                 # como en cualquier otro sitio

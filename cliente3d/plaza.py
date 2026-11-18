@@ -1582,13 +1582,21 @@ def vivir_persecucion(dt, eventos):
         vuelo["objeto"].setH(f * 540)
 
 
-def entregar_mochila(actor_mateo):
-    """La captura: la mochila pasa de su espalda a las manos de Mateo."""
+def entregar_mochila(actor_mateo, mano=None):
+    """La captura: la mochila pasa de su espalda a las manos de Mateo.
+
+    Con mano (el hueso de su mano, expuesto) se cuelga de ella tal como
+    esta en ese cuadro: el clip «agarrar» pone ahi las manos en la mochila,
+    asi que desde entonces la lleva el."""
     mochila = _PLAZA.get("mochila")
-    if mochila is not None:
-        mochila.wrtReparentTo(actor_mateo)
-        mochila.setPos(0, -0.55, -0.35)
-        mochila.setHpr(0, 0, 0)
+    if mochila is None:
+        return
+    if mano is not None:
+        mochila.wrtReparentTo(mano)
+        return
+    mochila.wrtReparentTo(actor_mateo)
+    mochila.setPos(0, -0.55, -0.35)
+    mochila.setHpr(0, 0, 0)
 
 
 def terminar_minijuego():

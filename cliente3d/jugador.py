@@ -20,6 +20,11 @@ import random
 from panda3d.core import LMatrix3f, LMatrix4f, LVector3f, TransparencyAttrib, rotate_to
 from ursina import Vec3, camera, held_keys, mouse
 
+# La fisica de la carrera de la persecucion (gravedad, arrancada, vault,
+# deslizamiento, golpes) es la de las reglas: la misma para Mateo, para el
+# de la mochila de la maquina y para el que lleva otro jugador en red.
+import persecucion as F
+
 RADIO = 0.34                 # el bulto del personaje visto desde arriba
 
 VELOCIDAD = 2.7              # metros por segundo
@@ -199,6 +204,18 @@ TREPAR_ALTO, DURA_TREPAR, ALCANCE_TREPAR, VELOCIDAD_TREPAR = 1.3, 0.5, 1.5, 5.0
 IMPULSO_MAX, RAMPA_IMPULSO = 1.1, 2.5
 # Un golpe: LENTO s a una fraccion de la velocidad, y la camara tiembla.
 LENTO, FACTOR_LENTO, TEMBLOR = 1.0, 0.45, 0.35
+# La punta de Mateo en la persecucion: la de antes al cabo de la rampa.
+# Con la fisica de la carrera (fisica=True) no hay rampa ni salto de
+# velocidad: se arranca desde parado hacia esta punta (persecucion.ARRANCADA).
+PUNTA = VELOCIDAD_CORRER + IMPULSO_MAX
+# En el aire apenas se corrige: un pie que no toca suelo no empuja.
+CONTROL_AIRE = 1.2           # m/s2 de lado
+# Esquivar lo que cae o lanzan: un paso de lado rapido.
+ESQUIVA, DURA_ESQUIVA = 2.2, 0.3
+# Al arrancar se va hacia delante: grados por m/s2 de aceleracion, hasta un tope.
+INCLINA_ACELERA, INCLINA_ACELERA_MAX = 1.1, 7.0
+# Lo que cabecea el cuerpo en un golpe cuando el modelo no trae «tropezar».
+TUMBO = 15.0
 # A que velocidad avanza el personaje en cada estado. Sirve para que el
 # clip se reproduzca al ritmo al que de verdad pisa el suelo: los
 # numeros de CLIPS eran multiplicadores a ojo y dejaban los pies
@@ -254,6 +271,24 @@ def _choque(ox, oz, dx, dz, rect):
 
 assert _choque(0, 0, 0, -1, (-1, 1, -3, -2)) == 2 - MARGEN_PARED
 assert _choque(0, 0, 0, 1, (-1, 1, -3, -2)) is None
+
+
+def _cruce_rayo(ox, oz, dx, dz, rect):
+    """(entra, sale): a que distancia por el rayo entra y sale del
+    rectangulo (sin margen), o None si no lo cruza por delante."""
+    x0, x1, z0, z1 = rect
+    t0, t1 = -math.inf, math.inf
+    for o, d, lo, hi in ((ox, dx, x0, x1), (oz, dz, z0, z1)):
+        if abs(d) < 1e-9:
+            if not lo <= o <= hi:
+                return None
+            continue
+        a, b = sorted(((lo - o) / d, (hi - o) / d))
+        t0, t1 = max(t0, a), min(t1, b)
+    return (t0, t1) if t0 <= t1 and t1 > 0 else None
+
+
+assert _cruce_rayo(0, 0, 0, 1, (-1, 1, 2, 3)) == (2, 3)
 
 
 _BOTONES = {}
@@ -396,6 +431,31 @@ class Jugador:
         # Mateo. Con la camara (que mira por delante, para doblar antes) W
         # empujaba en diagonal contra las vallas en las esquinas.
         self.marcha = None
+        # La fisica de la carrera (solo en la persecucion; fuera, todo como
+        # siempre): la velocidad de verdad en el suelo (vector), el vault y el
+        # deslizamiento en curso, el desequilibrio de un golpe y las
+        # inclinaciones del cuerpo. Ver _correr_fisico.
+        self.fisica = False
+        self.vel_x = self.vel_z = 0.0
+        self.tropiezo = 0.0
+        self._valla = None
+        self._desliz = None
+        self._vy0 = 0.0
+        self._cumbre = 0.0
+        self._giro = 0.0               # rad/s a los que gira la marcha ahora
+        self._acelera = 0.0            # m/s2 hacia delante ahora
+        self._alabeo = self._cabeceo = 0.0
+        self._tumbo = 0.0
+        self._tumbo_lado = 1.0
+        self._esquiva = 0.0
+        self._esquiva_lado = 0.0
+        self.lado_input = 0
+        self.amenaza = False           # hay algo que esquivar (lo pone la persecucion)
+        # El cuerpo en la persecucion: el mezclador de clips (animador.py).
+        # None = los clips de siempre con loop.
+        self.animador = None
+        self._evento_cuerpo = []       # lo que paso este cuadro (salto, aterriza...)
+        self._fuera_de_valla = None
 
     def _bloqueado(self, x, z):
         """True si el personaje no cabe ahi.
@@ -445,7 +505,12 @@ class Jugador:
         if (self.salto is not None or self.trepa is not None or self.desliz is not None
                 or self.cubierta is not None):
             return None
-        if self._trepable_delante():
+        if self.fisica:
+            valla = self._valla_delante() if self.y_aire is None else None
+            if valla is not None:
+                self._empezar_valla(valla)
+                return "trepa"
+        elif self._trepable_delante():
             self.trepa = 0.0
             self._animar("deslizar")              # recogido, como al saltar una valla
             return "trepa"
@@ -453,9 +518,11 @@ class Jugador:
             return None                           # ya cayendo: no se salta del aire
         self.salto = 0.0
         self.y_aire = self.actor.getY()
-        self.vy = IMPULSO_SALTO
+        self.vy = F.IMPULSO_SALTO if self.fisica else IMPULSO_SALTO
+        self._vy0, self._cumbre = self.vy, self.y_aire
         self.t_aire = 0.0
         self.aterriza = 0.0
+        self._evento_cuerpo.append("salto")
         _sonar("k_aire", 0.35)
         return "salto"
 
@@ -474,14 +541,52 @@ class Jugador:
         return False
 
     def golpe(self):
-        """Le dieron o se estrello: frena un momento y la camara tiembla."""
+        """Le dieron o se estrello: frena un momento y la camara tiembla.
+        Con la fisica de la carrera desequilibra de verdad: se queda con
+        parte de la velocidad, no puede acelerar mientras tropieza y luego
+        se recupera como en una arrancada."""
         self.lento = LENTO
         self.temblor = TEMBLOR
         self.impulso = 0.0
+        if self.fisica:
+            self.vel_x *= F.GOLPE_QUEDA
+            self.vel_z *= F.GOLPE_QUEDA
+            self.tropiezo = F.TROPIEZO
+            self._tumbo = 1.0
+            self._tumbo_lado = random.choice((-1.0, 1.0))
+            self._evento_cuerpo.append("golpe")
+
+    def parar(self):
+        """Quieto de golpe (al volver a la plataforma tras caer al hueco)."""
+        self.vel_x = self.vel_z = 0.0
+
+    def velocidad(self):
+        """Los m/s a los que va de verdad por el suelo (fisica de la carrera)."""
+        return math.hypot(self.vel_x, self.vel_z)
+
+    def esquivar(self, lado):
+        """Un paso rapido de lado (A/D con algo encima): solo en la carrera."""
+        if not self.fisica or self._esquiva > 0 or self.y_aire is not None \
+                or self.trepa is not None or self.desliz is not None:
+            return False
+        self._esquiva, self._esquiva_lado = DURA_ESQUIVA, (1.0 if lado > 0 else -1.0)
+        self._evento_cuerpo.append("esquiva")
+        return True
 
     def altura_trepa(self):
         if self.trepa is None:
             return 0.0
+        if self.fisica and self._valla is not None:
+            # Con el clip «vallar» la cadera la sube el clip (hecho para una
+            # valla de su alto): aqui solo lo que le falta a lo mas alto (el
+            # coche). Sin clip, el cuerpo entero salva la valla en un arco
+            # cuya cumbre cae justo encima, no a mitad del tiempo.
+            v = self._valla
+            if self.trepa <= v["t_cruce"]:
+                f = 0.5 * self.trepa / max(1e-3, v["t_cruce"])
+            else:
+                f = 0.5 + 0.5 * (self.trepa - v["t_cruce"]) / max(1e-3, v["dura"] - v["t_cruce"])
+            return v["alza"] * math.sin(math.pi * max(0.0, min(1.0, f)))
         return TREPAR_ALTO * math.sin(math.pi * min(1.0, self.trepa / DURA_TREPAR))
 
     def deslizar(self):
@@ -490,6 +595,17 @@ class Jugador:
         if (self.desliz is not None or self.salto is not None or self.trepa is not None
                 or not (self.corriendo or self.moviendose or held_keys["w"])):
             return False
+        if self.fisica:
+            if self.y_aire is not None:
+                return False
+            # Se tira hacia delante con lo que llevaba y un empujon: rapido
+            # al entrar; luego el rozamiento lo frena (_desliz_paso).
+            ux, uz = self._direccion()
+            v = max(F.DESLIZ_MINIMO, min(F.DESLIZ_MAXIMO, self.velocidad() * F.ENTRA_DESLIZ))
+            v *= self.factor
+            self.vel_x, self.vel_z = ux * v, uz * v
+            self._desliz = {"fase": "cae", "t_levanta": None, "v0": v}
+            self._evento_cuerpo.append("desliz")
         self.desliz = 0.0
         return True
 
@@ -715,6 +831,601 @@ class Jugador:
             self.actor.setP(-inclina)
 
     # ----------------------------------------------------------------
+    #  la carrera de la persecucion (fisica)
+    # ----------------------------------------------------------------
+    # Solo con fisica=True (la persecucion: Mateo, y el de la mochila cuando
+    # lo lleva otro jugador). La referencia es la huida de Detroit: arranca
+    # desde parado, no gira en seco (y se inclina hacia dentro de la curva),
+    # en el aire conserva lo que llevaba, el vault no le quita el impulso
+    # (pierde algo), el deslizamiento entra rapido y frena por rozamiento,
+    # un golpe lo desequilibra y caer de alto pesa mas. Las constantes son
+    # las de las reglas (persecucion.py), comunes con la maquina.
+
+    def _direccion(self):
+        """Hacia donde va: la de su velocidad si se mueve; si no, la del cuerpo."""
+        v = self.velocidad()
+        if v > 0.3:
+            return self.vel_x / v, self.vel_z / v
+        return self._adelante()
+
+    def _correr_fisico(self, avance, lado, dt):
+        self.lento = max(0.0, self.lento - dt)
+        self.tropiezo = max(0.0, self.tropiezo - dt)
+        self._tumbo = max(0.0, self._tumbo - dt / 0.75)
+        v_antes = self.velocidad()
+        if self.trepa is not None:
+            self._valla_paso(dt)
+        elif self.desliz is not None:
+            self._desliz_paso(dt)
+        elif self.y_aire is not None:
+            self._aire_paso(lado, dt)
+        else:
+            self._suelo_paso(avance, lado, dt)
+        acelera = (self.velocidad() - v_antes) / max(dt, 1e-4)
+        self._acelera += (acelera - self._acelera) * min(1.0, 8.0 * dt)
+        self._vertical(dt)
+        self._inclinar(dt)
+        # La lente de la camara se abre con la velocidad (antes, con la rampa).
+        self.impulso = RAMPA_IMPULSO * max(0.0, min(1.0, (self.velocidad() - VELOCIDAD_CORRER)
+                                                     / IMPULSO_MAX))
+
+    def _suelo_paso(self, avance, lado, dt):
+        x, _, z = self.actor.getPos()
+        rad = math.radians(self.marcha(x, z) if self.marcha else self.yaw)
+        fx, fz = math.sin(rad), math.cos(rad)
+        rx, rz = math.cos(rad), -math.sin(rad)
+        dx, dz = fx * avance + rx * lado, fz * avance + rz * lado
+        largo = math.hypot(dx, dz)
+        v = self.velocidad()
+        ux, uz = self._direccion()
+        self._giro = 0.0
+        if largo < 1e-6:
+            punta, estado = 0.0, ("correr" if v > 2.0 else "quieto")
+            self.sin_andar += dt
+        else:
+            self.sin_andar = 0.0
+            qx, qz = dx / largo, dz / largo
+            if self.agachado and self.corriendo:
+                punta, estado = PUNTA * (1.0 - F.PIERDE_AGACHADO), "agachado_correr"
+            elif self.agachado:
+                punta, estado = VELOCIDAD_AGACHADO, "agachado_andar"
+            elif self.corriendo:
+                punta, estado = (PUNTA if self.con_impulso else VELOCIDAD_CORRER), "correr"
+            else:
+                punta, estado = VELOCIDAD, "andar"
+            punta *= self.factor
+            if v < 0.6:
+                ux, uz = qx, qz                    # parado o casi: se encara donde sea
+            else:
+                # Con inercia: la marcha gira hacia donde se quiere ir lo que
+                # deja la aceleracion lateral, y un giro cerrado frena (se
+                # planta el pie), como en las esquinas de la referencia.
+                actual = math.atan2(ux, uz)
+                dif = (math.atan2(qx, qz) - actual + math.pi) % (2 * math.pi) - math.pi
+                tope = min(F.GIRO_MAXIMO, F.ACELERACION_LATERAL / v) * dt
+                giro = max(-tope, min(tope, dif))
+                ux, uz = math.sin(actual + giro), math.cos(actual + giro)
+                self._giro = giro / max(dt, 1e-4)
+                cerrado = max(0.0, min(1.0, (abs(dif) - 0.35) / (math.pi / 2 - 0.35)))
+                punta *= 1.0 - (1.0 - F.FRENA_GIRO) * cerrado
+        if self.tropiezo > 0.0 and punta > v:
+            v_nueva = v                            # desequilibrado: el pie no empuja
+        else:
+            v_nueva = F.acercar_velocidad(v, punta, dt)
+        self.vel_x, self.vel_z = ux * v_nueva, uz * v_nueva
+        ex = ez = 0.0
+        if self._esquiva > 0.0:
+            # el paso de lado, encima de la carrera (y se apaga solo)
+            k = self._esquiva / DURA_ESQUIVA
+            ex, ez = uz * ESQUIVA * k * self._esquiva_lado, -ux * ESQUIVA * k * self._esquiva_lado
+            self._esquiva = max(0.0, self._esquiva - dt)
+        mx, mz = (self.vel_x + ex) * dt, (self.vel_z + ez) * dt
+        hecho = self._desplazar(mx, mz)
+        self._choque_frena(mx, mz, hecho, dt, libre=ex == 0.0 and ez == 0.0)
+        self.moviendose = abs(hecho[0]) + abs(hecho[1]) > 1e-4
+        if not self.moviendose and largo < 1e-6:
+            self.corriendo = False
+        if v_nueva > 0.3:
+            objetivo = 180.0 - math.degrees(math.atan2(ux, uz))
+            self.rumbo += _angulo_corto(self.rumbo, objetivo) * min(1.0, VELOCIDAD_GIRO * dt)
+            self.actor.setH(self.rumbo)
+        self._animar(estado)
+
+    def _aire_paso(self, lado, dt):
+        """En el aire: lo que llevaba (un pie que no toca suelo no empuja),
+        con un poco de correccion de lado."""
+        x, _, z = self.actor.getPos()
+        rad = math.radians(self.marcha(x, z) if self.marcha else self.yaw)
+        self.vel_x += math.cos(rad) * lado * CONTROL_AIRE * dt
+        self.vel_z += -math.sin(rad) * lado * CONTROL_AIRE * dt
+        mx, mz = self.vel_x * dt, self.vel_z * dt
+        hecho = self._desplazar(mx, mz, rodear=False)
+        self._choque_frena(mx, mz, hecho, dt)
+        self.moviendose = abs(hecho[0]) + abs(hecho[1]) > 1e-4
+
+    def _valla_paso(self, dt):
+        """El vault: hasta apoyar la mano, a la velocidad que lleva la mano
+        justo encima de la valla; luego, con lo que conserva."""
+        v = self._valla
+        self.trepa += dt
+        rapidez = v["v_pre"] if self.trepa < v["t_apoyo"] else v["v_post"]
+        ux, uz = v["dir"]
+        self.vel_x, self.vel_z = ux * rapidez, uz * rapidez
+        self._desplazar(ux * rapidez * dt, uz * rapidez * dt, rodear=False)
+        self.moviendose = True
+        if self.trepa >= v["dura"]:
+            self.trepa = None
+            self.vel_x, self.vel_z = ux * v["v_post"], uz * v["v_post"]
+            self._evento_cuerpo.append("fin_valla")
+
+    def _desliz_paso(self, dt):
+        """Deslizarse: cae al suelo, resbala frenando por rozamiento y se
+        levanta cuando va despacio; debajo de una barrera no se levanta
+        (sigue arrastrandose hasta salir)."""
+        d = self._desliz
+        self.desliz += dt
+        v = self.velocidad()
+        ux, uz = self._direccion()
+        x, _, z = self.actor.getPos()
+        debajo = self._bajo_barrera(x, z) or self._bajo_barrera(x + ux * 0.6, z + uz * 0.6)
+        if d["fase"] == "cae" and self.desliz >= F.CAE_DESLIZ:
+            d["fase"], d["v_resbala"] = "resbala", v
+        if d["fase"] == "resbala":
+            v = max(F.ARRASTRE_DESLIZ if debajo else 0.0, v - F.ROCE_DESLIZ * dt)
+            if v <= F.LEVANTA_DESLIZ * self.factor and not debajo:
+                d["fase"], d["t_levanta"] = "levanta", self.desliz
+        elif d["fase"] == "levanta":
+            punta = (PUNTA if self.con_impulso else VELOCIDAD_CORRER) * self.factor
+            v = F.acercar_velocidad(v, punta, dt)
+            if self.desliz - d["t_levanta"] >= F.DURA_LEVANTA:
+                self.desliz = None
+                self._evento_cuerpo.append("fin_desliz")
+        d["debajo"] = debajo
+        self.vel_x, self.vel_z = ux * v, uz * v
+        mx, mz = self.vel_x * dt, self.vel_z * dt
+        hecho = self._desplazar(mx, mz)          # rodea lo pequeño (en el callejon se clavaba)
+        self._choque_frena(mx, mz, hecho, dt)
+        self.moviendose = self.corriendo = True
+        if self.desliz is None:
+            self._desliz = None
+
+    def _vertical(self, dt):
+        """La altura: el suelo, o la gravedad de verdad si esta en el aire."""
+        x, y, z = self.actor.getPos()
+        piso = self._piso(x, z)
+        if self.y_aire is None and self.trepa is None and y + self._hundido_puesto - piso > CAIDA_MINIMA:
+            # Se acabo el suelo (el borde de una plataforma): a caer. Caer no
+            # es saltar (salto sigue en None).
+            self.y_aire, self.vy, self.t_aire = y + self._hundido_puesto, 0.0, 0.0
+            self._vy0, self._cumbre = 0.0, self.y_aire
+            self._evento_cuerpo.append("cae")
+        if self.y_aire is not None:
+            self.t_aire += dt
+            if self.salto is not None:
+                self.salto += dt
+            # exacto con la gravedad constante (Euler bajaba la cumbre 6 cm)
+            self.y_aire += self.vy * dt - 0.5 * F.GRAVEDAD * dt * dt
+            self.vy -= F.GRAVEDAD * dt
+            self._cumbre = max(self._cumbre, self.y_aire)
+            if self.y_aire <= piso:
+                self._aterrizar_fisico(max(0.0, -self.vy))
+                self.y_aire, self.vy, self.salto = None, 0.0, None
+        if self.aterriza > 0.0:
+            self.aterriza = max(0.0, self.aterriza - dt)
+        y = self.y_aire if self.y_aire is not None else piso + self.altura_trepa()
+        # Sin clip «aterrizar», lo que ceden las rodillas lo pone el nodo.
+        self._hundido_puesto = self._hundido_fisico() if not self._clip("aterrizar") else 0.0
+        self.actor.setY(y - self._hundido_puesto)
+
+    _hundido_puesto = 0.0
+
+    def _hundido_fisico(self):
+        """Lo que baja la cadera al aterrizar (sin clip «aterrizar»), con las
+        medidas de la referencia: 0,12 m tras un salto normal y 0,35-0,4 m
+        cayendo de la plataforma de 1 m."""
+        if self.aterriza <= 0.0:
+            return 0.0
+        total = ATERRIZAJE * (0.7 + 0.3 * self.fuerza_aterriza)
+        f = 1.0 - self.aterriza / total
+        pico = 0.12 + 0.26 * max(0.0, min(1.0, (self.fuerza_aterriza - 1.0) / 0.6))
+        return pico * math.sin(math.pi * f) * (1.0 - f) / 0.385
+
+    def _aterrizar_fisico(self, velocidad):
+        """Tocar suelo: amortigua segun lo rapido que se llega (y pierde algo
+        de velocidad si es fuerte)."""
+        if velocidad < 1.2:
+            return                                # un escalon: ni se nota
+        k = min(1.6, velocidad / F.IMPULSO_SALTO)
+        self.fuerza_aterriza = k
+        self.aterriza = ATERRIZAJE * (0.7 + 0.3 * k)
+        conserva = F.frenado_aterrizaje(velocidad)
+        self.vel_x *= conserva
+        self.vel_z *= conserva
+        self.temblor = max(self.temblor, 0.10 * k)
+        self._evento_cuerpo.append("aterriza")
+        _sonar("aterriza", min(1.0, 0.45 + 0.35 * k))
+
+    def _inclinar(self, dt):
+        """El cuerpo entero: hacia dentro de las curvas, hacia delante al
+        arrancar y, si el modelo no trae los clips, en el salto y en el golpe."""
+        en_suelo = self.y_aire is None and self.trepa is None and self.desliz is None
+        v = self.velocidad()
+        alabeo = 0.0
+        if en_suelo:
+            lateral = v * self._giro                       # m/s2 hacia dentro
+            alabeo = math.degrees(math.atan2(lateral, F.GRAVEDAD)) * F.INCLINA_CURVA
+            alabeo = max(-F.INCLINA_MAXIMA, min(F.INCLINA_MAXIMA, alabeo))
+            if self._esquiva > 0.0:
+                alabeo -= 9.0 * self._esquiva_lado * self._esquiva / DURA_ESQUIVA
+        cabeceo = 0.0
+        if en_suelo and v > 1.0:
+            cabeceo = max(0.0, min(INCLINA_ACELERA_MAX, self._acelera * INCLINA_ACELERA))
+        if self._tumbo > 0.0 and not self._clip("tropezar"):
+            f = 1.0 - self._tumbo                          # 0 al golpe .. 1 recuperado
+            cabeceo += TUMBO * math.sin(math.pi * min(1.0, f * 1.6)) * (1.0 - f)
+            alabeo += 6.0 * self._tumbo_lado * math.sin(math.pi * f) * (1.0 - f)
+        if not self._clip("saltar"):
+            if self.y_aire is not None and self.trepa is None and self.desliz is None:
+                f = min(1.0, self.t_aire / F.TIEMPO_SALTO)
+                cabeceo += INCLINA_AIRE * math.sin(math.pi * min(1.0, 0.25 + 0.75 * f))
+            elif self.aterriza > 0.0:
+                total = ATERRIZAJE * (0.7 + 0.3 * self.fuerza_aterriza)
+                f = 1.0 - self.aterriza / total
+                cabeceo += INCLINA_ATERRIZA * min(1.0, self.fuerza_aterriza) * math.sin(math.pi * f)
+        self._alabeo += (alabeo - self._alabeo) * min(1.0, 7.0 * dt)
+        self._cabeceo += (cabeceo - self._cabeceo) * min(1.0, 12.0 * dt)
+        self.actor.setP(-self._cabeceo)
+        self.actor.setR(self._alabeo)
+
+    def _clip(self, nombre):
+        return self.animador is not None and self.animador.tiene(nombre)
+
+    def _desplazar(self, dx, dz, rodear=True):
+        """Mueve el nodo (dx, dz) con los choques de siempre: un eje cada vez
+        (se desliza a lo largo de lo que roza), rodea lo pequeño, no sale
+        del pasillo ni de los limites. Devuelve lo que se movio de verdad."""
+        x, _, z = self.actor.getPos()
+        x0, z0 = x, z
+        nx = x + dx
+        if not self._bloqueado(nx, z):
+            x = nx
+        nz = z + dz
+        if not self._bloqueado(x, nz):
+            z = nz
+        largo = math.hypot(dx, dz)
+        if rodear and largo > 1e-6 and abs(x - x0) + abs(z - z0) < 1e-6 and self.choque is None:
+            # De frente contra algo pequeño (una farola): se rodea por el lado
+            # libre, siempre el mismo hasta pasarlo (como en _caminar).
+            rx, rz = dz / largo, -dx / largo
+            lado = getattr(self, "_rodeo", None)
+            if lado is None:
+                lado = 1
+                if self.pasillo is not None:
+                    dist = self.pasillo[0]
+                    lado = 1 if dist(x + rx, z + rz) <= dist(x - rx, z - rz) else -1
+            for lado_libre in (lado, -lado):
+                sx, sz = x + rx * largo * lado_libre, z + rz * largo * lado_libre
+                if not self._bloqueado(sx, sz):
+                    x, z = sx, sz
+                    self._rodeo = lado_libre
+                    break
+        else:
+            self._rodeo = None
+        if self.limites:
+            x_min, x_max, z_min, z_max = self.limites
+            x = max(x_min, min(x_max, x))
+            z = max(z_min, min(z_max, z))
+        self.actor.setX(x)
+        self.actor.setZ(z)
+        return x - x0, z - z0
+
+    def _choque_frena(self, mx, mz, hecho, dt, libre=True):
+        """Lo que no se pudo mover era velocidad contra algo: se pierde (a lo
+        largo de una pared se sigue resbalando)."""
+        quiso = math.hypot(mx, mz)
+        logro = math.hypot(*hecho)
+        if quiso < 1e-6 or logro >= quiso * 0.98:
+            return
+        if libre and getattr(self, "_rodeo", None) is None:
+            self.vel_x, self.vel_z = hecho[0] / dt, hecho[1] / dt
+        else:
+            self.vel_x *= logro / quiso
+            self.vel_z *= logro / quiso
+
+    def _se_pasa(self, rect):
+        """True si ese muro de la camara es (o pisa) algo que se salta o se trepa."""
+        x0, x1, z0, z1 = rect[:4]
+        for r in self.saltables + self.trepables:
+            if r[0] < x1 and x0 < r[1] and r[2] < z1 and z0 < r[3]:
+                return True
+        return False
+
+    def _bajo_barrera(self, x, z):
+        """Debajo (o casi) de algo que solo se pasa agachado o deslizandose."""
+        for x0, x1, z0, z1, *_t in self.agachables + self.deslizables:
+            if x0 - RADIO - 0.1 < x < x1 + RADIO + 0.1 and z0 - RADIO - 0.1 < z < z1 + RADIO + 0.1:
+                return True
+        return False
+
+    def _valla_delante(self):
+        """La valla (o mesa, o coche) a mano para el vault, o None."""
+        x, _, z = self.actor.getPos()
+        fx, fz = self._direccion()
+        for d in (0.4, 0.8, 1.2, ALCANCE_TREPAR):
+            px, pz = x + fx * d, z + fz * d
+            for r in self.trepables:
+                x0, x1, z0, z1 = r[:4]
+                if x0 - RADIO < px < x1 + RADIO and z0 - RADIO < pz < z1 + RADIO:
+                    return r
+        return None
+
+    def _empezar_valla(self, r):
+        """El vault con el impulso que lleva: la mano apoya justo encima de
+        la valla (el clip se acelera o se frena hasta ese cuadro: lo que en
+        animacion se llama ajustar el contacto) y sale perdiendo algo."""
+        import animador as AN
+        x, _, z = self.actor.getPos()
+        ux, uz = self._direccion()
+        cruce = _cruce_rayo(x, z, ux, uz, r[:4])
+        if cruce is None:
+            cx, cz = (r[0] + r[1]) / 2, (r[2] + r[3]) / 2
+            t = (cx - x) * ux + (cz - z) * uz
+            cruce = (t - 0.2, t + 0.2)
+        entra, sale = cruce
+        centro = max(0.1, (entra + sale) / 2)
+        alto = r[5] if len(r) > 5 and isinstance(r[5], (int, float)) else 1.1
+        v_post = max(F.VALLA_MINIMA, self.velocidad() * (1.0 - F.PIERDE_VALLA)) * self.factor
+        clip = self._clip("vallar")
+        alto_clip = 0.0
+        mano = F.MANO_VALLA
+        t_apoyo_clip, t_fin_clip = F.APOYO_VALLA, F.DURA_VALLA
+        if clip:
+            m = AN.marcas_de(self.actor, "vallar")
+            control = self.actor.getAnimControl("vallar")
+            fps = control.getFrameRate() or 30.0
+            if "apoyo" in m:
+                t_apoyo_clip = AN._cuadro_marca(m["apoyo"], fps) / fps
+            fin = m.get("contacto", m.get("aterriza"))
+            t_fin_clip = (AN._cuadro_marca(fin, fps) / fps if fin is not None
+                          else (control.getNumFrames() - 1) / fps)
+            alto_clip = float(m.get("alto", 1.05))
+            mano = float(m.get("mano_delante_m", mano))
+        d_pre = max(0.05, centro - mano)
+        ritmo_pre = max(0.65, min(1.6, t_apoyo_clip / (d_pre / v_post)))
+        t_pre = t_apoyo_clip / ritmo_pre
+        v_pre = d_pre / t_pre
+        t_post = max(0.15, t_fin_clip - t_apoyo_clip)
+        # tras apoyar, lo que falta para estar del todo al otro lado
+        d_post = (sale + RADIO + 0.1) - d_pre
+        v_post = max(v_post, d_post / t_post)
+        self._valla = {"dir": (ux, uz), "v_pre": v_pre, "v_post": v_post, "t_apoyo": t_pre,
+                       "dura": t_pre + t_post, "ritmo_pre": ritmo_pre,
+                       "t_cruce": t_pre + mano / v_post, "alto": alto,
+                       "alza": max(0.0, alto - alto_clip) if clip else alto + 0.15}
+        self.trepa = 0.0
+        self.vel_x, self.vel_z = ux * v_pre, uz * v_pre
+        self._evento_cuerpo.append("valla")
+
+    # ----------------------------------------------------------------
+    #  el cuerpo en la persecucion (el mezclador, animador.py)
+    # ----------------------------------------------------------------
+    # Lo que pasa (la fisica) decide que suena: la locomocion debajo (andar,
+    # correr, agachado, a la velocidad de verdad, con la fase de los pies
+    # comun) y encima lo de una vez (saltar recorrido por la fisica,
+    # aterrizar, vallar con la mano en su sitio, deslizar, tropezar,
+    # esquivar). Si el modelo no trae un clip, lo de antes (poses por huesos
+    # en el salto, la pose agachada en la valla y el deslizamiento).
+
+    jadea = False                  # parado tras correr (lo pone la persecucion)
+
+    def usar_animador(self, an):
+        self.animador = an.activar()
+        self._evento_cuerpo = []
+        return self.animador
+
+    def soltar_animador(self, clip="idle"):
+        if self.animador is None:
+            return
+        if self._aire:
+            self._soltar_huesos(self._aire)
+            self._aire = []
+        self.animador.soltar(clip)
+        self.animador = None
+        self.clip_puesto = clip if clip in self.actor.getAnimNames() else None
+        self.estado = "quieto"
+        for nombre in ("setP", "setR"):
+            getattr(self.actor, nombre)(0)
+        self._alabeo = self._cabeceo = 0.0
+
+    def _posar(self, clip, cuadro, fundido=0.1):
+        """Un clip de una vez en un cuadro concreto (lo pone la fisica)."""
+        n = self.actor.getAnimControl(clip).getNumFrames()
+        return self.animador.accion_fase(clip, max(0.0, min(1.0, cuadro / max(1, n - 1))), fundido)
+
+    def _marca(self, clip, nombre, defecto):
+        import animador as AN
+        m = AN.marcas_de(self.actor, clip)
+        if nombre not in m:
+            return defecto
+        control = self.actor.getAnimControl(clip)
+        return AN._cuadro_marca(m[nombre], control.getFrameRate() or 30.0)
+
+    def _cuerpo(self, dt):
+        an = self.animador
+        eventos, self._evento_cuerpo = self._evento_cuerpo, []
+        huesos = not an.tiene("saltar")
+        for ev in eventos:
+            if ev == "salto" and not huesos:
+                self._posar("saltar", self._marca("saltar", "despegue", 0.0), 0.11)
+            elif ev == "cae" and an.tiene("caer"):
+                an.accion("caer", fundido=0.18, mantener=True)
+            elif ev == "aterriza":
+                self._aterrizar_cuerpo()
+            elif ev == "valla":
+                if an.tiene("vallar"):
+                    an.accion("vallar", fundido=0.08, ritmo=self._valla["ritmo_pre"], salida=0.2)
+                elif an.tiene("agachado"):
+                    an.accion("agachado", fundido=0.1, desde=5, hasta=5, mantener=True)
+            elif ev == "fin_valla" and not an.tiene("vallar"):
+                an.quitar_accion(0.15)
+            elif ev == "golpe" and an.tiene("tropezar"):
+                an.accion("tropezar", fundido=0.06, salida=0.25)
+            elif ev == "esquiva":
+                # «esquivar» es hacia su lado («lado» del contrato, izq) y
+                # «esquivar_der» hacia el otro; si falta, la inclinacion basta.
+                pide = "der" if self._esquiva_lado > 0 else "izq"
+                lado = str(self._marca_texto("esquivar", "lado", "izq")).lower()
+                clip = "esquivar" if lado.startswith(pide) else "esquivar_" + pide
+                if an.tiene(clip):
+                    an.accion(clip, fundido=0.1, salida=0.2)
+        # Lo que lleva la fisica (saltar y deslizar, por fase) no se acaba
+        # solo: si la fisica ya termino y la capa sigue, fuera. Sin esto, si
+        # el deslizamiento acababa antes de llegar a su ultimo cuadro (un
+        # choque lo paraba en seco), el cuerpo se quedaba clavado en
+        # «deslizar» y avanzaba de pie sin mover las piernas.
+        actual = an.accion_actual()
+        if actual is not None and actual.modo == "fase" and (
+                (actual.clip == "deslizar" and self.desliz is None)
+                or (actual.clip == "saltar" and self.y_aire is None)):
+            an.quitar_accion(0.15, fase=an.fase_tras(actual.clip))
+        if self.trepa is not None and self._valla is not None:
+            capa = an.accion_actual()
+            if capa is not None and capa.clip == "vallar" and self.trepa >= self._valla["t_apoyo"]:
+                capa.ritmo = 1.0                       # la mano ya apoyo: a su ritmo
+        if self.desliz is not None and self._desliz is not None:
+            self._desliz_cuerpo()
+        elif self.y_aire is not None and self.salto is not None and not huesos:
+            self._posar("saltar", self._cuadro_salto(), 0.11)
+        self._locomocion(self.velocidad())
+        if huesos:
+            self._aire_por_huesos()
+
+    def _marca_texto(self, clip, nombre, defecto):
+        import animador as AN
+        return AN.marcas_de(self.actor, clip).get(nombre, defecto)
+
+    def _cuadro_salto(self):
+        """El cuadro de «saltar» que toca, segun la fisica: del despegue a la
+        cumbre mientras sube (por la velocidad vertical) y de la cumbre a
+        buscar el suelo mientras baja (por lo que le queda de altura)."""
+        n = self.actor.getAnimControl("saltar").getNumFrames()
+        d = self._marca("saltar", "despegue", 0.0)
+        a = self._marca("saltar", "apice", 0.45 * (n - 1))
+        b = self._marca("saltar", "busca_suelo", 0.8 * (n - 1))
+        if self.vy > 0.0 and self._vy0 > 0.0:
+            return d + (a - d) * (1.0 - self.vy / self._vy0)
+        x, _, z = self.actor.getPos()
+        piso = self._piso(x, z)
+        caida = max(0.05, self._cumbre - piso)
+        g = 1.0 - max(0.0, min(1.0, (self.y_aire - piso) / caida))
+        return a + (b - a) * g
+
+    def _aterrizar_cuerpo(self):
+        an = self.animador
+        k = self.fuerza_aterriza
+        if an.tiene("aterrizar"):
+            control = self.actor.getAnimControl("aterrizar")
+            t0 = self._marca("aterrizar", "contacto", 0.0) / (control.getFrameRate() or 30.0)
+            # un salto normal apenas se nota; una caida de la plataforma, entera
+            an.accion("aterrizar", fundido=0.05, t0=t0, peso=min(1.0, 0.5 + 0.45 * k),
+                      ritmo=1.0 + 0.35 * max(0.0, 1.0 - k), salida=0.22)
+        elif an.tiene("saltar"):
+            an.quitar_accion(0.12, fase=an.fase_tras("saltar", self._cuadro_salto()))
+        else:
+            an.quitar_accion(0.12)
+
+    def _desliz_cuerpo(self):
+        """«deslizar» por fases de la fisica: tirarse hasta el cuadro «suelo»,
+        resbalar hasta «levanta» (segun lo que ha frenado; debajo de una
+        barrera no pasa de ahi) y levantarse hasta el final."""
+        an, d = self.animador, self._desliz
+        if not an.tiene("deslizar"):
+            if an.tiene("agachado") and self.desliz is not None and d["fase"] != "levanta":
+                an.accion("agachado", fundido=0.1, desde=5, hasta=5, mantener=True)
+            elif d["fase"] == "levanta":
+                an.quitar_accion(0.2)
+            return
+        n = self.actor.getAnimControl("deslizar").getNumFrames()
+        suelo = self._marca("deslizar", "suelo", 0.25 * (n - 1))
+        levanta = self._marca("deslizar", "levanta", 0.7 * (n - 1))
+        if d["fase"] == "cae":
+            cuadro = suelo * min(1.0, self.desliz / F.CAE_DESLIZ)
+        elif d["fase"] == "resbala":
+            v0 = d.get("v_resbala", d["v0"])
+            f = max(0.0, min(1.0, (v0 - self.velocidad()) / max(0.1, v0 - F.LEVANTA_DESLIZ)))
+            if d.get("debajo"):
+                f = min(f, 0.9)
+            cuadro = suelo + (levanta - suelo) * f
+        else:
+            f = (self.desliz - d["t_levanta"]) / F.DURA_LEVANTA
+            cuadro = levanta + (n - 1 - levanta) * max(0.0, min(1.0, f))
+            if f >= 0.98:
+                an.quitar_accion(0.15, fase=an.fase_tras("deslizar"))
+                return
+        self._posar("deslizar", cuadro, 0.13)
+
+    def _locomocion(self, v):
+        """La base: los ciclos a la velocidad de verdad (andar y correr se
+        mezclan al arrancar, con los pies en la misma fase)."""
+        an = self.animador
+        if self.agachado and v > 0.3 and self.desliz is None:
+            clip = "agachado_correr" if an.tiene("agachado_correr") else "agachado_caminar"
+            an.ciclo(clip, v, fundido=0.25)
+        elif v < 0.35 and self.trepa is None and self.desliz is None and self.y_aire is None:
+            quieto = ("agachado" if self.agachado else
+                      "jadear" if self.jadea and an.tiene("jadear") else "idle")
+            an.ciclo(quieto, 0.0, fundido=0.3)
+        else:
+            corre = max(0.0, min(1.0, (v - 2.0) / 1.6))
+            corre = corre * corre * (3 - 2 * corre)
+            an.ciclos({"correr": corre, "caminar": 1.0 - corre}, max(v, 0.5), fundido=0.22)
+
+    def _cuerpo_de_antes(self):
+        """La fisica nueva con los clips de siempre (sin el JSON ni los clips
+        de la persecucion): como hasta ahora, la pose agachada al trepar y al
+        deslizarse y, en el aire, el tranco de la carrera a camara lenta con
+        las poses por huesos."""
+        if self.trepa is not None or self.desliz is not None:
+            self._animar("deslizar")
+        clip = self.clip_puesto
+        if (clip in ("correr", "caminar", "agachado_caminar") and self.y_aire is None
+                and self.trepa is None and self.desliz is None and self.velocidad() > 0.3):
+            # Los pasos al ritmo de la velocidad de verdad (con la arrancada
+            # va cambiando): si no, al salir de parado las piernas ya iban
+            # a tope y el pie resbalaba.
+            import animador as AN
+            ritmo = AN.ritmo_ciclo(self.actor, clip, self.velocidad())
+            control = self.actor.getAnimControl(clip)
+            if control is not None and abs(control.getPlayRate() - ritmo) > 0.03:
+                control.setPlayRate(ritmo)
+        if self.y_aire is not None and self.trepa is None and self.desliz is None:
+            vuelo = self._cuadros_vuelo(clip) if clip in ("correr", "caminar") else None
+            if vuelo is not None:
+                a, b, n = vuelo
+                f = min(1.0, self.t_aire / F.TIEMPO_SALTO)
+                self.actor.pose(clip, (a + (b - a) * f) % n)
+        self._huesos_salto()
+
+    def _aire_por_huesos(self):
+        """Sin clips de salto: lo de antes. En el aire las piernas siguen el
+        tranco de la carrera a camara lenta (la fase la fija esto) y los
+        huesos se orientan a las poses de vuelo, busca-suelo y aterrizaje."""
+        import animador as AN
+        an = self.animador
+        en_aire = self.y_aire is not None and self.trepa is None and self.desliz is None
+        an.fase_fija = None
+        if en_aire and an.tiene("correr"):
+            vuelo = self._cuadros_vuelo("correr")
+            info = AN.info_ciclo(self.actor, "correr")
+            if vuelo and info:
+                a, b, n = vuelo
+                f = min(1.0, self.t_aire / F.TIEMPO_SALTO)
+                cuadro = (a + (b - a) * f) % n
+                desde, hasta, fase0 = info
+                an.fase_fija = ((cuadro - desde) / (hasta - desde + 1) - fase0) % 1.0
+        self._huesos_salto()
+
+    # ----------------------------------------------------------------
     #  modos
     # ----------------------------------------------------------------
 
@@ -737,8 +1448,20 @@ class Jugador:
         if self._aire:
             self._soltar_huesos(self._aire)
             self._aire = []
+        if self.fisica:
+            self.vel_x = self.vel_z = self.tropiezo = self._tumbo = self._esquiva = 0.0
+            self._valla = self._desliz = None
+            self._alabeo = self._cabeceo = self._giro = self._acelera = 0.0
+            self.actor.setP(0)
+            self.actor.setR(0)
+            self._hundido_puesto = 0.0
         _raton(False)
         self._animar("quieto")
+        if self.animador is not None:
+            self.animador.fase_fija = None
+            self.animador.quitar_accion(0.2)
+            self.animador.ciclo("jadear" if self.jadea and self.animador.tiene("jadear")
+                                else "idle", 0.0, fundido=0.35)
         # Los planos fijos de decision necesitan al personaje entero.
         self.cerca = 0.0
         self._poner_alfa(1.0)
@@ -787,9 +1510,17 @@ class Jugador:
                                   and not self.apuntando) or self.desliz is not None
                 if self.solo_andar:
                     self.agachado = self.corriendo = False
-                if self.trepa is None:        # trepando lo lleva el impulso
-                    self._caminar(avance, lado, dt)
-                self._avanzar_salto(dt)
+                if self.fisica:
+                    self.lado_input = lado
+                    self._correr_fisico(avance, lado, dt)
+                    if self.animador is not None:
+                        self._cuerpo(dt)
+                    else:
+                        self._cuerpo_de_antes()
+                else:
+                    if self.trepa is None:    # trepando lo lleva el impulso
+                        self._caminar(avance, lado, dt)
+                    self._avanzar_salto(dt)
             if self.apuntando or self.lanzado is not None:
                 # Apuntando mira a donde mira la camara, ande hacia donde ande.
                 self.rumbo = 180.0 - self.yaw
@@ -1118,6 +1849,11 @@ class Jugador:
         self._animar(estado)
 
     def _animar(self, estado):
+        if self.animador is not None:
+            # En la persecucion el cuerpo lo lleva el mezclador (_cuerpo):
+            # aqui solo se apunta que hace.
+            self.estado = estado
+            return
         # No basta con mirar el estado: los gestos de mundo.reaccionar y
         # las rutinas de avanzar_rutinas tambien cambian el clip por
         # detras. Si el que suena no es el que este puso, hay que
@@ -1195,6 +1931,11 @@ class Jugador:
                     util = min(util, (menor + MARGEN_PARED - valor) / d)
         util = max(DISTANCIA_MINIMA, min(maximo, util))
         for rect in self.muros:
+            if self.fisica and self._se_pasa(rect):
+                # En la persecucion lo que se salta o se trepa (la jardinera)
+                # no tapa: acercarse por eso pegaba la camara a la espalda
+                # de Mateo a mitad del salto y le cortaba la cabeza.
+                continue
             t = _choque(origen.x, origen.z, dx, dz, rect)
             if t is not None:
                 util = min(util, max(DISTANCIA_MINIMA_MURO, t))

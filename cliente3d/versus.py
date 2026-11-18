@@ -34,6 +34,7 @@ from types import SimpleNamespace
 
 from ursina import camera, destroy
 
+import animador
 import audio
 import billar as B
 import jugador as JG
@@ -382,8 +383,10 @@ def _persecucion_servidor(cl, e, mensajes, p, toca):
         return
     if toca:
         a = cl.actor
+        an = cl.jugador.animador if cl.jugador is not None else None
         e.enviar("p_est", x=round(a.getX(), 3), y=round(a.getY(), 3), z=round(a.getZ(), 3),
-                 h=round(a.getH(), 1), clip=a.getCurrentAnim(),
+                 h=round(a.getH(), 1), p=round(a.getP(), 1), rr=round(a.getR(), 1),
+                 clip=a.getCurrentAnim(), an=an.estado_red() if an is not None else None,
                  resta=round(per.restante, 1), dist=round(per.distancia, 1),
                  fallos=per.fallos, sm=round(per.s_mateo, 1))
 
@@ -902,6 +905,12 @@ def _llega_p_ini(m):
     g.obstaculos_camara = plaza.obstaculos_camara(activos)
     g.con_impulso, g.siempre_corre = True, True
     g.factor = PE.PASO_SOSPECHOSO             # la mochila pesa
+    # La fisica de la carrera y, si el modelo trae los clips, el mezclador:
+    # corre, salta, trepa y se desliza igual que Mateo.
+    g.fisica = PE.FISICA
+    sosp.modelo_animador, J.cl.actor.modelo_animador = "alcalde", "ciudadano"
+    if PE.FISICA and animador.listo(sosp):
+        g.usar_animador(animador.Animador(sosp, "alcalde"))
     g.rumbo = 180.0 - rumbo
     sosp.setH(g.rumbo)
     g.yaw = rumbo
@@ -910,7 +919,8 @@ def _llega_p_ini(m):
     plaza.cerrar_pasillo()
     g.pasillo = (lambda px, pz: PE.distancia_a_ruta((px, pz), per.ruta), PE.ANCHO_PASILLO / 2)
     g.rail = lambda px, pz: per.punto(per.proyectar((px, pz), per.s) + 4.0)[2]
-    g.marcha = lambda px, pz: per.punto(per.proyectar((px, pz), per.s) + 0.8)[2]
+    g.marcha = lambda px, pz: per.punto(per.proyectar((px, pz), per.s) + 0.8
+                                        + (0.3 * g.velocidad() if g.fisica else 0.0))[2]
     g.encuadrar()
     g.activar()
     hud = pantallas.PersecucionHUD(huye=True)
@@ -936,6 +946,7 @@ def _huida_cliente(dt):
         if (ob["tipo"] == "brecha" and x0 < x < x1 and z0 < z < z1
                 and g.salto is None and g.trepa is None):
             actor.setPos(x, plaza.suelo(x, z0 - 2.5), z0 - 2.5)
+            g.parar()
             hud.avisar("¡AL HUECO!", E.GAITAN, 0.8)
             if h["choque"] <= 0.0:
                 h["choque"] = J.REPETIR_CHOQUE
@@ -960,7 +971,9 @@ def _huida_cliente(dt):
         h["envio"] = 0.0
         _V["sesion"].enlace.enviar("p", x=round(x, 3), y=round(actor.getY(), 3), z=round(z, 3),
                                    r=round(rumbo, 1), h=round(actor.getH(), 1),
-                                   clip=actor.getCurrentAnim())
+                                   p=round(actor.getP(), 1), rr=round(actor.getR(), 1),
+                                   clip=actor.getCurrentAnim(),
+                                   an=g.animador.estado_red() if g.animador is not None else None)
     est = h["est"]
     dist = est["dist"] if est else PE.VENTAJA_HUMANO
     resta = est["resta"] if est else h["resta"]
@@ -980,7 +993,14 @@ def _llega_p_est(m):
     a = J.cl.actor                    # Mateo, que viene detras
     a.setPos(m["x"], m["y"], m["z"])
     a.setH(m["h"])
-    poner_clip(a, m.get("clip"))
+    a.setP(m.get("p", 0.0))
+    a.setR(m.get("rr", 0.0))
+    if m.get("an") and h.get("mateo_an") is None and animador.listo(a):
+        h["mateo_an"] = animador.Animador(a, "ciudadano").activar()
+    if h.get("mateo_an") is not None and m.get("an"):
+        h["mateo_an"].aplicar_red(m["an"])
+    elif h.get("mateo_an") is None:
+        poner_clip(a, m.get("clip"))
 
 
 def _llega_p_fin(m):
@@ -1261,6 +1281,12 @@ def _recoger_minijuegos():
     if "huida" in obj:
         h = obj.pop("huida")
         h["jugador"].desactivar()
+        h["jugador"].fisica = False
+        h["jugador"].soltar_animador("idle")
+        if h.get("mateo_an") is not None:
+            h["mateo_an"].soltar("idle")
+            J.cl.actor.setP(0)
+            J.cl.actor.setR(0)
         h["hud"].cerrar()
         audio.musica(audio.MUSICA_TENSION, fundido=1.5, nivel=0.35)
     obj.pop("sospechoso", None)

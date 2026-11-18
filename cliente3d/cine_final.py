@@ -15,6 +15,14 @@ los pocos que aun celebran, el contrapicado desde la gente, la tarima
 entera, el perdedor, la cara del ganador y la plaza por encima de su
 hombro.
 
+Los gestos los pone posar.py, hueso a hueso y con el giro de cada hueso
+bajo control: antes se posaba con kombat_cliente.Cuerpo, que solo decide
+hacia donde apunta un hueso y no cuanto gira sobre si mismo, y al ganador
+se le quedaban las manos dobladas hacia atras con las palmas al reves.
+Cada uno mira a quien toca: al ganador si le aplaude o le acusa, al
+publico si celebra, levanta el puno o escolta, y al frente si se cruza de
+brazos (en la polarizada, el que perdio no le mira).
+
 No se decide nada: Enter la salta. Al acabar, juego3d abre el escrutinio.
 """
 
@@ -27,10 +35,10 @@ import audio
 import estilo as E
 import mundo
 import plaza
+import posar
 from escena import EscenaDecision
 from contenido import cargo_electo, ESCENAS_FINAL
 from juego import NOMBRES_CANDIDATOS
-from kombat_cliente import Cuerpo, GUARDIA
 
 # El modelo de cada candidato: no tienen el suyo, salvo De la Estrella
 # (candidato.glb, o el de prueba). shortcut: los demas toman prestado el de
@@ -85,8 +93,11 @@ EQUIPO = {
 
 def planos(final):
     d0, d1, mira = DETALLE[final]
-    px, pz, _mira, _gesto = PERDEDOR[final]
+    px, pz, _mira, gesto = PERDEDOR[final]
     cara_p = Vec3(px, GY + 1.55, pz)
+    # con el puno arriba el plano sube y abre un poco: si no, el puno, que
+    # es lo que cuenta ese final, quedaba cortado por arriba
+    foco_p, fov_p = (cara_p + Vec3(0, 0.3, 0), 47) if gesto == "puno" else (cara_p, 40)
     lista = [
         # La ciudad desde lo alto: como quedo.
         ("ciudad", 6.0, Vec3(0, 24, -42), Vec3(0, 21, -36), Vec3(0, 2, 12), Vec3(0, 2, 14), 58),
@@ -106,7 +117,7 @@ def planos(final):
         ("escenario", 5.5, Vec3(8.6, GY + 2.3, 31.2), Vec3(7.4, GY + 2.1, 32.4),
          Vec3(1.0, GY + 1.2, 40.6), Vec3(0.8, GY + 1.2, 40.6), 56),
         ("perdedor", 4.5, Vec3(px + 0.9, GY + 1.6, pz - 3.2), Vec3(px + 0.7, GY + 1.6, pz - 2.8),
-         cara_p, cara_p, 40),
+         foco_p, foco_p, fov_p),
         ("cara", 4.5, Vec3(GX + 1.1, GY + 1.75, GZ - 3.0), Vec3(GX + 1.0, GY + 1.75, GZ - 2.7),
          CABEZA, CABEZA, 38),
         # Por encima de su hombro, la plaza entera.
@@ -116,56 +127,23 @@ def planos(final):
     return tuple(lista)
 
 
-# --- gestos por huesos: direcciones (derecha, arriba, delante) ---------
-_DE_PIE = dict(GUARDIA, RightUpLeg=(0.12, -1.0, 0.0), LeftUpLeg=(-0.12, -1.0, 0.0),
-               RightLeg=(0.0, -1.0, 0.0), LeftLeg=(0.0, -1.0, 0.0))
-
-
-def _celebra(t, puno):
-    """Los dos brazos arriba; el de la izquierda golpea el aire al ritmo."""
-    s = 0.5 + 0.5 * math.sin(t * 5.0)
-    pose = dict(_DE_PIE, RightArm=(0.3, 1.0, 0.1), RightForeArm=(0.05, 1.0, 0.0))
-    if puno:
-        pose.update(LeftArm=(-0.5, 0.6 + 0.4 * s, 0.2), LeftForeArm=(-0.1, 1.0, 0.2 - 0.3 * s))
-    else:
-        pose.update(LeftArm=(-0.3, 1.0, 0.1), LeftForeArm=(-0.05, 1.0, 0.0))
-    return pose
-
-
-def _gesto(cual, t, fase=0.0):
-    """La pose de un gesto en el instante t y lo que saca el pecho."""
-    if cual == "aplaude":
-        s = 0.5 + 0.5 * math.sin(t * 9.0 + fase)           # las manos se juntan
-        return dict(_DE_PIE, RightArm=(0.35, -0.6, 0.5), LeftArm=(-0.35, -0.6, 0.5),
-                    RightForeArm=(-0.15 - 0.45 * s, 0.5, 0.7),
-                    LeftForeArm=(0.15 + 0.45 * s, 0.5, 0.7)), -3.0
-    if cual == "cruzado":
-        return dict(_DE_PIE, RightArm=(0.25, -0.9, 0.3), RightForeArm=(-0.95, 0.15, 0.25),
-                    LeftArm=(-0.25, -0.9, 0.3), LeftForeArm=(0.95, 0.05, 0.3)), 4.0
-    if cual == "puno":                                     # un puno arriba, al ritmo
-        s = 0.5 + 0.5 * math.sin(t * 5.0 + fase)
-        return dict(_DE_PIE, RightArm=(0.15, -1.0, 0.05), RightForeArm=(0.05, -1.0, 0.1),
-                    LeftArm=(-0.4, 0.7 + 0.3 * s, 0.2), LeftForeArm=(-0.1, 1.0, 0.1)), -4.0
-    if cual == "senala":                                   # el brazo tieso, acusando
-        s = 0.06 * math.sin(t * 11.0 + fase)
-        return dict(_DE_PIE, RightArm=(0.1, 0.05 + s, 1.0), RightForeArm=(0.0, 0.1 + s, 1.0),
-                    LeftArm=(-0.3, -0.9, 0.0), LeftForeArm=(-0.3, -0.6, 0.5)), -8.0
-    # firme: los brazos caidos, las manos delante
-    return dict(_DE_PIE, RightArm=(0.2, -1.0, 0.1), RightForeArm=(-0.5, -0.8, 0.4),
-                LeftArm=(-0.2, -1.0, 0.1), LeftForeArm=(0.5, -0.8, 0.4)), 0.0
+# A quien mira cada gesto: el ganador (le aplaude, le acusa), el publico
+# (levanta el puno con el, escolta) o nadie (None: al frente; el que se
+# cruza de brazos en la polarizada no le mira).
+MIRADA = {"aplaude": "ganador", "senala": "ganador", "puno": "publico",
+          "firme": "publico", "cruzado": None}
+PUBLICO_Z = 21.0                   # la gente de la plaza, delante de la tarima
 
 
 def _rumbo(dx, dz):
     return 180.0 - math.degrees(math.atan2(dx, dz))
 
 
-def _cuerpo(actor):
-    """Un Cuerpo que posa por huesos aunque el modelo traiga clips de pelea."""
-    c = Cuerpo(actor)
-    if c.usa_clips:
-        c.usa_clips = False
-        c._tomar()
-    return c
+def _en_cuerpo(actor, punto):
+    """Un punto del mundo en los ejes del cuerpo de actor (los de posar.py:
+    x a su derecha, y arriba, z hacia donde mira; el actor mira a su -z)."""
+    q = actor.getRelativePoint(actor.getParent(), punto)
+    return Vec3(-q.x, q.y, -q.z)
 
 
 class FinalCiudad(EscenaDecision):
@@ -193,12 +171,14 @@ class FinalCiudad(EscenaDecision):
         for modelo, x, z, mira, gesto in EQUIPO[final]:
             ruta = os.path.join(mundo.RAIZ, "assets", "npc", f"{modelo}.glb")
             otros.append((plaza._cargar(ruta), x, z, mira, gesto))
-        self.tarima = []                # (actor, cuerpo, rumbo, gesto, fase)
+        self.tarima = []                # (actor, esqueleto, gesto, fase)
         for n, (a, x, z, mira, gesto) in enumerate(otros):
             a.reparentTo(mundo_nodo)
             a.setPos(x, GY, z)
-            self.tarima.append((a, _cuerpo(a), _rumbo(*mira), gesto, n * 1.7))
-        self.cuerpo = _cuerpo(self.ganador)
+            a.setH(_rumbo(*mira))
+            # cada uno con su desfase: nadie aplaude a la vez que el de al lado
+            self.tarima.append((a, posar.Esqueleto(a), gesto, n * 1.7))
+        self.esqueleto = posar.Esqueleto(self.ganador)
         super().__init__(actor, [])
         self.fin = sum(p[1] for p in self.PLANOS)
         self.inicio = {p[0]: t for p, t in zip(self.PLANOS, self.inicios)}
@@ -215,23 +195,31 @@ class FinalCiudad(EscenaDecision):
                        fundido=2.0, nivel=0.55 if fiesta else 0.45)
         self._posar(0.0)
 
-    @staticmethod
-    def _poner(actor, cuerpo, pose, inclina, rumbo):
-        """La pose por huesos se calcula mirando a +x (como en la pelea) y
-        luego se gira el cuerpo entero hacia donde mira."""
-        cuerpo.dirs = pose
-        cuerpo.inclina = inclina
-        actor.setH(90.0)
-        cuerpo._aplicar(1)
-        actor.setH(rumbo)
-
     def _posar(self, t):
-        # el ganador: brazos arriba, pecho fuera, de cara al publico (-z)
-        self._poner(self.ganador, self.cuerpo,
-                    _celebra(t, self.datos["final"] != "desastre"), -6.0, 0.0)
-        for actor, cuerpo, rumbo, gesto, fase in self.tarima:
-            pose, inclina = _gesto(gesto, t, fase)
-            self._poner(actor, cuerpo, pose, inclina, rumbo)
+        # El ganador, de cara al publico (-z): los dos brazos arriba en V,
+        # quietos, con las dos manos abiertas y las palmas al publico (asi lo
+        # pidio el usuario: sin el puno que golpeaba el aire). Respira y carga
+        # el peso, y recorre la plaza con la mirada, despacio.
+        e = self.esqueleto
+        pose = posar.celebrar(e.m, t, 0.0, puno=False)
+        barrido = 7.0 * math.sin(2 * math.pi * t / 7.5)
+        pose["mirar"] = _en_cuerpo(self.ganador, Vec3(GX + barrido, 2.2, PUBLICO_Z))
+        e.poner(pose)
+        for n, (actor, e, gesto, fase) in enumerate(self.tarima):
+            if gesto == "senala":
+                pose = posar.senalar(e.m, t, fase, objetivo=_en_cuerpo(actor, CABEZA))
+            elif gesto == "aplaude":
+                # cada uno a su ritmo (de 2,1 a 2,5 palmadas por segundo)
+                pose = posar.aplaudir(e.m, t, fase, ritmo=2.1 + 0.4 * ((n * 0.37) % 1.0))
+            else:
+                pose = posar.GESTOS[gesto](e.m, t, fase)
+            quien = MIRADA.get(gesto)
+            if quien == "ganador":
+                pose["mirar"] = _en_cuerpo(actor, CABEZA)
+            elif quien == "publico":
+                x = actor.getX() + 4.0 * math.sin(2 * math.pi * t / 9.0 + fase)
+                pose["mirar"] = _en_cuerpo(actor, Vec3(x, 2.0, PUBLICO_Z))
+            e.poner(pose)
 
     def actualizar(self, dt):
         self._posar(self.t)
@@ -266,10 +254,10 @@ class FinalCiudad(EscenaDecision):
 
     def cerrar(self):
         super().cerrar()
-        self.cuerpo.soltar()
+        self.esqueleto.soltar()
         mundo.retirar_protagonista(self.ganador)
-        for actor, cuerpo, *_r in self.tarima:
-            cuerpo.soltar()
+        for actor, esqueleto, *_r in self.tarima:
+            esqueleto.soltar()
             actor.cleanup()
             actor.removeNode()
         self.tarima = []
