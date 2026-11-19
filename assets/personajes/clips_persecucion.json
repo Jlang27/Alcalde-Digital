@@ -21,10 +21,10 @@
    "duracion_s": 0.6,
    "ciclo": true,
    "v_diseno": 5.597,
-   "contacto_izq": 0.0,
-   "despegue_izq": 6.3,
-   "contacto_der": 9.0,
-   "despegue_der": 15.3
+   "contacto_izq": 10.0,
+   "despegue_izq": 16.3,
+   "contacto_der": 1.0,
+   "despegue_der": 7.3
   },
   "saltar": {
    "cuadros": 24,
@@ -166,6 +166,26 @@
    "suelo": 6,
    "levanta": 30,
    "fase_salida": 0.1
+  },
+  "caminar": {
+   "cuadros": 31,
+   "fps": 30,
+   "duracion_s": 1.033,
+   "ciclo": true,
+   "v_diseno": 1.451,
+   "contacto_izq": 19.0,
+   "despegue_izq": 5.05,
+   "contacto_der": 3.5,
+   "despegue_der": 20.55
+  },
+  "idle": {
+   "cuadros": 120,
+   "fps": 30,
+   "duracion_s": 4.0,
+   "ciclo": true,
+   "v_diseno": 0.0,
+   "inspira": 0,
+   "inspira2": 60.0
   }
  },
  "alcalde": {
@@ -186,10 +206,10 @@
    "duracion_s": 0.6,
    "ciclo": true,
    "v_diseno": 5.905,
-   "contacto_izq": 0.0,
-   "despegue_izq": 6.12,
-   "contacto_der": 9.0,
-   "despegue_der": 15.12
+   "contacto_izq": 1.0,
+   "despegue_izq": 7.12,
+   "contacto_der": 10.0,
+   "despegue_der": 16.12
   },
   "saltar": {
    "cuadros": 24,
@@ -331,6 +351,92 @@
    "suelo": 6,
    "levanta": 30,
    "fase_salida": 0.1
+  },
+  "caminar": {
+   "cuadros": 31,
+   "fps": 30,
+   "duracion_s": 1.033,
+   "ciclo": true,
+   "v_diseno": 1.496,
+   "contacto_izq": 19.0,
+   "despegue_izq": 5.05,
+   "contacto_der": 3.5,
+   "despegue_der": 20.55
+  },
+  "idle": {
+   "cuadros": 120,
+   "fps": 30,
+   "duracion_s": 4.0,
+   "ciclo": true,
+   "v_diseno": 0.0,
+   "inspira": 0,
+   "inspira2": 60.0
+  }
+ },
+ "periodista": {
+  "caminar": {
+   "cuadros": 30,
+   "fps": 30,
+   "duracion_s": 1.0,
+   "ciclo": true,
+   "v_diseno": 1.506,
+   "contacto_izq": 3.0,
+   "despegue_izq": 19.5,
+   "contacto_der": 18.0,
+   "despegue_der": 4.5
+  },
+  "idle": {
+   "cuadros": 120,
+   "fps": 30,
+   "duracion_s": 4.0,
+   "ciclo": true,
+   "v_diseno": 0.0,
+   "inspira": 0,
+   "inspira2": 60.0
+  }
+ },
+ "influencer": {
+  "caminar": {
+   "cuadros": 31,
+   "fps": 30,
+   "duracion_s": 1.033,
+   "ciclo": true,
+   "v_diseno": 1.426,
+   "contacto_izq": 19.0,
+   "despegue_izq": 5.05,
+   "contacto_der": 3.5,
+   "despegue_der": 20.55
+  },
+  "idle": {
+   "cuadros": 120,
+   "fps": 30,
+   "duracion_s": 4.0,
+   "ciclo": true,
+   "v_diseno": 0.0,
+   "inspira": 0,
+   "inspira2": 60.0
+  }
+ },
+ "prueba": {
+  "caminar": {
+   "cuadros": 31,
+   "fps": 30,
+   "duracion_s": 1.033,
+   "ciclo": true,
+   "v_diseno": 1.496,
+   "contacto_izq": 19.0,
+   "despegue_izq": 5.05,
+   "contacto_der": 3.5,
+   "despegue_der": 20.55
+  },
+  "idle": {
+   "cuadros": 120,
+   "fps": 30,
+   "duracion_s": 4.0,
+   "ciclo": true,
+   "v_diseno": 0.0,
+   "inspira": 0,
+   "inspira2": 60.0
   }
  }
 }

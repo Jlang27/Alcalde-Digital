@@ -810,6 +810,77 @@ def resolver_clip(res, clip):
     return clip
 
 
+PASOS_JUEGO = ("caminar", "correr", "agachado_caminar", "agachado_correr", "correr_mirando")
+
+
+def _recorte_mundo(r):
+    """Lo que cliente3d/mundo.ciclo haria con un ciclo: (desde, hasta).
+    Copia de su heuristica (pensada para los clips de Mixamo, que traen
+    cuadros quietos al principio y el ultimo repetido): r = por cuadro,
+    [pie izq, pie der, cadera] en el modelo."""
+    n = len(r)
+    mov = [sum(math.dist(r[min(n - 1, f + 3)][k], r[f][k]) for k in (0, 1)) for f in range(n)]
+    umbral = 0.25 * sorted(mov)[n // 2]
+    desde = next((f for f in range(n) if mov[f] > umbral), 0)
+    hasta = next((f for f in range(n - 1, -1, -1) if mov[max(0, f - 3)] > umbral), n - 1)
+    if not (desde + (n - 1 - hasta) >= 0.1 * n and hasta - desde >= n // 3):
+        desde, hasta = 0, n - 1
+    saltos = sorted(sum(math.dist(r[f + 1][k], r[f][k]) for k in range(3)) for f in range(n - 1))
+    tope = 0.5 * saltos[len(saltos) // 2]
+
+    def igual(f, g):
+        return sum(math.dist(r[f][k], r[g][k]) for k in range(3)) < tope
+    while hasta - desde > 4 and igual(hasta, hasta - 1):
+        hasta -= 1
+    if hasta - desde > 4 and igual(hasta, desde):
+        hasta -= 1
+    return desde, hasta
+
+
+def costura_ciclo(rig, clip):
+    """Cuantos cuadros girar un ciclo para que el juego no lo recorte.
+
+    mundo.ciclo da por repetido el ultimo cuadro si se parece al primero
+    (menos de medio paso medio de pies y cadera). En un andar limpio el
+    cuadro 0 es el contacto del talon, el momento mas lento: el cierre
+    (n-1 -> 0) se quedaba por debajo y el juego tocaba 0..n-2, un tiron por
+    vuelta (medido en el juego: «caminar» de 31 cuadros en bucle 0..29).
+    Se empieza el clip en el paso mas largo; las marcas lo dicen. Solo los
+    ciclos de pasos (los que el juego recorta: mundo.CICLO_MINIMO y
+    animador.PASOS); jadear o idle van en bucle entero."""
+    if not clip.ciclo or clip.nombre not in PASOS_JUEGO:
+        return 0
+    huesos = [rig.j(h) for h in ("LeftFoot", "RightFoot", "Hips")]
+    r = [[tuple(P[h]) for h in huesos] for _W, P in mundo_de(rig, clip)]
+    n = len(r)
+    if _recorte_mundo(r) == (0, n - 1):
+        return 0
+    paso = [sum(math.dist(r[f][k], r[f - 1][k]) for k in range(3)) for f in range(n)]
+    return max(range(1, n), key=lambda f: paso[f])
+
+
+def girar_ciclo(res, rig, clip, datos):
+    """Gira el ciclo (si hace falta, ver costura_ciclo) y corre sus marcas y
+    sus apoyos del control de calidad."""
+    k = costura_ciclo(rig, clip)
+    if not k:
+        return 0
+    n = len(clip.poses)
+    clip.poses = clip.poses[k:] + clip.poses[:k]
+    resolver_clip(res, clip)             # el signo de los cuaterniones, en el orden nuevo
+    marcas = datos.get("marcas", {})
+    for nombre in ("contacto_izq", "despegue_izq", "contacto_der", "despegue_der"):
+        if nombre in marcas:
+            marcas[nombre] = round((marcas[nombre] - k) % n, 2)
+    if datos.get("contactos"):
+        datos["contactos"] = [(lado, (c0 - k) % n, (c0 - k) % n + (c1 - c0), v)
+                              for lado, c0, c1, v in datos["contactos"]]
+    huesos = [rig.j(h) for h in ("LeftFoot", "RightFoot", "Hips")]
+    r = [[tuple(P[h]) for h in huesos] for _W, P in mundo_de(rig, clip)]
+    assert _recorte_mundo(r) == (0, n - 1), f"{clip.nombre}: mundo.ciclo lo seguiria recortando"
+    return k
+
+
 def escribir_clip(glb, rig, clip):
     """Añade el clip al glTF (cuadros a 30 fps, LINEAR). Un ciclo lleva
     una clave mas igual a la primera (cierra la curva sin añadir cuadro); un
@@ -944,6 +1015,10 @@ class Carrera:
         self.bola = (pp["bola"][2] - tob[2], pp["bola"][1] - tob[1])
         self.ingle = rig.P0[rig.id["LeftUpLeg"]] - rig.P0[rig.id["Hips"]]
         self.y_td = e["cadera_td"] * self.k
+        if e.get("andar"):
+            # andando, la cadera respecto a la de pie de ESE modelo (las
+            # proporciones de la periodista y del influencer descuadraban el paso)
+            self.y_td = e["cadera_td"] / 0.957 * rig.alto_cadera
         self._preparar()
 
     # ------------------------------------------------------------ apoyo
@@ -980,6 +1055,19 @@ class Carrera:
         self.largo_apoyo = z_bola_td - z_bola_to
         self.t_apoyo = self.largo_apoyo / self.v
         self.beta = self.t_apoyo / self.D
+        if e.get("andar"):
+            # Andar: sin vuelo, con doble apoyo (cada pie apoya mas de medio
+            # ciclo). La cadera es un pendulo invertido: lo mas alto a mitad
+            # del apoyo, lo mas bajo en el doble apoyo. La velocidad de diseño
+            # sale de la pierna de cada modelo: la que da un apoyo de
+            # «apoyo_andar» del ciclo con este paso (asi ningun cuerpo patina).
+            self.v = self.largo_apoyo / (e["apoyo_andar"] * self.D)
+            self.t_apoyo = self.largo_apoyo / self.v
+            self.beta = self.t_apoyo / self.D
+            self.t_vuelo = self.v_sube = self.fuerza = 0.0
+            self.hundir = -e["cadera_sube"] * self.k
+            self._preparar_vuelo()
+            return
         assert 0.15 < self.beta < 0.48, f"apoyo imposible: beta={self.beta:.2f}"
         self.t_vuelo = self.D / 2 - self.t_apoyo
         self.v_sube = G * self.t_vuelo / 2              # velocidad vertical al despegar
@@ -989,6 +1077,10 @@ class Carrera:
         # a +v_sube y la cadera baja lo que baja un corredor de verdad.
         self.fuerza = G * math.pi / 2 * (self.D / 2) / self.t_apoyo
         self.hundir = -self._y_apoyo(self.t_apoyo / 2)
+        self._preparar_vuelo()
+
+    def _preparar_vuelo(self):
+        e = self.e
         # Las curvas del vuelo de la pierna, con las tangentes del apoyo.
         eps = 1e-4
         b = self.beta
@@ -1020,6 +1112,16 @@ class Carrera:
         """Posicion y giro de la pelvis (canal cad y cad_rot)."""
         e = self.e
         t = (fase % 0.5) * self.D
+        if e.get("andar"):
+            bajo = (self.beta - 0.5) / 2               # mitad del doble apoyo
+            y = self.y_td + e["cadera_sube"] * self.k * (1 - math.cos(4 * math.pi * (fase - bajo))) / 2
+            w = 2 * math.pi
+            b = self.beta
+            giro = -e["pelvis_giro"] * math.cos(w * fase)
+            alabeo = e["pelvis_alabeo"] * math.cos(w * (fase - b / 4))
+            cabeceo = e["pelvis_cabeceo"]
+            lado = -e["pelvis_lado"] * self.k * math.cos(w * (fase - 0.25))
+            return {"pos": v3(lado, y, 0.0), "rot": v3(cabeceo, giro, alabeo)}
         if t < self.t_apoyo:
             y = self.y_td + self._y_apoyo(t)
         else:
@@ -2147,6 +2249,134 @@ CLIPS_SUELTOS = {"saltar": clip_saltar, "aterrizar": clip_aterrizar, "caer": cli
                  "vallar": clip_vallar, "deslizar": clip_deslizar}
 
 
+ESTILO_ANDAR = {
+    # El andar de Connor («El rehen», primera mision): erguido, contenido,
+    # brazos casi rectos que se balancean poco, la cabeza quieta; talon
+    # primero y el pie que rueda. Biomecanica de un andar normal: apoyo ~62 %
+    # del ciclo (doble apoyo ~12 % por paso), rodilla casi recta al tocar,
+    # ~15 en la carga, ~35 al despegar y ~60 en el vuelo de la pierna.
+    # Medido por «pose» en el pasillo de casa de Hank (camara fija, 0,999 fiable):
+    # zancada 1,01-1,05 s, apoyo ~55 %, doble apoyo ~0,08 s, cadera +-4-5 cm,
+    # pelvis +-4-5 de giro y +-1-2 de caida, hombros +-6 al contrario, tronco 0-3,
+    # brazos ~12 abiertos con el codo siempre algo doblado (15-40), braceo +-12-15.
+    "andar": True, "apoyo_andar": 0.55, "despeje": True,
+    "ciclo": 31 / FPS,        # 1,03 s: 116 pasos por minuto
+    "v": 1.40,                # m/s de diseño (con las piernas de Mateo; se escala)
+    "cadera_td": 0.90, "cadera_sube": 0.045,
+    # Despegue con la rodilla a 32 y el pie a 34 (antes 25 y 42): el paso
+    # queda en ~0,75 m (v de diseño 1,45-1,50) y a los 1,6 m/s del juego el
+    # clip va a x1,07-1,10, la zancada de 0,95 s que pide docs/animacion_explorar.md.
+    # Acortarlo subiendo la cadera bloqueaba la rodilla y doblaba el patinaje;
+    # asi no cambia. De paso, la ronda (1,1 m/s) y los paseos de las escenas
+    # (0,95) dejan de verse a camara lenta.
+    "rodilla_td": 4.0, "rodilla_to": 32.0,
+    "pie_td": -15.0, "pie_to": 34.0, "rueda": 0.14, "talon_sube": 0.62,
+    "vuelo": [(0.70, -6.0, 54.0), (0.76, 6.0, 61.0), (0.84, 19.0, 46.0), (0.92, 25.0, 18.0)],
+    "tobillo_vuelo": [(0.72, 8.0), (0.85, 0.0), (0.95, -6.0)],
+    "paso_ancho": 0.075, "pie_giro": -6.0,
+    "pelvis_cabeceo": 4.0, "pelvis_giro": 4.5, "pelvis_alabeo": 1.8, "pelvis_lado": 0.012,
+    "tronco": 2.0, "torax_giro": 6.0, "mirada": 2.0,
+    "brazo_delante": 14.0, "brazo_detras": -13.0, "brazo_fase": 0.5,
+    "codo_delante": 32.0, "codo_detras": 16.0,
+    "brazo_abre": 10.0, "brazo_abre_detras": 2.0, "brazo_cruza": 0.15,
+    "dedos": 0.36, "pulgar": 0.7,
+}
+
+
+ESTILO_ANDAR_KARA = dict(ESTILO_ANDAR, **{
+    # Kara (capitulo 5 del juego, «Huida de casa de Todd»): andar contenido
+    # de androide domestica: los pies casi en una linea, mas giro y vaiven
+    # de cadera, paso algo mas corto y rapido, brazos pegados que apenas
+    # se balancean. Para la periodista (Valeria).
+    "ciclo": 30 / FPS,
+    # Su paso ya es de ~0,75 m (x1,06 a 1,6 m/s): conserva el despegue de antes.
+    "rodilla_to": 25.0, "pie_to": 42.0,
+    "paso_ancho": 0.035, "pie_giro": -4.0,
+    "pelvis_giro": 6.0, "pelvis_alabeo": 5.0, "pelvis_lado": 0.024,
+    "tronco": 1.5, "torax_giro": 2.5, "mirada": 3.0,
+    "brazo_delante": 11.0, "brazo_detras": -10.0, "codo_delante": 20.0, "codo_detras": 12.0,
+    "brazo_abre": 4.0, "brazo_abre_detras": 1.0, "brazo_cruza": 0.25,
+    "dedos": 0.32, "pulgar": 0.6,
+})
+
+
+def clip_idle(au, n=120, manos_juntas=False):
+    """De pie, quieto como Connor: recto, los pies a la anchura de la cadera
+    y clavados, los brazos colgando relajados con el codo apenas doblado y
+    las manos medio sueltas. Lo unico que se mueve: la respiracion (dos por
+    vuelta: el pecho y los hombros suben un poco), un vaiven minimo del peso
+    de un pie a otro y la cabeza que se asienta. Ciclo de 4 s."""
+    r = au.rig
+    base = pose_base(r)
+    poses = []
+    for f in range(n):
+        u = f / n
+        resp = (1 - math.cos(2 * math.pi * 2 * u)) / 2            # 0..1, dos veces
+        vaiven = math.sin(2 * math.pi * u)
+        p = copia(base)
+        # rodillas a ~12 grados (medido en el reposo del dormitorio de Hank)
+        lado_cad = 0.0175 if manos_juntas else 0.006       # Kara se mece +-1,75 cm
+        p["cad"] = v3(lado_cad * vaiven, r.alto_cadera - 0.004 + 0.002 * resp, -0.005)
+        p["cad_rot"] = v3(1.0, 0.6 * vaiven, -1.2 * vaiven)
+        p["col_rot"] = v3(-1.5 + 1.2 * resp, -0.4 * vaiven, 1.0 * vaiven)
+        p["cue_rot"] = v3(2.0 - 0.6 * resp, 0.8 * math.sin(2 * math.pi * u + 1.0), 0.2 * vaiven)
+        p["cab_rot"] = v3(1.0 - 0.4 * resp, 0.8 * math.sin(2 * math.pi * u + 1.0), 0.0)
+        if manos_juntas:
+            # la barbilla algo baja y la cabeza que gira lenta +-12 (mira a uno y a otro)
+            mira = 12.0 * math.sin(2 * math.pi * u)
+            p["cue_rot"] = v3(5.0 - 0.6 * resp, 0.4 * mira, 0.0)
+            p["cab_rot"] = v3(4.0 - 0.4 * resp, 0.6 * mira, 0.0)
+        for k, sg in (("L", 1.0), ("R", -1.0)):
+            n_ = "Left" if k == "L" else "Right"
+            # los tobillos a 0,20 m (el reposo de Mixamo los abre a 0,30)
+            p[f"tob_{k}"] = cuerpo(r.P0[r.j(n_ + "Foot")])
+            p[f"tob_{k}"][0] = -sg * 0.10
+            p[f"rod_{k}"] = norm(v3(-sg * 0.10, 0, 1))
+            p[f"pie_{k}"] = v3(0, sg * -5, 0)
+            p[f"hom_{k}"] = v3(-1.0 + 2.5 * resp, 1.0)
+            fuera = -sg
+            p[f"bra_{k}"] = norm(v3(fuera * 0.14, -1.0, -0.03))
+            p[f"ant_{k}"] = norm(v3(-fuera * 0.06, -1.0, 0.42))      # codo a ~24 grados
+            p[f"pal_{k}"] = norm(v3(-fuera, 0.0, 0.25))
+            p[f"mun_{k}"] = v3(6.0, 0.0)
+            p[f"ded_{k}"] = 0.36
+            p[f"pul_{k}"] = 0.75
+            if manos_juntas:
+                # Kara (medido por «pose» en kara/reposo_mesa_4, 1:45,9-1:54,1, 95 %
+                # fiable): las manos cogidas a la ESPALDA, munecas 9-10 cm detras
+                # de la pelvis y casi juntas, codos a 25-45 grados.
+                bra = v3(-0.22 * sg, -0.93, -0.30)
+                ant = v3(0.45 * sg, -0.75, -0.48)
+                p[f"hom_{k}"] = v3(1.0 + 2.0 * resp, -4.0)
+                au.brazo(p, k, tuple(bra), tuple(ant), palma=(0.35 * sg, 0.15, -0.92))
+                p[f"mun_{k}"] = v3(-10.0, 0.0)
+                p[f"ded_{k}"] = 0.45
+        poses.append(p)
+    clip = Clip("idle", poses, True, {"inspira": 0, "inspira2": n / 2})
+    return clip, {"ciclo": True, "v": 0.0, "marcas": clip.marcas,
+                  "contactos": [("Left", 0, n - 1, 0.0), ("Right", 0, n - 1, 0.0)]}
+
+
+def clips_explorar(rig, modelo=None):
+    """caminar e idle (los cinco modelos jugables). La periodista se calca de
+    Kara; los demas, de Connor."""
+    kara = modelo == "periodista"
+    car = Carrera(rig, ESTILO_ANDAR_KARA if kara else ESTILO_ANDAR)
+    n = round(car.D * FPS)
+    clip = clip_ciclo("caminar", rig, car, n)
+    b = car.beta
+    salida = {"caminar": (clip, {
+        "ciclo": True, "v": car.v,
+        "contactos": [("Left", 0, int(math.floor(b * n)), car.v),
+                      ("Right", n // 2, n // 2 + int(math.floor(b * n)), car.v)],
+        "marcas": {"contacto_izq": 0.0, "despegue_izq": round(b * n, 2),
+                   "contacto_der": n / 2, "despegue_der": round((n / 2 + b * n) % n, 2)},
+        "resumen": car.resumen()})}
+    au = Autor(rig, Resolutor(rig), car)
+    salida["idle"] = clip_idle(au, manos_juntas=kara)
+    return salida
+
+
 def clips_de(rig, modelo):
     """{nombre: (Clip, datos para el control y el contrato)}."""
     salida = {}
@@ -2174,15 +2404,19 @@ def clips_de(rig, modelo):
     au = Autor(rig, Resolutor(rig), car)
     for nombre, fabrica in CLIPS_SUELTOS.items():
         salida[nombre] = fabrica(au)
+    salida.update(clips_explorar(rig, modelo))
     return salida
 
 
 # =========================================================================== principal
 
-MODELOS = ("ciudadano", "alcalde")
+# Los de la persecucion llevan todo; los otros jugables, solo explorar.
+MODELOS = ("ciudadano", "alcalde", "periodista", "influencer", "prueba")
+PERSECUCION = ("ciudadano", "alcalde")
 NOMBRES = ("correr", "agachado_correr", "saltar", "aterrizar", "caer", "vallar", "deslizar",
            "tropezar", "esquivar", "esquivar_der", "lanzar_atras", "correr_mirando", "agarrar",
            "atrapado", "jadear")
+EXPLORAR = ("caminar", "idle")
 
 
 def origen(modelo):
@@ -2193,9 +2427,16 @@ def origen(modelo):
 
 def preparar_glb(modelo):
     glb = Glb(origen(modelo))
-    # Fuera los clips que fabrica esta herramienta (y el correr sintetizado):
-    # asi da igual de que .glb se parta, el resultado es el mismo.
-    glb.js["animations"] = [a for a in glb.js.get("animations", []) if a["name"] not in NOMBRES]
+    # Fuera los clips que esta herramienta fabrica PARA ESTE MODELO (y el
+    # correr sintetizado, si lo sustituye): asi da igual de que .glb se parta,
+    # el resultado es el mismo. Los que solo llevan explorar conservan su
+    # «correr» de Mixamo/sintetizado: lo usan el vigilante (prueba.glb) y
+    # quien corre fuera de la persecucion; quitarlo dejaba al vigilante
+    # andando acelerado (banco_pruebas/colegio.py lo detecto).
+    fuera = set(NOMBRES) if modelo in PERSECUCION else set()
+    if ENTREGA_EXPLORAR:
+        fuera |= set(EXPLORAR)
+    glb.js["animations"] = [a for a in glb.js.get("animations", []) if a["name"] not in fuera]
     glb.js, glb.bin = compactar(glb.js, glb.bin)
     glb.bin = bytearray(glb.bin)
     return glb
@@ -2206,6 +2447,10 @@ def preparar_glb(modelo):
 # esta a la altura de la referencia, el juego sigue con lo de antes.
 ENTREGA = {"correr", "saltar", "aterrizar", "caer", "vallar", "deslizar", "agachado_correr", "tropezar",
            "agarrar", "atrapado", "correr_mirando", "lanzar_atras", "esquivar", "esquivar_der", "jadear"}
+
+# caminar e idle propios (calcados de Connor) en los cinco jugables: hasta
+# verlos en el juego, False (se quedan los de Mixamo).
+ENTREGA_EXPLORAR = True
 
 CONVENIO = {
     "formato": "alcalde-clips/1",
@@ -2232,12 +2477,15 @@ def main(argv):
         rig = Rig(glb)
         res = Resolutor(rig)
         antes = os.path.getsize(os.path.join(PERSONAJES, modelo + ".glb"))
-        clips = clips_de(rig, modelo)
+        clips = clips_de(rig, modelo) if modelo in PERSECUCION else clips_explorar(rig, modelo)
         contrato[modelo] = {}
         print(f"\n=== {modelo}: pierna {rig.pierna:.3f} m, cadera {rig.alto_cadera:.3f} m")
         for nombre, (clip, datos) in clips.items():
             resolver_clip(res, clip)
-            if not qa and nombre in ENTREGA:
+            giro = girar_ciclo(res, rig, clip, datos)
+            if giro:
+                print(f"  {nombre}: empieza en el cuadro {giro} (si no, mundo.ciclo le quitaba el ultimo)")
+            if not qa and (nombre in ENTREGA or (ENTREGA_EXPLORAR and nombre in EXPLORAR)):
                 # Se escriben SIEMPRE todos los entregados: preparar_glb los quito.
                 escribir_clip(glb, rig, clip)
                 n = len(clip.locales)

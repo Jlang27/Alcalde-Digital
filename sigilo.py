@@ -56,7 +56,11 @@ AGARRE = 1.2               # a cuanto hay que estar de algo para agarrarlo (E)
 ALCANCE_HUMANO = 9.0
 ALCANCE_AGACHADO_HUMANO = 5.0
 MEDIO_ANGULO_HUMANO = 34.0
-PASO_HUMANO = 0.78         # su velocidad, como fraccion del andar de ella
+# El vigilante humano (en red) anda como ella: con el andar calcado de Connor
+# el juego pasa a 1,6 m/s (antes 2,7) y a 0,78 se quedaba en 1,25, casi como
+# ella agachada (1,3). A 1,0 sigue siendo mas rapido que ella agachada, como
+# antes, y su cuerpo pisa al ritmo del clip. Decision del coordinador, 18 nov.
+PASO_HUMANO = 1.0          # su velocidad, como fraccion del andar de ella
 DESLUMBRE = 3.5            # segundos sin linterna tras un ruido fuerte
 
 

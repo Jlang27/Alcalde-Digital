@@ -815,7 +815,9 @@ def _edificios_ciudad(mundo, azar, manzanas=None):
 
 
 def _calles(mundo):
-    asfalto = _material((0.020, 0.021, 0.026, 1), rugosidad=0.35, textura="asfalto")
+    # 0,5 y no 0,35: con la calle casi pulida, el relieve del asfalto
+    # devolvia la luz en puntitos que titilaban a ras de suelo (intro).
+    asfalto = _material((0.020, 0.021, 0.026, 1), rugosidad=0.5, textura="asfalto")
     _pieza(mundo, "plane", asfalto, 2400, (0, 0, 0))
 
     andenes = []
@@ -4723,6 +4725,11 @@ def _rastro(actor, clip):
     if control is None or control.getNumFrames() < 4 or not control.getFrameRate():
         return None
     muestra = Actor(other=actor)
+    # La copia hereda la mezcla del original: si a este lo lleva el
+    # mezclador (animador.py, enableBlend), posar un clip en la copia no
+    # pesa nada, los cuadros salian todos iguales y la medida daba None
+    # (ritmo 1,0 y pies que patinan al explorar). La copia, sin mezcla.
+    muestra.disableBlend()
     try:
         control = muestra.getAnimControl(clip)
         nodos = []

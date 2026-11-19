@@ -1289,6 +1289,9 @@ def poner_personaje(rol):
     if cl.actor is not None:
         mundo.retirar_protagonista(cl.actor)
     cl.actor = mundo.protagonista(cl.mundo, rol)
+    # El contrato de los clips (clips_persecucion.json) va por modelo: asi el
+    # mezclador de explorar lee la v_diseno de «caminar» de este personaje.
+    cl.actor.modelo_animador = os.path.splitext(os.path.basename(mundo.ruta_personaje(rol)))[0]
     cl.rol_actor = rol
     cl.jugador = None
     animar("idle")

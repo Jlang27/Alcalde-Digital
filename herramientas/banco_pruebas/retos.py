@@ -72,8 +72,17 @@ for _ in range(400):
         break
     est = r.juego.estado("tu")
     if est["mi_turno"] and est["validas"]:
-        i, lado = est["validas"][0]
-        tecla(str(i + 1), 0.2)
+        # la ULTIMA que se pueda poner: con la mano larga (hasta 11 fichas
+        # con el pozo) prueba tambien las que no tienen numero
+        i, lado = est["validas"][-1]
+        if i < 10:
+            tecla(str((i + 1) % 10), 0.2)           # el 0 es la décima
+        else:
+            # de la undécima en adelante, el cursor de las flechas y Enter
+            while J.cl.reto.cursor != i:
+                tecla("right arrow", 0.05)
+            tecla("enter", 0.2)
+            print("domino: ficha", i + 1, "elegida con las flechas")
         if J.cl.reto.sel is not None:
             tecla("left arrow" if lado == "izq" else "right arrow", 0.2)
     pasar(0.3)

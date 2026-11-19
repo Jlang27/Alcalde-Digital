@@ -107,8 +107,17 @@ class Auto:
     # La suspension: muelle y amortiguador (1,4 Hz, algo blanda: se nota
     # el cabeceo), cuanto cabecea por m/s2 y la pausa de un bache.
     FRECUENCIA, AMORTIGUA = 1.4, 0.38
-    CABECEO = 0.45            # grados por m/s2 (al frenar a 0,8 g, unos 3,5)
+    # Un turismo cabecea ~1° por cada 0,25 g de frenada. Con 0,45 °/(m/s2)
+    # el IDM (hasta -8 m/s2) lo llevaba a 4,6° y el morro se metia en el
+    # asfalto en la intro.
+    CABECEO = 0.30            # grados por m/s2 (al frenar a 0,8 g, unos 2,4)
     BALANCEO = 0.6            # grados por m/s2 de lado
+    # El cuerpo cabecea y se balancea sobre su centro de masas, a media
+    # altura y en el centro de la batalla, no sobre el suelo: girando sobre
+    # un punto a ras de suelo, el morro bajaba lo que mide medio coche por
+    # el seno del angulo y la carroceria atravesaba la calle.
+    ALTO_CENTRO = 0.55        # m sobre el suelo
+    DESPEJE_MINIMO = 0.04     # lo minimo que la carroceria queda sobre la calle
 
     def __init__(self, padre, nombre, color=None, modo="detalle", extra=(), quemado=False,
                  propio_piloto=False):
@@ -117,8 +126,21 @@ class Auto:
         color = color or f.m["colores"][0]
         cuerpo, rueda_d, rueda_i = _piezas(nombre, modo, extra)
         self.raiz = padre.attachNewNode(f"auto_{nombre}")
-        self.cuerpo = cuerpo.copyTo(self.raiz)
+        # El pivote de la suspension en el centro de masas (ver ALTO_CENTRO):
+        # el cuerpo cuelga de el desplazado al reves, asi en reposo queda
+        # exactamente donde estaba.
+        self.z_centro = sum(f.z(se) for se in f.ejes) / max(1, len(f.ejes))
+        self.pivote = self.raiz.attachNewNode("pivote")
+        self.pivote.setPos(0, self.ALTO_CENTRO, self.z_centro)
+        self.cuerpo = cuerpo.copyTo(self.pivote)
+        self.cuerpo.setPos(0, -self.ALTO_CENTRO, -self.z_centro)
         _vestir(self.cuerpo, color, quemado)
+        # Lo mas bajo de la carroceria (el labio de los paragolpes): con el
+        # cabeceo y el hundimiento nunca puede bajar de DESPEJE_MINIMO.
+        caja = self.cuerpo.getTightBounds(self.raiz)
+        self.bajo = caja[0][1] if caja else 0.15
+        self.medio_largo = max(abs(caja[0][2] - self.z_centro), abs(caja[1][2] - self.z_centro)) \
+            if caja else f.L / 2
         self.ejes = []
         for se in f.ejes:
             eje = self.raiz.attachNewNode("eje")
@@ -174,9 +196,17 @@ class Auto:
         if bache is not None and v > 1.0:
             self.alto_v += bache.gauss(0.0, 0.010) * min(1.0, v / 12.0) * math.sqrt(dt * 30)
         self.alto = max(-0.10, min(0.06, self.alto))
-        self.cuerpo.setPos(0, self.alto, 0)
-        self.cuerpo.setP(self.cabeceo)
-        self.cuerpo.setR(self.balanceo)
+        # Que ni el morro ni la cola atraviesen la calle: lo que baja un
+        # extremo al cabecear (medio largo por el seno) mas el hundimiento
+        # no puede comerse el despeje que tiene el coche.
+        margen = self.bajo - self.DESPEJE_MINIMO
+        if margen > 0:
+            maximo = math.degrees(math.asin(min(1.0, max(0.0, margen + min(0.0, self.alto))
+                                                / self.medio_largo)))
+            self.cabeceo = max(-maximo, min(maximo, self.cabeceo))
+        self.pivote.setPos(0, self.ALTO_CENTRO + self.alto, self.z_centro)
+        self.pivote.setP(self.cabeceo)
+        self.pivote.setR(self.balanceo)
         # las ruedas giran lo que avanzan (adelante: la de arriba va hacia +z)
         self.giro = (self.giro - math.degrees(v * dt / self.f.R)) % 360.0
         for eje in self.ejes:

@@ -39,7 +39,7 @@ from panda3d.core import (GeomVertexArrayFormat, GeomVertexFormat,
 
 CALIDADES = ("No", "Bajas", "Altas")
 LADO = {1: 512, 2: 1024}
-VERSION = 6                    # subir al tocar un generador: tira la cache
+VERSION = 8                    # subir al tocar un generador: tira la cache
 CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      ".cache_texturas")
 
@@ -212,7 +212,16 @@ def _asfalto(n, azar):
     grano = _ruido(n, azar, 0.3)
     mancha = _ruido(n, azar, 2.3)
     v = 0.66 + 0.20 * grano + 0.16 * mancha
-    return _gris(v), grano, 0.55 + 0.35 * mancha        # charcos y zonas secas
+    # El relieve, de la piedra (grano medio) y no del ruido casi blanco:
+    # con este, cada pixel de la calzada inclinaba su normal a un lado
+    # distinto y, a ras de suelo y con la calle algo pulida, cada uno
+    # reflejaba la luz o no segun el cuadro: purpurina que titilaba con la
+    # camara en marcha («la carretera vibra»). Y mas mate: el asfalto seco
+    # no es un espejo; las zonas lisas (charcos) siguen brillando algo.
+    # (Con grano grueso, beta 1,1, se leia como agua con ondas: el de la
+    # piedra menuda va en medio.)
+    piedra = _ruido(n, azar, 0.75)
+    return _gris(v), piedra, 0.80 + 0.20 * mancha
 
 
 def _adoquin(n, azar):
@@ -263,7 +272,7 @@ TIPOS = {
     "losa": (lambda n, a: _hormigon(n, a, losas=2), 2.4, 1.8),
     "ladrillo": (_ladrillo, 1.2, 3.2),
     "metal": (_metal, 1.0, 1.0),
-    "asfalto": (_asfalto, 3.0, 2.4),
+    "asfalto": (_asfalto, 3.0, 0.7),        # relieve suave: ver _asfalto
     "adoquin": (_adoquin, 1.6, 3.0),
     "cesped": (_cesped, 2.0, 2.2),
     "papel": (_papel, 1.2, 1.2),
