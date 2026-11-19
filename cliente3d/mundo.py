@@ -15,6 +15,8 @@ from panda3d.core import (AmbientLight, DirectionalLight, Fog, Filename,
 from PIL import Image, ImageDraw, ImageFont
 
 import autos
+import buses
+import patrulla
 import luces
 import posproceso
 import ambiente
@@ -466,9 +468,9 @@ MURALES = (
 # camara. Todo un carril va a la misma velocidad: si no, los carros se
 # atravesarian unos a otros.
 CARRILES = ((-4.5, -13.0), (-1.5, -10.0), (1.5, 9.0), (4.5, 12.0))
-# Los buses, (carril, z de salida). Estan calculados para que el
-# primero pase rozando la camara en el plano de la avenida.
-BUSES = ((1, 101.0), (3, -75.0), (2, 120.0))
+# El Sobusa pasa rozando la cámara en el plano de la avenida.
+BUSES = ((1, 101.0, "sobusa"), (3, -75.0, "carolina"),
+         (2, 120.0, "cootransporcar"), (0, 175.0, "coochofal"))
 Z_TRAFICO = (-90.0, 225.0)
 
 # Peatones en la acera de la derecha: (x, z, rumbo). Rumbo 0 = de cara
@@ -1101,28 +1103,17 @@ def _pantallas(mundo):
 _AZAR_AUTOS = random.Random(23)
 
 
-def _vehiculo(mundo, bus, carril, z, mats, pintura=None, vivo=False):
+def _vehiculo(mundo, modelo_bus, carril, z, mats, pintura=None, vivo=False):
     """Un bus o un carro: un nodo que se mueve con sus piezas colgadas."""
     x, velocidad = CARRILES[carril]
-    nodo = mundo.attachNewNode("bus" if bus else "carro")
+    nodo = mundo.attachNewNode("bus" if modelo_bus else "carro")
     nodo.setPos(x, 0, z)
     # Mirando hacia donde va: el frente (z local +) por delante.
     nodo.setH(180 if velocidad < 0 else 0)
-    if bus:
-        _pieza(nodo, "cube", mats[f"bus_{carril % 3}"], (2.6, 2.9, 12.0),
-               (0, 1.75, 0))
-        # Franja blanca bajo las ventanas, la de los buses de ciudad.
-        _pieza(nodo, "cube", mats["franja_bus"], (2.64, 0.25, 12.02),
-               (0, 1.55, 0))
-        _pieza(nodo, "cube", mats["ventana_bus"], (2.66, 1.0, 11.2),
-               (0, 2.30, 0))
-        # Abarrotado: siluetas pegadas al vidrio, a contraluz.
-        for i in range(12):
-            _pieza(nodo, "cube", mats["silueta"], (2.72, 0.80, 0.30),
-                   (0, 2.20, -5.0 + i * 0.88 + (i % 3) * 0.08))
-        _pieza(nodo, "cube", mats["ruta"], (2.0, 0.35, 0.05), (0, 3.0, 6.02))
-        largo, alto_luz = 12.0, 0.75
-    elif autos.ACTIVO:
+    if modelo_bus:
+        buses.crear(nodo, modelo_bus)
+        return [nodo, velocidad]
+    if autos.ACTIVO:
         # Uno de los ocho modelos (autos.py); el taxi, un Sentra amarillo
         # con su letrero. Modo "trafico": lo opaco en un solo material.
         import autos_vivos
@@ -1135,16 +1126,11 @@ def _vehiculo(mundo, bus, carril, z, mats, pintura=None, vivo=False):
         auto = autos_vivos.Auto(nodo, nombre, tinte, "trafico", extra,
                                 propio_piloto=vivo)
         return [nodo, velocidad, auto]
-    else:
-        _pieza(nodo, "cube", mats[pintura or f"carro_{carril % 3}"],
-               (1.8, 1.0, 4.2), (0, 0.65, 0))
-        _pieza(nodo, "cube", mats["silueta"], (1.6, 0.5, 2.0),
-               (0, 1.35, -0.2))
-        largo, alto_luz = 4.2, 0.68
-    _pieza(nodo, "cube", mats["faro"], (1.7, 0.16, 0.05),
-           (0, alto_luz, largo / 2 + 0.02))
-    _pieza(nodo, "cube", mats["freno"], (1.7, 0.14, 0.05),
-           (0, alto_luz + 0.1, -largo / 2 - 0.02))
+    _pieza(nodo, "cube", mats[pintura or f"carro_{carril % 3}"],
+           (1.8, 1.0, 4.2), (0, 0.65, 0))
+    _pieza(nodo, "cube", mats["silueta"], (1.6, 0.5, 2.0), (0, 1.35, -0.2))
+    _pieza(nodo, "cube", mats["faro"], (1.7, 0.16, 0.05), (0, 0.68, 2.12))
+    _pieza(nodo, "cube", mats["freno"], (1.7, 0.14, 0.05), (0, 0.78, -2.12))
     return [nodo, velocidad]
 
 
@@ -1153,19 +1139,8 @@ def _trafico(mundo, azar, vivo=True):
     si no, todos a la velocidad del carril (se funden: _carriles)."""
     _AZAR_AUTOS.seed(23)
     mats = {
-        # Amarillo, azul y rojo, como los buses de la referencia.
-        "bus_0": _material((0.60, 0.38, 0.02, 1), rugosidad=0.45,
-                           metalico=0.2),
-        "bus_1": _material((0.03, 0.10, 0.38, 1), rugosidad=0.45,
-                           metalico=0.2),
-        "bus_2": _material((0.40, 0.04, 0.03, 1), rugosidad=0.45,
-                           metalico=0.2),
-        "franja_bus": _material((0.60, 0.58, 0.52, 1), rugosidad=0.6),
         "taxi": _material((0.62, 0.42, 0.02, 1), rugosidad=0.3, metalico=0.5),
-        "ventana_bus": _material((0.02, 0.02, 0.02, 1),
-                                 emision=(1.30, 0.95, 0.55, 1)),
         "silueta": _material((0.008, 0.008, 0.010, 1), rugosidad=0.9),
-        "ruta": _material((0.02, 0.02, 0.02, 1), emision=(1.6, 0.8, 0.1, 1)),
         "faro": _material((0.05, 0.05, 0.05, 1), emision=(2.4, 2.3, 2.0, 1)),
         "freno": _material((0.05, 0.02, 0.02, 1), emision=(1.8, 0.05, 0.04, 1)),
         "carro_0": _material((0.12, 0.12, 0.13, 1), rugosidad=0.3,
@@ -1176,11 +1151,17 @@ def _trafico(mundo, azar, vivo=True):
                              metalico=0.6),
     }
     vehiculos = []
-    for carril, z in BUSES:
-        vehiculos.append(_vehiculo(mundo, True, carril, z, mats))
+    for carril, z, modelo in BUSES:
+        vehiculos.append(_vehiculo(mundo, modelo, carril, z, mats))
+    if vivo:
+        # En el plano de la avenida se ven los tapacubos. Cada bus lleva
+        # velocidad constante y conserva el giro al volver al inicio del carril.
+        _ACTUAL["ruedas_buses"] = [
+            (nodo.findAllMatches("**/eje"), -math.degrees(abs(v) / buses.RADIO_RUEDA))
+            for nodo, v in vehiculos]
     z_min, z_max = Z_TRAFICO
     for carril in range(len(CARRILES)):
-        ocupados = [z for c, z in BUSES if c == carril]
+        ocupados = [z for c, z, _ in BUSES if c == carril]
         z = z_min + azar.uniform(0, 20)
         while z < z_max:
             # Hueco de sobra respecto al bus: van a la misma velocidad y
@@ -1188,7 +1169,7 @@ def _trafico(mundo, azar, vivo=True):
             if all(abs(z - b) > 16 for b in ocupados):
                 # Uno de cada tres, taxi amarillo: es una ciudad colombiana.
                 pintura = "taxi" if azar.random() < 0.33 else None
-                vehiculos.append(_vehiculo(mundo, False, carril, z, mats,
+                vehiculos.append(_vehiculo(mundo, None, carril, z, mats,
                                            pintura, vivo))
             z += azar.uniform(22, 48)
     if autos.ACTIVO and vivo:
@@ -1463,6 +1444,10 @@ def seguir_cielo():
 def mover_trafico(dt):
     """Avanza buses y carros; al salir por un extremo vuelven a entrar."""
     z_min, z_max = _ACTUAL.get("limites_trafico", Z_TRAFICO)
+    for ejes, grados_segundo in _ACTUAL.get("ruedas_buses", ()):
+        giro = (ejes[0].getP() + grados_segundo * dt) % 360
+        for eje in ejes:
+            eje.setP(giro)
     if _ACTUAL.get("trafico"):
         import autos_vivos
         autos_vivos.mover(_ACTUAL["trafico"], dt, z_min, z_max, _ACTUAL["azar_trafico"])
@@ -2139,12 +2124,6 @@ def _exterior_colegio(o, azar):
         o.caja("metal", x - 0.08, x + 0.08, 0, 5.6, zf - 2.9, zf - 2.74)
         o.caja("metal", x - 0.05, x + 0.05, 5.5, 5.58, zf - 2.9, zf - 1.9)
         o.caja("bombilla", x - 0.18, x + 0.18, 5.38, 5.5, zf - 2.1, zf - 1.8)
-    for xc, zc in PATRULLAS_COLEGIO:              # las carrocerias
-        o.caja("carroceria", xc - 2.2, xc + 2.2, 0.32, 1.25, zc - 0.9, zc + 0.9)
-        o.caja("carroceria", xc - 1.2, xc + 1.0, 1.25, 1.75, zc - 0.8, zc + 0.8)
-        o.caja("ventana_oscura", xc - 1.15, xc + 0.95, 1.3, 1.7, zc - 0.82, zc + 0.82)
-        for dx in (-1.4, 1.4):
-            o.caja("rejilla", xc + dx - 0.35, xc + dx + 0.35, 0, 0.62, zc - 0.95, zc + 0.95)
     # Dos bloques vecinos con alguna ventana: sin ellos, mas alla de la
     # esquina del colegio solo habia niebla.
     for x0, x1, alto in ((-34.0, -11.0, 10.0), (X_ESTE + 3.0, X_ESTE + 22.0, 8.0)):
@@ -2188,7 +2167,6 @@ MATERIALES_COLEGIO = {
     "asfalto_mojado": ((0.010, 0.011, 0.014), 0.07, 0, None),
     "raya": ((0.45, 0.45, 0.40), 0.35, 0, None),
     "bombilla": ((0.2, 0.15, 0.05), 0.5, 0, (2.6, 1.5, 0.55)),
-    "carroceria": ((0.012, 0.014, 0.022), 0.22, 0.6, None),
     "muro_vecino": ((0.06, 0.055, 0.06), 0.9, 0, None),
     "madera": ((0.16, 0.075, 0.035), 0.65, 0, None),
     "madera_oscura": ((0.07, 0.03, 0.015), 0.55, 0, None),
@@ -2297,26 +2275,25 @@ def _rectoria(mundo):
     for x, alto, z in FOLIOS_COLEGIO:
         poner("folio", x - 0.15, x + 0.15, alto, alto + 0.01, z - 0.11, z + 0.11)
     _volcar_obra(mundo, OBRA_COLEGIO, MATERIALES_COLEGIO, caras)
-    _sirenas(mundo)
+    _patrullas_colegio(mundo)
     _lluvia()
 
 
-def _sirenas(mundo):
-    """Las barras de luz de las patrullas, que se alternan rojo y azul.
-
-    Van fuera de la malla fundida porque parpadean: se cambia el material
-    entero de cada barra (como en ciudad_alerta) en vez de tocar la
-    emision, que en un material ya aplicado no siempre se refleja.
-    """
+def _patrullas_colegio(mundo):
+    """Orienta las camionetas hacia la llegada de Valeria y conecta sus barras."""
     mats = {(c, on): _material((0.02, 0.02, 0.02, 1), rugosidad=0.4,
                                emision=(*(v if on else v * 0.06 for v in e), 1))
             for c, e in (("roja", (2.6, 0.12, 0.08)), ("azul", (0.12, 0.35, 2.8)))
             for on in (True, False)}
     barras = []
     for xc, zc in PATRULLAS_COLEGIO:
-        for c, dx in (("roja", -0.25), ("azul", 0.25)):
-            barras.append((c, _pieza(mundo, "cube", mats[(c, False)],
-                                     (0.42, 0.14, 0.6), (xc + dx, 1.82, zc))))
+        camioneta = patrulla.crear_patrulla(mundo)
+        camioneta.setPos(xc, 0, zc)
+        camioneta.setH(-90)
+        for c in ("roja", "azul"):
+            lente = camioneta.find("**/" + c)
+            lente.setMaterial(mats[(c, False)], 1)
+            barras.append((c, lente))
     _ACTUAL["sirenas"] = (barras, mats)
     _ACTUAL["fase_sirena"] = None
 
@@ -3207,13 +3184,8 @@ def _ciudad_abajo(mundo):
     # ~9 llamadas de dibujo: la ciudad del capitulo 3 volveria a doblar.
     _trafico(ciudad, azar, vivo=False)
     # Dos patrullas en la acera del mitin: la manifestacion ya tiene policia.
-    cuerpo = _material((0.02, 0.02, 0.025, 1), rugosidad=0.4, metalico=0.5)
-    rojo = _material((0.02, 0.0, 0.0, 1), emision=(2.4, 0.1, 0.08, 1))
-    azul = _material((0.0, 0.0, 0.02, 1), emision=(0.1, 0.3, 2.4, 1))
     for zc in (-49.0, -9.0):
-        _pieza(quieto, "cube", cuerpo, (1.8, 1.3, 4.2), (-8.0, 0.8, zc))
-        _pieza(quieto, "cube", rojo, (0.7, 0.15, 0.3), (-8.4, 1.55, zc))
-        _pieza(quieto, "cube", azul, (0.7, 0.15, 0.3), (-7.6, 1.55, zc))
+        patrulla.crear_patrulla(quieto).setPos(-8.0, 0.15, zc)
     _fundir(quieto, ciudad)
     _ACTUAL["vehiculos"] = _carriles(ciudad, _ACTUAL["vehiculos"])
 
@@ -4272,7 +4244,7 @@ def cambiar_escenario(mundo, escenario):
             nodo.removeNode()
     if "en_mano" in _ACTUAL:
         _ACTUAL["en_mano"][0].removeNode()
-    for clave in ("vehiculos", "trafico", "azar_trafico", "limites_trafico",
+    for clave in ("vehiculos", "trafico", "azar_trafico", "limites_trafico", "ruedas_buses",
                   "pantallas", "luz_pantalla", "cielo", "lluvia",
                   "sirenas", "fase_sirena", "luz_sirena", "reloj",
                   "luz_ambiente", "objetos", "usados", "arco", "en_mano",

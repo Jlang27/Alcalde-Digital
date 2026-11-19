@@ -2300,7 +2300,13 @@ ESTILO_ANDAR_KARA = dict(ESTILO_ANDAR, **{
 })
 
 
-def clip_idle(au, n=120, manos_juntas=False):
+ABRE_BRAZOS_KARA = 0.18
+ABRE_BRAZOS_CONNOR = 0.14
+PALMA_IDLE = 0.25            # la palma hacia dentro y algo delante
+DEDOS_IDLE = 0.36
+
+
+def clip_idle(au, n=120, kara=False, manos_espalda=False, abre=0.14):
     """De pie, quieto como Connor: recto, los pies a la anchura de la cadera
     y clavados, los brazos colgando relajados con el codo apenas doblado y
     las manos medio sueltas. Lo unico que se mueve: la respiracion (dos por
@@ -2315,13 +2321,13 @@ def clip_idle(au, n=120, manos_juntas=False):
         vaiven = math.sin(2 * math.pi * u)
         p = copia(base)
         # rodillas a ~12 grados (medido en el reposo del dormitorio de Hank)
-        lado_cad = 0.0175 if manos_juntas else 0.006       # Kara se mece +-1,75 cm
+        lado_cad = 0.0175 if kara else 0.006               # Kara se mece +-1,75 cm
         p["cad"] = v3(lado_cad * vaiven, r.alto_cadera - 0.004 + 0.002 * resp, -0.005)
         p["cad_rot"] = v3(1.0, 0.6 * vaiven, -1.2 * vaiven)
         p["col_rot"] = v3(-1.5 + 1.2 * resp, -0.4 * vaiven, 1.0 * vaiven)
         p["cue_rot"] = v3(2.0 - 0.6 * resp, 0.8 * math.sin(2 * math.pi * u + 1.0), 0.2 * vaiven)
         p["cab_rot"] = v3(1.0 - 0.4 * resp, 0.8 * math.sin(2 * math.pi * u + 1.0), 0.0)
-        if manos_juntas:
+        if kara:
             # la barbilla algo baja y la cabeza que gira lenta +-12 (mira a uno y a otro)
             mira = 12.0 * math.sin(2 * math.pi * u)
             p["cue_rot"] = v3(5.0 - 0.6 * resp, 0.4 * mira, 0.0)
@@ -2335,13 +2341,13 @@ def clip_idle(au, n=120, manos_juntas=False):
             p[f"pie_{k}"] = v3(0, sg * -5, 0)
             p[f"hom_{k}"] = v3(-1.0 + 2.5 * resp, 1.0)
             fuera = -sg
-            p[f"bra_{k}"] = norm(v3(fuera * 0.14, -1.0, -0.03))
+            p[f"bra_{k}"] = norm(v3(fuera * abre, -1.0, -0.03))
             p[f"ant_{k}"] = norm(v3(-fuera * 0.06, -1.0, 0.42))      # codo a ~24 grados
-            p[f"pal_{k}"] = norm(v3(-fuera, 0.0, 0.25))
+            p[f"pal_{k}"] = norm(v3(-fuera, 0.0, PALMA_IDLE))
             p[f"mun_{k}"] = v3(6.0, 0.0)
-            p[f"ded_{k}"] = 0.36
+            p[f"ded_{k}"] = DEDOS_IDLE
             p[f"pul_{k}"] = 0.75
-            if manos_juntas:
+            if manos_espalda:
                 # Kara (medido por «pose» en kara/reposo_mesa_4, 1:45,9-1:54,1, 95 %
                 # fiable): las manos cogidas a la ESPALDA, munecas 9-10 cm detras
                 # de la pelvis y casi juntas, codos a 25-45 grados.
@@ -2373,7 +2379,11 @@ def clips_explorar(rig, modelo=None):
                    "contacto_der": n / 2, "despegue_der": round((n / 2 + b * n) % n, 2)},
         "resumen": car.resumen()})}
     au = Autor(rig, Resolutor(rig), car)
-    salida["idle"] = clip_idle(au, manos_juntas=kara)
+    # Valeria: de Kara el vaiven, la respiracion y la cabeza que mira despacio,
+    # pero los brazos sueltos a los lados como Connor (lo pidio el usuario el
+    # 19 nov: las manos a la espalda no le iban). Con algo mas de apertura:
+    # su cadera es mas ancha y la mano no debe rozar el muslo.
+    salida["idle"] = clip_idle(au, kara=kara, abre=ABRE_BRAZOS_KARA if kara else ABRE_BRAZOS_CONNOR)
     return salida
 
 

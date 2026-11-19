@@ -255,8 +255,10 @@ def mover(vehiculos, dt, z_min, z_max, azar):
         signo = 1 if lista[0].v_carril > 0 else -1
         lista.sort(key=lambda v: v.z * signo)
         n = len(lista)
+        indice_bus = None
         for i, v in enumerate(lista):
             if v.bus:
+                indice_bus = i
                 v.a = 0.0                          # los buses marcan el paso (la intro)
                 continue
             lider = lista[(i + 1) % n] if n > 1 else None
@@ -279,6 +281,18 @@ def mover(vehiculos, dt, z_min, z_max, azar):
                 acc -= IDM_A * (max(0.0, deseado) / hueco) ** 2
             v.a = max(-8.0, min(IDM_A, acc))
             v.v = max(0.0, v.v + v.a * dt)
+        # El bus mantiene su marca de cámara. Si se acerca a una cola,
+        # los coches van recuperando su paso antes de agotar la separación.
+        if indice_bus is not None:
+            detras = lista[indice_bus]
+            for paso in range(1, n):
+                delante = lista[(indice_bus + paso) % n]
+                hueco = (signo * (delante.z - detras.z)) % tramo - (delante.largo + detras.largo) / 2
+                minima = detras.v - max(0.0, hueco - IDM_S0) / max(dt, IDM_T)
+                if not delante.bus and delante.v < minima:
+                    delante.a += (minima - delante.v) / dt
+                    delante.v = minima
+                detras = delante
     for v in vehiculos:
         v.z += v.v * dt * (1 if v.v_carril > 0 else -1)
         if v.v_carril > 0 and v.z > z_max:
@@ -309,6 +323,12 @@ def aparcados(padre, lista):
     sueltos y reaccionan a quien les pasa por encima (vivir)."""
     quietos = padre.attachNewNode("autos_quietos")
     for x, y, z, giro, estilo, vivo in lista:
+        if estilo == "patrulla":
+            import patrulla
+            camioneta = patrulla.crear_patrulla(quietos)
+            camioneta.setPos(x, y, z)
+            camioneta.setH(-giro)
+            continue
         azar = random.Random(int(x * 73 + z * 131))
         quemado = estilo == "quemado"
         if estilo == "coche_taxi":

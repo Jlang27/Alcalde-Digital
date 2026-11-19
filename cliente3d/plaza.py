@@ -187,8 +187,6 @@ MATERIALES = {
     "brasas": ((0.10, 0.02, 0.0), 0.8, 0, (0.9, 0.18, 0.02)),
     "quemado": ((0.012, 0.011, 0.010), 0.95, 0, None),
     "escombro": ((0.15, 0.14, 0.13), 0.9, 0, None),
-    "patrulla": ((0.75, 0.76, 0.78), 0.3, 0.5, None),
-    "patrulla_franja": ((0.02, 0.06, 0.25), 0.4, 0.3, None),
     "uniforme": ((0.02, 0.025, 0.03), 0.8, 0, None),
     "escudo": ((0.10, 0.12, 0.14), 0.2, 0.6, None),
 }
@@ -286,11 +284,12 @@ def _coche(t, x, z, giro, mat, bloquea=True, vivo=False):
     (con ALCALDE_AUTOS=0, carroceria, cabina y ruedas de cajas). vivo: el
     de la persecucion, que se hunde cuando lo trepan (autos_vivos.vivir).
     El rectangulo de bloqueo es el de siempre: las colisiones no cambian."""
-    if autos.ACTIVO:
+    if autos.ACTIVO or mat == "patrulla":
         if bloquea:
+            ancho, largo, alto = (1.9, 4.6, 1.05) if mat == "patrulla" else (1.8, 4.3, 1.0)
             c, s = abs(math.cos(math.radians(giro))), abs(math.sin(math.radians(giro)))
-            r = (1.8 * c + 4.3 * s) / 2, (1.8 * s + 4.3 * c) / 2
-            t.o.solido((x - r[0], x + r[0], z - r[1], z + r[1]), 1.0)
+            r = (ancho * c + largo * s) / 2, (ancho * s + largo * c) / 2
+            t.o.solido((x - r[0], x + r[0], z - r[1], z + r[1]), alto)
         t.autos.append((x, 0.0, z, giro, mat, vivo))
         return
     t.girada(mat, x, z, 1.8, 4.3, 0.25, 1.0, giro, bloquea)
@@ -903,9 +902,7 @@ def _obra_caotica():
             pass                                          # la ventana: sin nadie a la vista
     # Las patrullas al fondo de la avenida, con la fila de antidisturbios.
     for x, z, giro in ((40.6, 43.0, 20.0), (39.6, -39.0, 160.0), (-6.0, -66.0, 90.0)):
-        t.girada("patrulla", x, z, 1.9, 4.6, 0.25, 1.05, giro, bloquea=True)
-        t.girada("patrulla_franja", x, z, 1.95, 4.0, 0.55, 0.75, giro)
-        t.girada("cristal_coche", x, z, 1.7, 2.3, 1.05, 1.55, giro)
+        _coche(t, x, z, giro, "patrulla")
     # La ciudad de fuera, casi a oscuras: persianas bajadas.
     _ventanas_alrededores(t, random.Random(60), (1, 1, 9))
     return t
