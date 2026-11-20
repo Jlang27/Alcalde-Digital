@@ -30,7 +30,7 @@ sigue contra la máquina y el desinformador vuelve al menú.
 | Cap. | Protagonista | Desinformador |
 |---|---|---|
 | 1 | investiga y arma el tablero, como siempre | riega el rumor vecino a vecino por las aristas (`Partida.rumor_manual`, `regar`); los envíos salen del reloj de ella (`MINUTOS_POR_ENVIO`) y de las jugadas del tablero |
-| 2 | mismo objetivo y misma velocidad; ve un poco menos (niebla 0,048) y el plano se destapa al andar (`minimapa.con_niebla`) | **el vigilante** (`Sigilo.poner_humano`): linterna más larga y ancha (`ALCANCE_HUMANO`, `MEDIO_ANGULO_HUMANO`), niebla 0,014, pero anda al 78 % (`PASO_HUMANO`) y nunca corre; ve en el plano lo que oye; un petardo cerca lo deslumbra (`DESLUMBRE`); tras un aviso vuelve a su puesto |
+| 2 | mismo objetivo y misma velocidad; ve un poco menos (niebla 0,048) y el plano se destapa al andar (`minimapa.con_niebla`) | **el vigilante** (`Sigilo.poner_humano`): linterna más larga y ancha (`ALCANCE_HUMANO`, `MEDIO_ANGULO_HUMANO`), niebla 0,014, pero anda como ella de pie (`PASO_HUMANO` = 1,0, 1,6 m/s: más rápido que ella agachada) y nunca corre; ve en el plano lo que oye; un petardo cerca lo deslumbra (`DESLUMBRE`); tras un aviso vuelve a su puesto |
 | 3 | billar contra el otro | juega por el asesor (`Partida8Remota`) |
 | 4 | JH777 | Nodo (`PeleaRemota`, `Pelea.nodo_humano`) |
 | 5 (plaza pacífica) | Mateo en el duelo | las notas del rival (`ritmo.DueloRival`) |
