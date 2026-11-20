@@ -234,6 +234,8 @@ class EscenaDecision:
         antes = self.t
         self.t += dt
         t = self.t
+        if self.fase == "salida":
+            return t >= self.fin
         self._camara()
         self._eventos(lambda marca: antes < marca <= t)
         if self.fase == "llega" and t >= self.T_DECIDE:
@@ -246,10 +248,17 @@ class EscenaDecision:
         return self.fin is not None and t >= self.fin
 
     def saltar(self):
-        """Enter: hasta la decision, o del final de la consecuencia al cierre.
-        Mientras se decide no hace nada: la decision no se salta."""
+        """Enter adelanta a la decisión o funde a negro para cerrar."""
         if self.fase == "llega":
-            self.t = max(self.t, self.T_DECIDE - 0.01)
+            if self.T_DECIDE == math.inf:
+                # Las cinemáticas sin decisión cierran desde el plano actual.
+                # El reloj sigue finito para las poses y la cámara.
+                self.fase = "salida"
+                self.fin = min(self.fin, self.t + 0.35)
+                self.negro.animate_color(color.rgba(0, 0, 0, 1),
+                                         duration=min(0.3, self.fin - self.t))
+            else:
+                self.t = max(self.t, self.T_DECIDE - 0.01)
             self._adelantar()
         elif self.fase == "consecuencia" and self.fin is None:
             self.fin = self.t + 0.6
