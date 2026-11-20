@@ -280,10 +280,10 @@ def _papelera(t, x, z):
 
 
 def _coche(t, x, z, giro, mat, bloquea=True, vivo=False):
-    """Un coche aparcado (o cruzado): uno de los ocho modelos de autos.py
-    (con ALCALDE_AUTOS=0, carroceria, cabina y ruedas de cajas). vivo: el
-    de la persecucion, que se hunde cuando lo trepan (autos_vivos.vivir).
-    El rectangulo de bloqueo es el de siempre: las colisiones no cambian."""
+    """Aparca un coche civil o una patrulla con su rectángulo de bloqueo.
+
+    El coche de la persecución reacciona cuando el jugador lo trepa.
+    """
     if autos.ACTIVO or mat == "patrulla":
         if bloquea:
             ancho, largo, alto = (1.9, 4.6, 1.05) if mat == "patrulla" else (1.8, 4.3, 1.0)
@@ -901,7 +901,7 @@ def _obra_caotica():
         elif ev["tipo"] == "lanza" and ev["desde"] != "sospechoso" and ev["desde"][1] > -7:
             pass                                          # la ventana: sin nadie a la vista
     # Las patrullas al fondo de la avenida, con la fila de antidisturbios.
-    for x, z, giro in ((40.6, 43.0, 20.0), (39.6, -39.0, 160.0), (-6.0, -66.0, 90.0)):
+    for x, z, giro in ((38.9, 44.0, 20.0), (39.4, -38.7, 160.0), (-6.0, -66.0, 90.0)):
         _coche(t, x, z, giro, "patrulla")
     # La ciudad de fuera, casi a oscuras: persianas bajadas.
     _ventanas_alrededores(t, random.Random(60), (1, 1, 9))

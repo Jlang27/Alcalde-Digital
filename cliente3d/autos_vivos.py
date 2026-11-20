@@ -281,17 +281,19 @@ def mover(vehiculos, dt, z_min, z_max, azar):
                 acc -= IDM_A * (max(0.0, deseado) / hueco) ** 2
             v.a = max(-8.0, min(IDM_A, acc))
             v.v = max(0.0, v.v + v.a * dt)
-        # El bus mantiene su marca de cámara. Si se acerca a una cola,
-        # los coches van recuperando su paso antes de agotar la separación.
+        # Hay un bus por carril. La fila que tiene delante recupera el
+        # paso antes de agotar el hueco. El resto sigue a su conductor IDM.
         if indice_bus is not None:
             detras = lista[indice_bus]
             for paso in range(1, n):
                 delante = lista[(indice_bus + paso) % n]
-                hueco = (signo * (delante.z - detras.z)) % tramo - (delante.largo + detras.largo) / 2
+                centros = (signo * (delante.z - detras.z)) % tramo
+                hueco = centros - (delante.largo + detras.largo) / 2
                 minima = detras.v - max(0.0, hueco - IDM_S0) / max(dt, IDM_T)
-                if not delante.bus and delante.v < minima:
-                    delante.a += (minima - delante.v) / dt
-                    delante.v = minima
+                if delante.v >= minima:
+                    break
+                delante.a += (minima - delante.v) / dt
+                delante.v = minima
                 detras = delante
     for v in vehiculos:
         v.z += v.v * dt * (1 if v.v_carril > 0 else -1)
