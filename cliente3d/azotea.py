@@ -205,7 +205,8 @@ def _caseton(cont, muro, metal, bombilla):
 
 
 def _pc(nodo, metal, goma):
-    """La mesa con el PC del directo: tablero, patas, monitor, teclado y torre."""
+    """La mesa y todos sus accesorios se esconden juntos durante la pelea."""
+    nodo = nodo.attachNewNode("mesa_directo")
     x, z = MONITOR_PC.x, MONITOR_PC.z - 0.05
     madera = M._material((0.16, 0.10, 0.06, 1), rugosidad=0.6, textura="madera")
     M._pieza(nodo, "cube", madera, (1.05, 0.05, 0.56), (x, 0.74, z))
@@ -219,6 +220,14 @@ def _pc(nodo, metal, goma):
     M._pieza(nodo, "cube", goma, (0.20, 0.44, 0.44), (x - 0.38, 0.99, z + 0.02))
     led = M._material((0.0, 0.02, 0.02, 1), emision=(0.2, 1.8, 2.2, 1))
     M._pieza(nodo, "cube", led, (0.012, 0.36, 0.012), (x - 0.27, 0.99, z - 0.20))
+    accesorios = nodo.attachNewNode("accesorios_mesa")
+    lata = M._material((0.55, 0.56, 0.58, 1), rugosidad=0.3, metalico=0.9)
+    lata_tinta = M._material((0.75, 0.50, 0.06, 1), rugosidad=0.35, metalico=0.5)
+    microfono = M._material((0.012, 0.012, 0.014, 1), rugosidad=0.7)
+    M._pieza(accesorios, "cube", lata_tinta, (0.065, 0.12, 0.065), (x + 0.3925, 0.825, z + 0.0125))
+    M._pieza(accesorios, "cube", lata, (0.065, 0.12, 0.065), (x + 0.3325, 0.825, z + 0.1525))
+    M._pieza(accesorios, "cube", microfono, (0.03, 0.225, 0.03), (x + 0.195, 0.8775, z - 0.185))
+    M._pieza(accesorios, "cube", microfono, (0.06, 0.10, 0.06), (x + 0.195, 1.04, z - 0.185))
     pantalla = M._pantalla_plana(M._textura("pc_azotea_directo", _pintar_pc("directo"),
                                             768, 448, srgb=False),
                                  MONITOR_PC, 0.62, 0.36,
@@ -375,13 +384,6 @@ def _atrezo(cont):
     c("cable", -4.90, -4.17, 0.0, 0.02, -2.72, -2.69)
     c("cable", -5.60, -4.90, 0.0, 0.02, -2.80, -2.77)
     c("cable", -4.42, -4.02, 0.0, 0.07, -3.55, -3.35)     # la regleta
-    # en la mesa del PC: dos latas y el microfono
-    x, z = MONITOR_PC.x, MONITOR_PC.z - 0.05
-    c("lata_tinta", x + 0.36, x + 0.425, 0.765, 0.885, z - 0.02, z + 0.045)
-    c("lata", x + 0.30, x + 0.365, 0.765, 0.885, z + 0.12, z + 0.185)
-    c("cable", x + 0.18, x + 0.21, 0.765, 0.99, z - 0.20, z - 0.17)
-    c("cable", x + 0.165, x + 0.225, 0.99, 1.09, z - 0.215, z - 0.155)
-
     for mat, lista in caras.items():
         M._pieza_malla(cont, lista, mats[mat])
     for x, r in plantas:
@@ -445,17 +447,16 @@ def construir(cont):
     M._pieza(cont, "cube", neon_mag, (3.0, 0.04, 0.04), (nx, ny + 0.6, nz - 0.05))
     M._pieza(cont, "cube", neon_cian, (3.0, 0.04, 0.04), (nx, ny - 0.6, nz - 0.05))
 
-    # el montaje del directo, en primer plano a la izquierda (fuera de la
-    # linea de pelea): tripode con camara y el aro de luz
+    # El equipo de grabación queda en primer plano al explorar la azotea.
+    equipo = _ESTADO["caseton"].attachNewNode("equipo_directo")
     for g in (0, 120, 240):
         a = math.radians(g)
-        M._pieza(cont, "cube", goma, (0.03, 1.5, 0.03),
+        M._pieza(equipo, "cube", goma, (0.03, 1.5, 0.03),
                  (-5.6 + 0.25 * math.sin(a), 0.72, -2.6 + 0.25 * math.cos(a)))
-    M._pieza(cont, "cube", goma, (0.32, 0.2, 0.22), (-5.6, 1.55, -2.6))
-    _tubo(cont, aro, (0.85, 0.035, 0.85), (-4.9, 1.75, -2.9), giro=0)
-    M._pieza(cont, "cube", goma, (0.03, 1.7, 0.03), (-4.9, 0.85, -2.9))
-    # Con el caseton: la camara de la pelea pasa por aqui y lo esconde.
-    _pc(_ESTADO["caseton"], metal, goma)
+    M._pieza(equipo, "cube", goma, (0.32, 0.2, 0.22), (-5.6, 1.55, -2.6))
+    _tubo(equipo, aro, (0.85, 0.035, 0.85), (-4.9, 1.75, -2.9), giro=0)
+    M._pieza(equipo, "cube", goma, (0.03, 1.7, 0.03), (-4.9, 0.85, -2.9))
+    _pc(equipo, metal, goma)
 
     _atrezo(cont)
 

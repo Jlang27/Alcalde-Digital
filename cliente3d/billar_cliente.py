@@ -96,6 +96,9 @@ def _suelta(padre, modelo, mat, escala, pos):
     e = Entity(model=modelo)
     e.reparentTo(padre)
     e.clearShader()
+    # La bola y el taco son sólidos. Ursina asigna transparencia dual
+    # al cargar el modelo, incluso si todos los píxeles son opacos.
+    e.model.setTransparency(TransparencyAttrib.M_none)
     e.setMaterial(mat, 1)
     e.scale = escala
     e.position = pos
@@ -144,6 +147,7 @@ class MesaVista:
     # --- el taco: tres tramos de madera y la punta azul de tiza ---
     def _taco(self):
         self.taco = self.padre.attachNewNode("taco")
+        self.piezas_taco = []
         claro = mundo._material((0.62, 0.45, 0.25, 1), rugosidad=0.35)
         oscuro = mundo._material((0.10, 0.035, 0.02, 1), rugosidad=0.3)
         blanco = mundo._material((0.9, 0.88, 0.82, 1), rugosidad=0.4)
@@ -154,6 +158,7 @@ class MesaVista:
                                           (mundo._cilindro(1, 1), oscuro, 0.0125, 0.85, 1.45)):
             e = _suelta(self.taco, modelo, mat, (radio, z1 - z0, radio), (0, 0, -(z0 + z1) / 2))
             e.rotation_x = 90                  # el tubo va a lo largo de y: tumbarlo
+            self.piezas_taco.append(e)
         self.taco.setP(4)                       # algo inclinado, como se tira de verdad
 
     def poner_taco(self, angulo, retroceso, visible=True):
@@ -290,7 +295,10 @@ class MesaVista:
         for e in self.bolas.values():
             destroy(e)
         for g in self.guias:
+            destroy(g.q)
             destroy(g)
+        for e in self.piezas_taco:
+            destroy(e)
         self.taco.removeNode()
 
 

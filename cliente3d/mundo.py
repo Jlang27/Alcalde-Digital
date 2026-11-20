@@ -3240,8 +3240,17 @@ def _fundir(origen, destino, copias_z=(0.0,)):
             copia.setTransform(geom.getTransform(fundido))
             copia.setZ(copia.getZ() + dz)
             copia.setState(estado)
+    # Ursina entrega su prototipo en la primera carga de una primitiva.
+    # Si esa primera esfera es un cerro de la ciudad, quitar su GeomNode
+    # vacía también las futuras bolas, troneras y cascos de la sesión.
+    # Descolgar el modelo entero de su Entity conserva la malla original.
+    retirar = set()
     for geom in piezas:
-        geom.detachNode()
+        duenio = geom.findNetPythonTag("Entity")
+        modelo = duenio.getPythonTag("Entity").model if duenio else None
+        retirar.add(modelo if modelo and modelo.isAncestorOf(geom) else geom)
+    for nodo in retirar:
+        nodo.detachNode()
     fundido.flattenStrong()
 
 

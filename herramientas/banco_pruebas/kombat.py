@@ -12,11 +12,13 @@ del resultado, y sigue hasta el cierre del dia.
 Con «pierde», JH777 no hace nada: se comprueba la derrota y su bandera.
 """
 import sys
+from copy import copy
 
-from panda3d.core import Vec3
+from panda3d.core import Point2, Point3, Vec3
 
 from banco import *
 from banco import J
+from ursina import application
 
 import kombat as K
 
@@ -47,6 +49,9 @@ for _ in range(6):
         break
     tecla("enter", 0.6)
 assert estado() == "libre", estado()
+equipo = J.cl.mundo.find("**/equipo_directo")
+accesorios = equipo.find("**/accesorios_mesa")
+assert not accesorios.isEmpty() and not accesorios.isHidden()
 # Las colisiones de la azotea: el tanque de agua ya no se atraviesa.
 assert J.cl.jugador._bloqueado(-5.7, 2.4), "el tanque no estorba"
 assert not J.cl.jugador._bloqueado(0.0, 0.0), "el centro tiene que estar libre"
@@ -72,6 +77,7 @@ assert hasta_estado("aviso_papel", 10), estado()
 foto("kombat_aviso")
 tecla("enter", 0.4)
 assert estado() == "kombat", estado()
+assert equipo.isHidden() and accesorios.isHidden(), "el equipo del directo tapa a los luchadores"
 pasar(0.6)
 foto("kombat_presentacion")
 pasar(1.6)
@@ -96,6 +102,49 @@ assert eje_codo.dot(bisagra) > 0.94, "el codo izquierdo se retuerce en guardia"
 assert (pulgar.getPos(raiz) - dedo.getPos(raiz)).length() < 0.05, "el puño queda abierto"
 for articulacion in (brazo, codo, muneca, pulgar, dedo):
     articulacion.removeNode()
+
+
+def comprobar_guardias(combate):
+    # En la esquina, a distancia mínima, también la mano del rival tiene
+    # que quedar fuera de la silueta de la cara en el plano del jugador.
+    app = application.base
+
+    def proyectar(nodo):
+        p = Point2()
+        assert app.camLens.project(app.cam.getRelativePoint(nodo, Point3(0)), p)
+        return p.x
+
+    luchadores = [copy(pelea.santi), copy(pelea.nodo)]
+    cuerpos = (combate.santi, combate.nodo)
+    juntas = []
+    for cuerpo in cuerpos:
+        a = cuerpo.actor
+        nombres = {j.getName().split(":")[-1]: j.getName() for j in a.getJoints()}
+        juntas.append([a.exposeJoint(None, "modelRoot", nombres[n]) for n in
+                       ("Head", "HeadTop_End", "LeftHandMiddle2", "RightHandMiddle2")])
+    for lado in (1, -1):
+        for i, l in enumerate(luchadores):
+            l.mira = lado if i == 0 else -lado
+            l.x = -K.ANCHO_RING + (K.SEPARACION if l.mira < 0 else 0)
+            l.estado = "quieto" if i == 0 else "bloquear"
+            l.agachado = False
+        for _ in range(60):
+            for cuerpo, l in zip(cuerpos, luchadores):
+                cuerpo.actualizar(l, 1 / 30, 0.0)
+            combate.camara.actualizar(*luchadores, 1 / 30)
+        for cuerpo in cuerpos:
+            cuerpo.actor.update(force=True)
+        for l, (cabeza, coronilla, *_) in zip(luchadores, juntas):
+            cara = (proyectar(cabeza) + proyectar(coronilla)) / 2
+            for _, _, izquierda, derecha in juntas:
+                for mano in (izquierda, derecha):
+                    assert l.mira * (proyectar(mano) - cara) > 0.035, "la mano cubre la cara"
+    for grupo in juntas:
+        for nodo in grupo:
+            nodo.removeNode()
+
+
+comprobar_guardias(J.cl.kombat)
 
 # ---------------------------------------------------------------------
 #  el bot
@@ -218,6 +267,7 @@ assert pelea.resultado in ("desenmascarado", "gano", "perdio")
 if PIERDE:
     assert pelea.resultado == "perdio", pelea.resultado
 assert hasta_estado("aviso_papel", 10), estado()
+assert not accesorios.isHidden(), "falta el equipo del directo al cerrar el combate"
 foto("kombat_resultado")
 tecla("enter", 1.0)
 assert "la_alcaldia_en_duda" in p.banderas if pelea.resultado == "perdio" else True

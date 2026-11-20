@@ -43,15 +43,15 @@ CLIPS_PELEA = {"guardia": "guardia", "andar": "guardia_andar", "puno": "puno",
 # La guardia de un juego de lucha (referencia: Mortal Kombat X): de lado,
 # piernas abiertas y rodillas dobladas (la cadera baja BAJA_GUARDIA), la
 # pierna y el puno izquierdos delante, el de delante a la altura de la cara
-# y el de atras en la barbilla con el codo pegado.
+# y el de atras por delante de la barbilla con el codo pegado.
 # Con peso: rodillas a ~135 grados, el pie de atras lejos, abierto y con
 # el talon levantado (RightFoot), el puno de delante a la altura de la
-# nariz y el de atras pegado a la mejilla con el codo contra las costillas.
+# nariz y el de atras protegiendo la mejilla con el codo contra las costillas.
 # El codo de atras, delante de las costillas y no pegado al costado: con el
 # brazo casi vertical (0,35 hacia delante) el antebrazo subia POR DENTRO
 # de la sudadera de JH777 y el brazo derecho se veia cortado en el codo.
-GUARDIA = {"LeftArm": (-0.05, -0.6, 0.8), "LeftForeArm": (0.05, 0.95, 0.3),
-           "RightArm": (0.12, -0.76, 0.64), "RightForeArm": (-0.32, 0.8, 0.5),
+GUARDIA = {"LeftArm": (-0.12, -0.68, 0.74), "LeftForeArm": (0.03, 0.9, 0.51),
+           "RightArm": (0.12, -0.68, 0.77), "RightForeArm": (0.03, 0.8, 1.0),
            "LeftUpLeg": (-0.2, -0.6, 0.78), "LeftLeg": (0.0, -0.96, -0.22),
            "RightUpLeg": (0.25, -0.82, -0.5), "RightLeg": (0.05, -0.62, -0.78),
            "LeftFoot": (-0.1, -0.45, 0.88), "RightFoot": (0.35, -0.7, 0.6)}
@@ -70,8 +70,8 @@ CARGA_PATADA = dict(GUARDIA, RightUpLeg=(0.05, -0.55, 0.5), RightLeg=(0.0, -1.0,
 PATADA = dict(GUARDIA, RightUpLeg=(0.0, 0.15, 1.0), RightLeg=(0.0, 0.35, 1.0),
               RightArm=(0.4, -0.7, -0.3), RightForeArm=(0.2, 0.5, 0.3))
 # Cubrirse: los dos antebrazos de pie delante de la cara, cruzados.
-BLOQUEO = dict(GUARDIA, RightArm=(0.3, -0.3, 0.9), RightForeArm=(-0.3, 0.95, 0.12),
-               LeftArm=(-0.3, -0.3, 0.9), LeftForeArm=(0.3, 0.95, 0.12))
+BLOQUEO = dict(GUARDIA, RightArm=(0.15, -0.34, 0.94), RightForeArm=(-0.12, 0.95, 0.55),
+               LeftArm=(-0.15, -0.34, 0.94), LeftForeArm=(0.12, 0.95, 0.55))
 # El golpe recibido (como en MK): cabeza y pecho atras (INCLINA), los brazos
 # despedidos hacia atras y un paso atras con la pierna de detras.
 # No una tabla: la cadera atras y abajo (avance y baja en _escalares), la
@@ -703,8 +703,9 @@ class Cuerpo:
         # guardia que respira: los puños suben y bajan un poco
         s = math.sin(reloj * 2.2) * 0.05
         pose = dict(GUARDIA)
-        pose["RightForeArm"] = (-0.45, 0.8 + s, 0.35)
-        pose["LeftForeArm"] = (0.1, 0.75 + s, 0.65)
+        for hueso in ("RightForeArm", "LeftForeArm"):
+            lateral, altura, frente = GUARDIA[hueso]
+            pose[hueso] = (lateral, altura + s, frente)
         return pose, 12.0
 
     def _por_clips(self, l):
