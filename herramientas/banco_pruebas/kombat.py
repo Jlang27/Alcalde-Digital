@@ -13,6 +13,8 @@ Con «pierde», JH777 no hace nada: se comprueba la derrota y su bandera.
 """
 import sys
 
+from panda3d.core import Vec3
+
 from banco import *
 from banco import J
 
@@ -78,6 +80,22 @@ pasar(1.0)
 pelea = J.cl.partida.kombat
 assert pelea.fase == "pelea" and J.cl.kombat.fase == "pelea"
 foto("kombat_guardia")
+
+# El codo izquierdo se dobla sobre su bisagra y el pulgar queda recogido.
+actor = J.cl.actor
+raiz = actor.getParent()
+nombres = {j.getName().split(":")[-1]: j.getName() for j in actor.getJoints()}
+brazo, codo, muneca, pulgar, dedo = (
+    actor.exposeJoint(None, "modelRoot", nombres[nombre])
+    for nombre in ("LeftArm", "LeftForeArm", "LeftHand", "LeftHandThumb4", "LeftHandMiddle3"))
+actor.update(force=True)
+eje_codo = (codo.getPos(raiz) - brazo.getPos(raiz)).cross(
+    muneca.getPos(raiz) - codo.getPos(raiz)).normalized()
+bisagra = raiz.getRelativeVector(brazo, Vec3(-0.16, 0, 0.99)).normalized()
+assert eje_codo.dot(bisagra) > 0.94, "el codo izquierdo se retuerce en guardia"
+assert (pulgar.getPos(raiz) - dedo.getPos(raiz)).length() < 0.05, "el puño queda abierto"
+for articulacion in (brazo, codo, muneca, pulgar, dedo):
+    articulacion.removeNode()
 
 # ---------------------------------------------------------------------
 #  el bot
