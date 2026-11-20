@@ -1,4 +1,4 @@
-"""Alcalde Digital - cliente 3D.
+"""Nova en juego - cliente 3D.
 
 Capa visual en Ursina sobre la logica que ya existe: no duplica reglas,
 solo las dibuja. La partida sigue viviendo entera en juego.Partida.
@@ -400,7 +400,7 @@ def abrir_capitulos(seleccion=0):
     cl.capitulo_sel = seleccion
     p = cl.pantalla
     p.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
-    p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.462), E.TEXTO_TENUE,
+    p.append(E.pequena("NOVA EN JUEGO", (-0.84, 0.462), E.TEXTO_TENUE,
                        escala=0.56))
     p.append(E.titular("Capítulos", (-0.84, 0.405), 2.4, E.TEXTO))
     p.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
@@ -472,7 +472,7 @@ def abrir_minijuegos(seleccion=0):
     cl.minijuego_sel = seleccion
     p = cl.pantalla
     p.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
-    p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
+    p.append(E.pequena("NOVA EN JUEGO", (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
     p.append(E.titular("Minijuegos", (-0.84, 0.405), 2.4, E.TEXTO))
     p.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
     for i, (_clave, cap, titulo, que) in enumerate(MINIJUEGOS):
@@ -3757,7 +3757,7 @@ def _cifra(clave, p):
 
 def _arriba(p):
     titulo, _dias, lugar = capitulo_de(p.dia_actual)
-    return (f"ALCALDE DIGITAL   ·   DÍA 0{p.dia_actual + 1}   ·   "
+    return (f"NOVA EN JUEGO   ·   DÍA 0{p.dia_actual + 1}   ·   "
             f"{p.nombre_protagonista.upper()}")
 
 
@@ -4836,7 +4836,7 @@ def main():
     x, y, ancho, alto, completa = A.geometria_ventana()
     if completa:
         loadPrcFileData("", "fullscreen 1")
-    app = Ursina(title="Alcalde Digital", borderless=False, vsync=True,
+    app = Ursina(title="Nova en juego", borderless=False, vsync=True,
                  fullscreen=False, size=(ancho, alto), position=(x, y))
     window.color = color.Color(*mundo.CIELO)
     E.cargar_fuentes()           # antes de crear cualquier texto
