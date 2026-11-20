@@ -1,4 +1,4 @@
-# Nova en juego
+# Nova
 
 Videojuego educativo 3D sobre el uso responsable de las redes sociales,
 hecho para **Estructura de Datos II** en la **Universidad del Norte** y
