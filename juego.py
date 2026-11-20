@@ -49,7 +49,7 @@ from contenido import (
     RUTA_PERSECUCION_PLAZA, FASES_PERSECUCION, EVENTOS_PERSECUCION,
     aplicar_habilidades, aplicar_banderas,
     HERENCIAS, TITULARES, TEXTO_ESTADO_PLAZA, FINALES, CANDIDATO_PROPIO,
-    dialogo_expediente, dialogo_captura,
+    dialogo_expediente, dialogo_captura, DETALLES_DUELO_RED,
 )
 from sigilo import Sigilo, VELOCIDAD as VELOCIDAD_RONDA, AVISOS_MAXIMOS
 from kombat import Pelea
@@ -645,6 +645,9 @@ class Partida:
             elegida = self.kombat.resultado or "perdio"
         elif self.duelo is not None:
             elegida = self.duelo.resultado()
+            if self.duelo.rival_humano and self.duelo.rival_juzgadas:
+                for id_nodo, detalle in DETALLES_DUELO_RED.items():
+                    self.arbol_decision.buscar(id_nodo).detalle = detalle
         elif self.persecucion is not None:
             elegida = self.persecucion.resultado or "escapo"
         else:

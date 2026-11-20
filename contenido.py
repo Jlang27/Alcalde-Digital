@@ -12,6 +12,7 @@ tocar ni una linea de los arboles.
 """
 
 from estructuras import NodoHabilidad, ArbolHabilidades, NodoDecision, ArbolDecision
+from ritmo import PERFECTA, PARCIAL, MARGEN_RIVAL
 
 
 # ===================================================================
@@ -1266,15 +1267,16 @@ def cargo_electo(nombre):
 
 HOJAS_CAPITULO_5 = {
     "pacifica": (
-        ("perfecta", "Victoria perfecta", "Más del 85 % de precisión.", "PERFECTA",
+        ("perfecta", "Victoria perfecta", f"Al menos {PERFECTA * 100:.0f} % de precisión.", "PERFECTA",
          ("r5_perfecta", "La plaza canta la verdad",
           {"desinformacion": -15, "confianza": 15, "conflictos": -10},
           "cantaste_la_verdad", "El bulo se queda sin eco.", "LA VERDAD")),
-        ("parcial", "Victoria parcial", "Entre el 65 y el 85 %.", "PARCIAL",
+        ("parcial", "Victoria parcial", f"Desde {PARCIAL * 100:.0f} % hasta menos de "
+         f"{PERFECTA * 100:.0f} %.", "PARCIAL",
          ("r5_parcial", "Un aplauso a medias",
           {"desinformacion": -8, "confianza": 8, "conflictos": -5},
           None, "Parte del público borra el rumor.", "A MEDIAS")),
-        ("derrota", "Derrota", "Menos del 65 %.", "DERROTA",
+        ("derrota", "Derrota", f"Menos del {PARCIAL * 100:.0f} %.", "DERROTA",
          ("r5_derrota", "El rumor suena más fuerte",
           {"desinformacion": 5, "confianza": -5, "conflictos": 5},
           "el_rumor_gano_el_duelo", "El bulo vuelve a correr.", "EL RUMOR")),
@@ -1290,6 +1292,15 @@ HOJAS_CAPITULO_5 = {
           {"desinformacion": 10, "confianza": -5, "conflictos": 10},
           "la_red_sigue_activa", "La repetidora sigue llenando las pantallas.", "SIGUE")),
     ),
+}
+
+# El diagrama del duelo en red cuenta también la precisión del otro cantante.
+DETALLES_DUELO_RED = {
+    "perfecta": f"Al menos {PERFECTA * 100:.0f} % e igualas o superas al rival.",
+    "parcial": f"Desde {PARCIAL * 100:.0f} % sin victoria perfecta y a un máximo de "
+               f"{MARGEN_RIVAL * 100:.0f} puntos del rival si vas por detrás.",
+    "derrota": f"Menos del {PARCIAL * 100:.0f} % o más de {MARGEN_RIVAL * 100:.0f} "
+               "puntos por detrás del rival.",
 }
 
 

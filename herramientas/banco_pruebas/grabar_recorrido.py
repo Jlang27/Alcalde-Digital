@@ -137,7 +137,9 @@ else:
     _subprocess.run(
         [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error",
          "-framerate", str(FPS), "-i", _os.path.join(tmp, "%04d.png"),
-         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "21",
+         # El decodificador incluido con Panda en Windows necesita un primer
+         # cuadro utilizable al abrir el MP4, sin reordenación de cuadros B.
+         "-c:v", "libx264", "-bf", "0", "-pix_fmt", "yuv420p", "-crf", "21",
          "-preset", "slow", "-an", salida], check=True)
     Image.open(_os.path.join(tmp, f"{CUADROS // 2:04d}.png")).convert("RGB").save(
         _os.path.join(RAIZ, "assets", "fotos", f"fin_{FINAL}.jpg" if FINAL else f"cap_{CAP}.jpg"), quality=88)

@@ -125,4 +125,4 @@ while estado() == "aviso_papel":
 assert p.tablero["total"] == p.jugadas_ganadas() == esperadas, (p.tablero, esperadas)
 foto("reto_tablero")
 print("jugadas del tablero:", p.tablero["total"], "| retos:", p.retos)
-print("errores:", ERRORES or "ninguno")
+informe()

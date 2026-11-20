@@ -263,6 +263,7 @@ try:
         assert abs(s0 - PE.VENTAJA_HUMANO) < 3.0, s0
         espera(lambda: per.s > s0 + 6.0, 40, "que el de la mochila corra")
         pasar(frames=2)
+        assert s.enlace.vivo and per.humano, "el invitado se desconectó durante la carrera"
         sosp = J.cl.sospechoso
         assert math.hypot(sosp.getX() - per.sx, sosp.getZ() - per.sz) < 0.6, "no se dibuja donde va"
         assert sosp.getCurrentAnim() in ("correr", "caminar"), sosp.getCurrentAnim()

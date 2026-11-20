@@ -165,7 +165,15 @@ def tecla(k):
     if s is None or s.protagonista:
         return False
     fase = _V["fase"]
-    if fase == "rumor":
+    if fase in ("caida", "fin") and k in ("enter", "space", "escape"):
+        J.volver_al_menu()
+    elif k == "escape":
+        if _V.get("salir", -9) > _V["t"] - 3.0:
+            J.volver_al_menu()
+        else:
+            _V["salir"] = _V["t"]
+            _avisar("Pulsa Esc otra vez para salir de la partida")
+    elif fase == "rumor":
         if not k.endswith(" up"):
             _V["obj"]["rumor"].tecla(k)
     elif fase == "reto":
@@ -174,21 +182,13 @@ def tecla(k):
         _V["obj"]["combate"].tecla(k)
     elif fase == "billar":
         _V["obj"]["billar"].tecla(k)
-    elif fase == "duelo":
+    elif fase == "duelo" and J.cl.duelo_ronda >= 0:
         carril = J.TECLAS_DUELO.get(k)
         if carril is not None:
             J.pulsar_duelo(carril)
     elif fase == "huida" and k in ("space", "c"):
         g = _V["obj"]["huida"]["jugador"]
         g.saltar() if k == "space" else g.deslizar()
-    elif fase in ("caida", "fin") and k in ("enter", "space", "escape"):
-        J.volver_al_menu()
-    elif k == "escape" and fase in ("espera", "sigilo", "huida"):
-        if _V.get("salir", -9) > _V["t"] - 3.0:
-            J.volver_al_menu()
-        else:
-            _V["salir"] = _V["t"]
-            _avisar("Pulsa Esc otra vez para salir de la partida")
     return True
 
 
@@ -714,7 +714,8 @@ def _desinformador(dt):
         bil.actualizar(dt)
         if bil.mi_turno():
             e.enviar("b_apunta", a=round(bil.angulo, 4), r=round(bil.retro, 4))
-    elif fase == "duelo":
+    # El montaje y la primera ronda viajan en mensajes separados.
+    elif fase == "duelo" and cl.duelo_ronda >= 0:
         J.duelo_paso(dt)
     elif fase == "sigilo":
         _sigilo_cliente(dt)

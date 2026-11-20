@@ -308,7 +308,8 @@ class AperturaAbel(intro.Intro):
         ritmo = mundo.ritmo_para(self.abel, "caminar", VELOCIDAD)
         self.abel.loop("caminar")
         self.abel.setPlayRate(ritmo, "caminar")
-        # El trafico llega hasta el sur mientras dure el paseo.
+        # La avenida sigue abierta hasta cerrar la intro para que los vehículos
+        # que ya circulan por el sur completen su vuelta sin caer sobre otro.
         mundo._ACTUAL["limites_trafico"] = TRAFICO_PASEO
         audio.ambiente(True, fundido=0.8, nivel=0.55)
         self._caminar(0.0)
@@ -319,7 +320,6 @@ class AperturaAbel(intro.Intro):
         self._cerrar_vision()
         self.abel.hide()
         self.sur.hide()
-        mundo._ACTUAL.pop("limites_trafico", None)
         self.fase = "despues"
         self.t = PRIMER_CAP
         self.banda.setVolume(self.volumen)
