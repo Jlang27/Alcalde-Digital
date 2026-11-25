@@ -1,4 +1,4 @@
-"""Montaje independiente de la apertura de Alcalde Digital. Enter salta la secuencia."""
+"""Montaje independiente de la apertura de Nova Become Corrupt. Enter salta la secuencia."""
 
 import math
 import random
@@ -277,7 +277,7 @@ def abrir(ventana="onscreen", tamano=None):
     ajustes.cargar()
     # intro.py comparte el convenio RGBA de 8 bits de juego3d.main.
     color.rgba = color.rgba32
-    app = Ursina(title="Alcalde Digital · Prólogo de Abel", window_type=ventana,
+    app = Ursina(title="Nova Become Corrupt · Prólogo de Abel", window_type=ventana,
                  fullscreen=False, borderless=False, development_mode=False,
                  size=tamano or ajustes.geometria_ventana(False)[2:4])
     window.update_aspect_ratio()

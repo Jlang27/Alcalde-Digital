@@ -2,6 +2,7 @@ import math
 import os
 import random
 import textwrap
+from functools import lru_cache
 
 import simplepbr
 from direct.actor.Actor import Actor
@@ -1281,7 +1282,7 @@ def _peatones(mundo):
         # Panda3D. Medido: 7,8 s por modelo frente a 0,07 s copiando. Con
         # seis modelos asi, cada arranque de la ciudad se iba casi un
         # minuto en reconvertir lo que ya estaba convertido.
-        actor = Actor(application.base.loader.loadModel(ruta).copyTo(NodePath()))
+        actor = _personaje(application.base.loader.loadModel(ruta).copyTo(NodePath()))
         _quitar_mapa_de_brillo(actor)
         for j, (x, z, rumbo) in enumerate(PEATONES[i::2]):
             sitio = mundo.attachNewNode(f"peaton_{i}_{j}")
@@ -1333,7 +1334,7 @@ def _vidas(mundo):
             actor = npc(mundo, quien, (x, 0.15, z), rumbo, clip)
         else:
             ruta = Filename.from_os_specific(ruta_personaje(quien)).getFullpath()
-            actor = Actor(application.base.loader.loadModel(ruta).copyTo(NodePath()))
+            actor = _personaje(application.base.loader.loadModel(ruta).copyTo(NodePath()))
             _quitar_mapa_de_brillo(actor)
             actor.reparentTo(mundo)
             actor.setPos(x, 0.15, z)
@@ -4312,6 +4313,44 @@ def sombra_de_contacto(actor, radio=0.52):
     return nodo
 
 
+def _personaje(modelo):
+    actor = Actor(modelo)
+    if "celular" not in actor.getAnimNames():
+        return actor
+    control = actor.getAnimControl("celular")
+    telefono = None
+    visible = False
+
+    def sincronizar(tarea):
+        nonlocal telefono, visible
+        if actor.isEmpty():
+            return tarea.done
+        reproduciendo = control.isPlaying()
+        if reproduciendo != visible:
+            visible = reproduciendo
+            if telefono is None:
+                hueso = _pie(actor, "RightHand")
+                if hueso is None:
+                    return tarea.done
+                mano = actor.exposeJoint(None, "modelRoot", hueso)
+                telefono = montar_celular(mano)
+                # Los Mixamo trabajan en cm. El índice queda a +X desde
+                # el meñique y el pulgar toca la pantalla por el lado -Z.
+                telefono.setScale(1 / mano.getScale(actor).x)
+                telefono.setPos(2.7, 9.8, -1.9)
+                telefono.setR(90)
+            if visible:
+                telefono.unstash()
+            else:
+                telefono.stash()
+        return tarea.cont
+
+    # También cubre play() de una sola vez, los bucles de la intro y
+    # los cambios de clip que llegan desde el otro jugador.
+    application.base.taskMgr.add(sincronizar, "celular_en_mano", sort=46)
+    return actor
+
+
 def protagonista(mundo, rol=None):
     """Carga al personaje que juega, con su clave y su contraluz.
 
@@ -4319,7 +4358,7 @@ def protagonista(mundo, rol=None):
     menu no pasa por el reparto, y hay que traer a su protagonista.
     """
     ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
-    actor = Actor(ruta)
+    actor = _personaje(ruta)
     actor.reparentTo(mundo)
     mezclar(actor)
     _luz_de_personaje(mundo, actor)
@@ -4454,7 +4493,7 @@ def elenco(mundo, roles=ROLES_JUGABLES):
     centro = (len(roles) - 1) / 2.0
     for i, rol in enumerate(roles):
         ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
-        actor = Actor(ruta)
+        actor = _personaje(ruta)
         actor.reparentTo(mundo)
         actor.setPos(Vec3((i - centro) * PASO_ELENCO, 0.0, 0.0))
         _quitar_mapa_de_brillo(actor)
@@ -5265,6 +5304,73 @@ def _letra(tam, titular=True):
     return ImageFont.truetype(os.path.join(RAIZ, "assets", "fuentes", archivo), tam)
 
 
+def _pintar_celular(img, en_vivo):
+    """Atlas de las dos caras. La mitad izquierda es la pantalla."""
+    d = ImageDraw.Draw(img)
+    d.rectangle((0, 0, 255, 511), fill="#0c1119")
+    d.rounded_rectangle((8, 8, 247, 503), 20, fill="#183349")
+    d.rounded_rectangle((95, 16, 161, 29), 6, fill="#080c12")
+    d.ellipse((145, 19, 152, 26), fill="#35556b")
+    d.text((20, 56), "CIVITAS", font=_letra(22), fill="#e6f7ff")
+    d.rounded_rectangle((18, 99, 236, 199), 14, fill="#923247" if en_vivo else "#216773")
+    d.text((30, 113), "DIRECTO" if en_vivo else "Mensajes", font=_letra(28), fill="white")
+    d.text((30, 159), "@jh777" if en_vivo else "Actividad", font=_letra(20, False), fill="white")
+    for y, largo, tinta in ((235, 209, "#71ded4"), (301, 180, "#faab77"), (367, 216, "#72bedf")):
+        d.ellipse((20, y, 42, y + 22), fill=tinta)
+        d.rounded_rectangle((56, y, largo, y + 7), 3, fill="#d3e4ee")
+        d.rounded_rectangle((56, y + 16, largo - 32, y + 22), 3, fill="#68869b")
+    d.rounded_rectangle((87, 481, 169, 487), 3, fill="#e5f0f6")
+    d.rectangle((256, 0, 511, 511), fill="#354454")
+    d.rounded_rectangle((269, 15, 377, 149), 20, fill="#1b242f", outline="#72818f", width=3)
+    for x, y in ((300, 54), (341, 95)):
+        d.ellipse((x - 20, y - 20, x + 20, y + 20), fill="#080d14", outline="#758895", width=4)
+        d.ellipse((x - 8, y - 9, x + 6, y + 5), fill="#28465e")
+        d.ellipse((x - 6, y - 8, x - 1, y - 3), fill="#96b7bd")
+    d.ellipse((338, 40, 355, 57), fill="#e7dfbf")
+
+
+@lru_cache(maxsize=2)
+def _modelo_celular(en_vivo):
+    """Carcasa de 78 × 158 mm, con bisel, cantos y esquinas redondeadas."""
+    vertices, uvs, triangulos = [], [], []
+    ancho, alto, radio = 0.078, 0.158, 0.010
+    contorno = []
+    for esquina, (sx, sy) in enumerate(((1, 1), (-1, 1), (-1, -1), (1, -1))):
+        for k in range(6):
+            a = (esquina + k / 5) * math.pi / 2
+            contorno.append((sx * (ancho / 2 - radio) + radio * math.cos(a),
+                             sy * (alto / 2 - radio) + radio * math.sin(a)))
+    n = len(contorno)
+    for trasera in (False, True):
+        i = len(vertices)
+        for x, y in [(0, 0), *contorno]:
+            vertices.append((x, y, 0.0045 if trasera else -0.0045))
+            u = 0.75 - 0.5 * x / ancho if trasera else 0.25 + 0.5 * x / ancho
+            uvs.append((u, 0.5 + y / alto))
+        for k in range(n):
+            triangulos.extend((i, i + 1 + k, i + 1 + (k + 1) % n))
+    for k in range(n):
+        a, b = 1 + k, 1 + (k + 1) % n
+        # UV del canto en una zona lisa de la tapa.
+        i = len(vertices)
+        vertices.extend(vertices[j] for j in (a, b, b + n + 1, a + n + 1))
+        uvs.extend([(0.92, 0.4)] * 4)
+        triangulos.extend((i, i + 1, i + 2, i, i + 2, i + 3))
+    m = Mesh(vertices=vertices, triangles=triangulos, uvs=uvs)
+    m.setTwoSided(True)
+    m.setTexture(_textura(f"celular_{en_vivo}", lambda img: _pintar_celular(img, en_vivo),
+                          512, 512), 1)
+    m.setLightOff(1)
+    m.setShaderOff(1)
+    return m
+
+
+def montar_celular(padre, en_vivo=False):
+    telefono = padre.attachNewNode("celular")
+    _modelo_celular(en_vivo).instanceTo(telefono)
+    return telefono
+
+
 def _pintar_canica(tinte):
     def pintar(img):
         d, (w, h) = ImageDraw.Draw(img), img.size
@@ -5869,7 +5975,7 @@ def invitado(mundo, color_jugador, rol=None):
     cine y no como error.
     """
     ruta = Filename.from_os_specific(ruta_personaje(rol)).getFullpath()
-    actor = Actor(ruta)
+    actor = _personaje(ruta)
     actor.reparentTo(mundo)
     actor.setPos(POSICION_INVITADO)
     actor.setH(-160)                      # girado hacia el protagonista

@@ -409,7 +409,7 @@ def ordenadas(todas):
     return por
 
 
-CABECERA = """# Voces de Alcalde Digital
+CABECERA = """# Voces de Nova Become Corrupt
 
 Hoja de grabación. **La genera `herramientas/listar_voces.py`**: si cambia
 una línea del guion, se vuelve a ejecutar y esta hoja queda al día.

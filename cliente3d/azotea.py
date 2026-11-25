@@ -3,7 +3,7 @@
 La azotea de un edificio de ocho pisos con la Ciudad Nova de la intro abajo
 (mundo._ciudad_abajo: la misma ciudad, el mismo mitin y el mismo trafico que
 se ven desde la oficina del capitulo 3). Encima, el montaje de un streamer:
-aro de luz, camara en tripode, cables, guirnaldas y un letrero de neon.
+celular en trípode con aro de luz, cables, guirnaldas y un letrero de neon.
 
 La pelea es 2.5D (kombat.py es 2D por dentro): los luchadores se mueven
 sobre la linea z = 0, de x = -4,2 a 4,2, y la camara los ve de lado desde
@@ -18,11 +18,12 @@ de enfrente. Ambar contra azul, como el resto del juego.
 import math
 import textwrap
 
-from panda3d.core import AmbientLight, DirectionalLight, Fog, LColor, PointLight, Vec3
+from panda3d.core import (AmbientLight, Camera, DirectionalLight, Fog, LColor,
+                          PerspectiveLens, PointLight, Vec3)
 from PIL import ImageDraw
 
 import mundo as M
-from ursina import Mesh, color
+from ursina import Mesh, application, color
 
 
 def _cilindro(lados=24):
@@ -92,7 +93,12 @@ PLANOS_AZOTEA = {
 # camara: la del tripode. Es el plano que sale en pantalla mientras hace
 # el directo, antes de que Nodo le lance el reto.
 MARCA_DIRECTO = (-4.15, -2.85)
-PLANO_DIRECTO = (Vec3(-5.55, 1.50, -2.55), Vec3(-4.15, 1.42, -2.85), 46)
+CELULAR = Vec3(-5.60, 1.55, -2.60)
+CARA_DIRECTO = Vec3(MARCA_DIRECTO[0], 1.55, MARCA_DIRECTO[1])
+HACIA_JH = (CARA_DIRECTO - CELULAR).normalized()
+# La lente frontal está en lo alto de la pantalla, por delante del soporte.
+LENTE = CELULAR + Vec3(0, 0.065, 0) + HACIA_JH * 0.035
+PLANO_DIRECTO = (LENTE, CARA_DIRECTO, 43)
 
 # Lo que estorba al andar (x0, x1, z0, z1). La azotea no tenia ninguno:
 # se cruzaba el tanque de agua y el tripode como si fueran humo. El
@@ -100,8 +106,8 @@ PLANO_DIRECTO = (Vec3(-5.55, 1.50, -2.55), Vec3(-4.15, 1.42, -2.85), 46)
 BLOQUEOS = (
     (-6.50, -4.90, 1.60, 3.20),      # el tanque de agua sobre sus patas
     (4.80, 6.00, 0.60, 3.20),        # las dos maquinas de aire
-    (-5.95, -5.25, -2.95, -2.25),    # el tripode de la camara
-    (-5.15, -4.65, -3.15, -2.65),    # el pie del aro de luz
+    (CELULAR.x - 0.36, CELULAR.x + 0.36,
+     CELULAR.z - 0.36, CELULAR.z + 0.36),  # patas del trípode
     (-4.70, -3.60, -2.05, -1.45),    # la mesa del PC
     (2.45, 4.55, 2.45, 3.40),        # el sofa viejo (atrezo)
     (3.00, 3.90, 1.75, 2.35),        # su mesa de cajas
@@ -391,6 +397,86 @@ def _atrezo(cont):
         M._pieza(cont, "sphere", hojas, r * 1.3, (x + r * 0.5, ALTO_PRETIL + 0.30 + r * 1.3, FONDO_Z))
 
 
+def _tripode(equipo, metal, goma):
+    pie = equipo.attachNewNode("tripode")
+    pie.setPos(CELULAR.x, 0, CELULAR.z)
+    pie.setH(math.degrees(math.atan2(HACIA_JH.x, -HACIA_JH.z)))
+    for giro in (0, 120, 240):
+        pata = pie.attachNewNode("pata")
+        pata.setH(giro)
+        tramo = _tubo(pata, goma, (0.028, math.hypot(0.51, 0.35), 0.028),
+                      (0, 0.265, 0.175))
+        tramo.setP(math.degrees(math.atan2(0.35, 0.51)))
+    _tubo(pie, metal, (0.032, 1.04, 0.032), (0, 0.77, 0))
+    centro = pie.attachNewNode("aro_y_celular")
+    centro.setY(CELULAR.y)
+    # Difusor de frente, con el hueco libre y el canto de la carcasa visible.
+    def punto(angulo, radio, z):
+        return (radio * math.cos(angulo), radio * math.sin(angulo), z)
+
+    frente, carcasa = [], []
+    for k in range(64):
+        a, b = k * math.tau / 64, (k + 1) * math.tau / 64
+        nx, ny = math.cos((a + b) / 2), math.sin((a + b) / 2)
+        for caras, r0, z0, r1, z1, normal in (
+                (frente, 0.256, -0.022, 0.300, -0.022, (0, 0, -1)),
+                (carcasa, 0.300, 0.022, 0.256, 0.022, (0, 0, 1)),
+                (carcasa, 0.300, -0.022, 0.300, 0.022, (nx, ny, 0)),
+                (carcasa, 0.256, 0.022, 0.256, -0.022, (-nx, -ny, 0))):
+            caras.append(((punto(a, r0, z0), punto(b, r0, z0),
+                           punto(b, r1, z1), punto(a, r1, z1)), normal))
+    difusor = M._material((0.7, 0.64, 0.53, 1), emision=(2.2, 2.0, 1.7, 1))
+    M._pieza_malla(centro, frente, difusor)
+    M._pieza_malla(centro, carcasa, goma)
+    # Brazo y pinza por detrás para dejar la pantalla y la cámara libres.
+    _tubo(centro, metal, (0.013, 0.25, 0.013), (0, -0.145, 0.013))
+    M._pieza(centro, "cube", goma, (0.088, 0.023, 0.021), (0, -0.022, 0.013))
+    for x in (-0.041, 0.041):
+        M._pieza(centro, "cube", goma, (0.008, 0.024, 0.021), (x, -0.022, 0))
+    _ESTADO["celular"] = M.montar_celular(centro, en_vivo=True)
+
+
+class VistaDirecto:
+    """Retorno de la cámara frontal mientras un plano enseña el celular."""
+
+    def __init__(self):
+        base = application.base
+        self.buffer = base.win.makeTextureBuffer("selfie_jh777", 128, 128)
+        if not self.buffer:
+            return
+        telefono = _ESTADO["celular"]
+        lente = PerspectiveLens()
+        lente.setFov(32)
+        lente.setNearFar(0.08, 120)
+        self.camara = telefono.attachNewNode(Camera("selfie", lente))
+        self.camara.setPos(0, 0.065, -0.035)
+        self.camara.lookAt(telefono, 0, -0.025, -1.5)
+        self.camara.node().setScene(base.render)
+        self.buffer.setClearColor((0.18, 0.12, 0.13, 1))
+        self.buffer.makeDisplayRegion().setCamera(self.camara)
+        # Ventana de vídeo bajo la cabecera del canal, sobre el cristal.
+        self.video = Mesh(vertices=[(-0.034, -0.058, 0), (0.034, -0.058, 0),
+                                    (0.034, 0.010, 0), (-0.034, 0.010, 0)],
+                          triangles=[0, 1, 2, 0, 2, 3], uvs=[(0, 0), (1, 0), (1, 1), (0, 1)])
+        self.video.reparentTo(telefono)
+        self.video.setZ(-0.0048)
+        self.video.setTwoSided(True)
+        self.video.setShaderOff(1)
+        self.video.setLightOff(1)
+        self.video.setTexture(self.buffer.getTexture(), 1)
+
+    def visible(self, mostrar):
+        if self.buffer:
+            self.buffer.setActive(mostrar)
+
+    def cerrar(self):
+        if self.buffer:
+            self.video.removeNode()
+            self.camara.removeNode()
+            application.base.graphicsEngine.removeWindow(self.buffer)
+            self.buffer = None
+
+
 def construir(cont):
     """Monta la azotea y la ciudad de abajo dentro del contenedor."""
     M._ciudad_abajo(cont)
@@ -403,7 +489,6 @@ def construir(cont):
     neon_mag = M._material((0.02, 0.0, 0.02, 1), emision=(2.4, 0.25, 1.8, 1))
     neon_cian = M._material((0.0, 0.02, 0.02, 1), emision=(0.2, 1.8, 2.2, 1))
     bombilla = M._material((0.05, 0.04, 0.02, 1), emision=(2.6, 1.6, 0.6, 1))
-    aro = M._material((0.05, 0.05, 0.05, 1), emision=(2.2, 2.0, 1.7, 1))
 
     # la losa y sus juntas (la cuadricula da escala y lectura del suelo)
     M._pieza(cont, "cube", hormigon, (ANCHO * 2, 0.3, FONDO_Z - FRENTE_Z + 1.0),
@@ -449,13 +534,7 @@ def construir(cont):
 
     # El equipo de grabación queda en primer plano al explorar la azotea.
     equipo = _ESTADO["caseton"].attachNewNode("equipo_directo")
-    for g in (0, 120, 240):
-        a = math.radians(g)
-        M._pieza(equipo, "cube", goma, (0.03, 1.5, 0.03),
-                 (-5.6 + 0.25 * math.sin(a), 0.72, -2.6 + 0.25 * math.cos(a)))
-    M._pieza(equipo, "cube", goma, (0.32, 0.2, 0.22), (-5.6, 1.55, -2.6))
-    _tubo(equipo, aro, (0.85, 0.035, 0.85), (-4.9, 1.75, -2.9), giro=0)
-    M._pieza(equipo, "cube", goma, (0.03, 1.7, 0.03), (-4.9, 0.85, -2.9))
+    _tripode(equipo, metal, goma)
     _pc(equipo, metal, goma)
 
     _atrezo(cont)
@@ -513,8 +592,7 @@ def _luces(cont):
 def _aro(cont):
     """El aro de luz es un foco que apunta a donde se planta JH777:
     le da de lleno y tira su sombra larga sobre la losa, hacia el pretil."""
-    M.luces.foco(cont, "aro_de_luz", (-4.9, 1.75, -2.9),
-                 (MARCA_DIRECTO[0] + 3.0, 0.9, MARCA_DIRECTO[1] + 0.6),
+    M.luces.foco(cont, "aro_de_luz", LENTE, CARA_DIRECTO,
                  (5.2, 4.4, 3.3), apertura=96, alcance=14.0, caida=0.05)
 
 

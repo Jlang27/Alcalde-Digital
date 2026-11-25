@@ -1723,6 +1723,7 @@ class Menu:
                              E.TEXTO_TENUE, escala=0.56), 0.02)
         self.piezas.append(E.regla(0.40, (x, 0.432), 0.0016, E.ACENTO_UI))
         self._nace(E.titular("Nova", (x, 0.388), 3.1, E.TEXTO), 0.08)
+        self._nace(E.titular("Become Corrupt", (x, 0.298), 1.65, E.TEXTO), 0.13)
 
     def _opciones(self):
         for i, texto in enumerate(self.opciones):

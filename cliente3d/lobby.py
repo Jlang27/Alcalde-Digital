@@ -348,7 +348,7 @@ class Lobby:
     def _cabecera(self, titulo, bajada=""):
         a = self.piezas.append
         a(E.banda(2.4, 1.20, (0, 0), E.tinta(238), z=E.Z_FONDO))
-        a(E.pequena("NOVA  ·  DOS JUGADORES EN RED", (-0.84, 0.462),
+        a(E.pequena("NOVA BECOME CORRUPT  ·  DOS JUGADORES EN RED", (-0.84, 0.462),
                     E.TEXTO_TENUE, escala=0.56))
         a(E.titular(titulo, (-0.84, 0.405), 2.4, E.TEXTO))
         a(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))

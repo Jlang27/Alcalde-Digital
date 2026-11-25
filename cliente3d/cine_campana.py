@@ -203,6 +203,7 @@ YJ = mundo.YJ
 TX, TZ = mundo.MESA_BILLAR
 DANIEL_LLAMA = (-1.3, -12.9)          # delante del ascensor del piso 8
 EN_CABINA = (-1.3, -15.45)
+LECTURA_CABINA = Vec3(EN_CABINA[0] + 0.04, 1.42, EN_CABINA[1] + 0.08)
 DANIEL_SALE = (-1.0, -12.6)           # recien salido, arriba
 DANIEL_EN_MESA = (TX - 1.0, TZ - 1.25)
 ASESOR_EN_MESA = (TX + 1.55, TZ + 0.35)
@@ -226,8 +227,8 @@ PLANOS_SUBIDA = (
      _v(-1.3, 1.45, -15.4), _v(-1.3, 1.45, -15.4), 44),
     # Dentro: la cabina sube y el indicador cuenta los pisos (la camara
     # va con la cabina: _durante le suma su altura).
-    ("sube", 4.2, _v(-1.92, 1.85, -14.72), _v(-1.88, 1.82, -14.76),
-     _v(-1.15, 1.5, -15.55), _v(-1.15, 1.5, -15.55), 58),
+    ("sube", 4.2, _v(-0.64, 1.91, -14.71), _v(-0.66, 1.88, -14.73),
+     LECTURA_CABINA, LECTURA_CABINA, 81),
     # Arriba, desde la sala: campanita, puertas y Abel que sale.
     ("llega", 2.8, _v(0.8, YJ + 1.6, -11.6), _v(0.6, YJ + 1.6, -11.9),
      _v(-1.3, YJ + 1.25, -14.8), _v(-1.3, YJ + 1.25, -14.8), 52),
@@ -346,7 +347,7 @@ class SubidaJuegos(EscenaDecision):
             self._poner(self.actor, *EN_CABINA, y)
             temblor = 0.004 * math.sin(t * 37) * math.sin(math.pi * f)
             camera.y += y + temblor
-            mundo.mirar(Vec3(-1.15, 1.5 + y, -15.55))
+            mundo.mirar(LECTURA_CABINA + Vec3(0, y, 0))
         elif nombre == "llega":
             mundo.abrir_ascensor(mundo.PISO_JUEGOS, (t - 0.4) / 1.0)
             if t >= 1.4:

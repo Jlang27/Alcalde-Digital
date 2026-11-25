@@ -1,4 +1,4 @@
-# Multijugador de Alcalde Digital
+# Multijugador de Nova Become Corrupt
 
 ## 0. Lo implementado: protagonista contra desinformador (dos PC)
 

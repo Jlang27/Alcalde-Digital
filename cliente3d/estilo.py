@@ -1,4 +1,4 @@
-"""Sistema de diseno de Alcalde Digital: «Prensa y urna».
+"""Sistema de diseno de Nova Become Corrupt: «Prensa y urna».
 
 La identidad no sale de la ciencia ficcion sino del material impreso de
 una campana electoral: afiches pegados en un poste, el periodico del

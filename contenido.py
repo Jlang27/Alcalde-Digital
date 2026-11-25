@@ -1,5 +1,5 @@
 """
-ALCALDE DIGITAL - Contenido del juego
+NOVA BECOME CORRUPT - Contenido del juego
 Universidad del Norte - Estructura de Datos II - Primera entrega
 
 Aqui vive TODO el contenido: los 4 roles con su arbol de habilidades, las

@@ -1,5 +1,5 @@
 """
-ALCALDE DIGITAL - Visor de modelos 3D (herramienta de la Persona A)
+NOVA BECOME CORRUPT - Visor de modelos 3D (herramienta de la Persona A)
 
 Sirve para comprobar, sin depender de nadie, que un archivo .glb quedo bien:
 que carga, que tiene sus animaciones, que la escala es correcta y que se ve
@@ -74,7 +74,7 @@ def main():
     if sin_ventana:
         app = Ursina(window_type="offscreen")
     else:
-        app = Ursina(title="Alcalde Digital - Visor de modelos", borderless=False)
+        app = Ursina(title="Nova Become Corrupt - Visor de modelos", borderless=False)
     window.color = color.rgb32(38, 40, 46)
 
     # --- suelo de referencia ---

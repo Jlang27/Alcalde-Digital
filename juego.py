@@ -1,5 +1,5 @@
 """
-ALCALDE DIGITAL - Logica de la partida (2 a 4 jugadores)
+NOVA BECOME CORRUPT - Logica de la partida (2 a 4 jugadores)
 Universidad del Norte - Estructura de Datos II
 
 Modelo de datos pensado para multijugador desde el principio, aunque la

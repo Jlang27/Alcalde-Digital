@@ -18,6 +18,7 @@ from panda3d.core import Point2, Point3, Vec3
 
 from banco import *
 from banco import J
+from azotea import CARA_DIRECTO
 from ursina import application
 
 import kombat as K
@@ -50,6 +51,10 @@ for _ in range(6):
     tecla("enter", 0.6)
 assert estado() == "libre", estado()
 equipo = J.cl.mundo.find("**/equipo_directo")
+celular = equipo.find("**/aro_y_celular/celular")
+assert not celular.isEmpty()
+frente = J.cl.mundo.getRelativeVector(celular, Vec3(0, 0, -1)).normalized()
+assert frente.dot((CARA_DIRECTO - celular.getPos(J.cl.mundo)).normalized()) > 0.99
 accesorios = equipo.find("**/accesorios_mesa")
 assert not accesorios.isEmpty() and not accesorios.isHidden()
 # Las colisiones de la azotea: el tanque de agua ya no se atraviesa.
