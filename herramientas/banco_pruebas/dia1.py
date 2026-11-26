@@ -42,8 +42,11 @@ preguntar("hernan", "hernan_familia"); despedirse()
 assert p.hora() == "7:50", p.hora()
 ids = preguntar(J.CELULAR, "comentarios")
 assert ids == ["perfil", "comentarios", "foto"], ids
+telefono = J.cl.actor.find("**/celular")
+assert not telefono.isEmpty() and not telefono.isStashed(), "Mateo lee con la mano vacía"
 pasar(1.0); foto("dia1_celular")
 despedirse()
+assert telefono.isStashed(), "Mateo sigue con el celular al volver a caminar"
 assert p.hora() == "7:55" and [x[0] for x in p.pruebas()] == ["comentarios"]
 pasar(1.0); foto("dia1_aviso_pista")
 

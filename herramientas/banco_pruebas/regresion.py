@@ -34,6 +34,8 @@ REGLAS = (
     ("ritmo.py", True), ("persecucion.py", True),
     ("herramientas/probar_tablero.py", True), ("herramientas/probar_dia1.py", True),
     ("herramientas/probar_herencias.py", True), ("red/probar_red.py", False),
+    ("herramientas/banco_pruebas/salida_invitado.py", True),
+    ("herramientas/banco_pruebas/videos_intro.py", True),
 )
 
 
@@ -49,7 +51,10 @@ def correr(orden, donde):
         salida = (r.stdout or "") + (r.stderr or "")
         bien = r.returncode == 0 and "Traceback" not in salida
     except subprocess.TimeoutExpired as e:
-        salida, bien = (e.stdout or "") + "\n(se paso de tiempo)", False
+        # TimeoutExpired conserva los bytes de las dos tuberías, incluso
+        # cuando run() usa text=True. La siguiente prueba debe poder arrancar.
+        salida = ((e.stdout or b"") + (e.stderr or b"")).decode("utf-8", errors="replace")
+        salida, bien = salida + "\n(se paso de tiempo)", False
     return bien, salida
 
 
@@ -59,10 +64,12 @@ def main():
     sys.stdout.reconfigure(errors="replace")
     filtro = sys.argv[1] if len(sys.argv) > 1 else ""
     fallos = 0
+    ejecutadas = 0
     for archivo, *args in ESCENARIOS:
         nombre = " ".join((archivo, *args))
-        if filtro not in nombre or not os.path.exists(os.path.join(AQUI, archivo)):
+        if filtro not in nombre:
             continue
+        ejecutadas += 1
         bien, salida = correr([sys.executable, os.path.join(AQUI, archivo), *args], RAIZ)
         bien = bien and "sin excepciones" in salida
         print(("OK    " if bien else "FALLA ") + nombre, flush=True)
@@ -70,13 +77,17 @@ def main():
             fallos += 1
             print("\n".join("      " + l for l in salida.strip().split("\n")[-8:]), flush=True)
     for ruta, aislado in REGLAS:
-        if filtro not in ruta or not os.path.exists(os.path.join(RAIZ, ruta)):
+        if filtro not in ruta:
             continue
+        ejecutadas += 1
         orden = [sys.executable] + (["-I"] if aislado else []) + [os.path.join(RAIZ, ruta)]
         bien, salida = correr(orden, RAIZ)
         ultima = (salida.strip().split("\n") or [""])[-1]
         print(("OK    " if bien else "FALLA ") + ruta + "  ·  " + ultima[:90], flush=True)
         fallos += not bien
+    if not ejecutadas:
+        print(f"Ninguna prueba coincide con {filtro!r}.")
+        return 1
     print("FIN: todo bien" if not fallos else f"FIN: {fallos} con fallos")
     return 1 if fallos else 0
 

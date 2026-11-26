@@ -147,20 +147,6 @@ def prolongar_avenida(ciudad):
     mundo._edificios_ciudad(ciudad, azar, manzanas)
 
 
-def preparar_trafico(ciudad):
-    # El bus de la panorámica original solo tiene carrocería. En el plano
-    # bajo se ve el hueco hasta el suelo. Lleva neumáticos con tapacubos lisos.
-    goma = mundo._material((0.013, 0.014, 0.018, 1), rugosidad=0.9)
-    metal = mundo._material((0.21, 0.22, 0.24, 1), rugosidad=0.43, metalico=0.65)
-    for bus in ciudad.findAllMatches("bus"):
-        for z in (-3.55, 3.7):
-            for lado in (-1, 1):
-                mundo._pieza(bus, "sphere", goma, (0.38, 1.06, 1.06), (lado * 1.27, 0.53, z))
-                mundo._pieza(bus, "sphere", metal, (0.08, 0.58, 0.58), (lado * 1.42, 0.53, z))
-    # (En el prototipo aqui se adelantaba el trafico: en el juego no, el
-    # plano de la avenida tiene medido el bus que roza la camara.)
-
-
 def travelling(t):
     """Del rostro al andén y al cielo. El eje de marcha siempre es el mismo."""
     abrir = suave((t - 0.9) / 4.3)
@@ -322,7 +308,8 @@ class AperturaAbel(intro.Intro):
         ritmo = mundo.ritmo_para(self.abel, "caminar", VELOCIDAD)
         self.abel.loop("caminar")
         self.abel.setPlayRate(ritmo, "caminar")
-        # El trafico llega hasta el sur mientras dure el paseo.
+        # La avenida sigue abierta hasta cerrar la intro para que los vehículos
+        # que ya circulan por el sur completen su vuelta sin caer sobre otro.
         mundo._ACTUAL["limites_trafico"] = TRAFICO_PASEO
         audio.ambiente(True, fundido=0.8, nivel=0.55)
         self._caminar(0.0)
@@ -333,7 +320,6 @@ class AperturaAbel(intro.Intro):
         self._cerrar_vision()
         self.abel.hide()
         self.sur.hide()
-        mundo._ACTUAL.pop("limites_trafico", None)
         self.fase = "despues"
         self.t = PRIMER_CAP
         self.banda.setVolume(self.volumen)
@@ -399,6 +385,5 @@ def montar(raiz):
     sur = ciudad.attachNewNode("avenida_sur")
     prolongar_avenida(sur)
     sur.hide()
-    preparar_trafico(ciudad)
     abel = mundo.protagonista(raiz, "candidato")
     return AperturaAbel(abel, sur)

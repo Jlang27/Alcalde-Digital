@@ -191,15 +191,17 @@ class Duelo:
 
     def resultado(self):
         """"perfecta", "parcial" o "derrota", por la precision total."""
-        p = self.precision()
+        # Los pesos de los juicios son décimas. Diez BAD sumaban
+        # 5,999999999999999 y se perdía pese a alcanzar exactamente el 60 %.
+        p = round(self.precision(), 12)
         if self.rival_humano and self.rival_juzgadas:
             # Contra una persona no basta con tocar bien: hay que tocar
             # mejor que ella. La perfecta pide ademas no quedar por debajo;
             # se pierde tocando mal o quedando claramente por detras.
-            r = self.precision_rival()
+            r = round(self.precision_rival(), 12)
             if p >= PERFECTA and p >= r:
                 return "perfecta"
-            return "derrota" if p < PARCIAL or p < r - MARGEN_RIVAL else "parcial"
+            return "derrota" if p < PARCIAL or round(r - p, 12) > MARGEN_RIVAL else "parcial"
         return "perfecta" if p >= PERFECTA else "parcial" if p >= PARCIAL else "derrota"
 
 
@@ -271,6 +273,18 @@ def _pruebas():
     assert tocar(fallos_cada=total // 3).resultado() == "perfecta"   # 3 fallos
     assert tocar(fallos_cada=3).resultado() == "parcial"
     assert tocar(fallos_cada=2).resultado() == "derrota"
+
+    # Bordes inclusivos con los mismos juicios que envían ambos clientes.
+    d = Duelo()
+    for _ in range(10):
+        d._juzgar(JUICIOS[2])
+    assert d.resultado() == "parcial"  # diez BAD: exactamente 60 %
+    d = Duelo()
+    d.rival_humano = True
+    for i in range(10):
+        d._juzgar(JUICIOS[0] if i < 7 else MISS)
+        d.juicio_rival("PERFECT" if i < 8 else "MISS")
+    assert d.resultado() == "parcial"  # 70 % frente a 80 %, margen exacto
 
     # Sin tocar nada: derrota.
     d = Duelo()

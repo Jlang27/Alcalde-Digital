@@ -65,10 +65,18 @@ SALIDA = RAIZ / "herramientas" / "banco_pruebas" / "capturas" / "equipo" / "pose
 VIDEO = Path.home() / "Downloads" / (
     "Detroit Become Human - Salvar a Hank o Perseguir Divergente - "
     "Español Latino - 1080p.mp4")
+# La primera misión de Connor (el rehén): referencia del andar y del reposo.
+VIDEO_CONNOR = Path.home() / "Downloads" / "Detroit Become Human Primera misión Connor.mp4"
+# Connor en casa de Hank: más luz y más andar; la fuente principal del andar.
+VIDEO_HANK = Path.home() / "Downloads" / "Detroit Become Human™ Parte 17 Connor conoce la casa de Hank.mp4"
+# Kara y Alice huyen de Todd: el andar, el reposo y el sigilo de una mujer.
+VIDEO_KARA = Path.home() / "Downloads" / (
+    "Detroit Become Human - Kara & Alice Escape from Todd (Alice's Father) - Chapter 5.mp4")
 MODELO = Path.home() / ".cache" / "alcalde_pose" / "modelos" / "pose_landmarker_heavy.task"
 
-# 59,94 fps de verdad: el contenedor cuenta en 1/60000 s y cada cuadro dura
-# 1001, así que el cuadro n empieza en n*1001/60000 s (medido con showinfo).
+# Los fps los fija `fijar_fps` con los del vídeo (59,94 en la persecución,
+# 29,97 en la primera misión): el cuadro n empieza en n/FPS s (medido con
+# showinfo; el contenedor cuenta en 1/60000 o 1/30000 s y cada cuadro dura 1001).
 FPS = 60000.0 / 1001.0
 ANCHO, ALTO = 1280, 720
 LADO_RECORTE = 512          # el recorte cuadrado que ve MediaPipe
@@ -137,13 +145,33 @@ def tramo(nombre, **datos):
     datos.setdefault("tipo", "accion")
     datos.setdefault("eventos", [])
     datos.setdefault("lenta", False)
-    datos.setdefault("corte_hz", 8.0 if datos["tipo"] == "ciclo" else 10.0)
+    # El corte del filtro, por tipo: la carrera tiene armónicos hasta ~8 Hz;
+    # el andar es más lento (6 Hz); en reposo lo que interesa (balanceo,
+    # respiración) está por debajo de 1 Hz y el resto es temblor del modelo.
+    datos.setdefault("corte_hz", {"ciclo": 8.0, "andar": 6.0, "reposo": 3.0}.get(datos["tipo"], 10.0))
     datos.setdefault("quien", "connor")
     datos.setdefault("vista", None)
     TRAMOS[nombre] = datos
 
 
 # Los tramos se definen al final del archivo (tabla larga), en definir_tramos().
+
+
+def fijar_fps(video):
+    """Lee los fps del vídeo con ffmpeg y los deja en FPS (29,97 y 59,94 se
+    toman exactos, 30000/1001 y 60000/1001)."""
+    import re
+    global FPS
+    salida = subprocess.run([ffmpeg(), "-hide_banner", "-i", str(video)],
+                            capture_output=True, text=True, errors="replace").stderr
+    m = re.search(r"(\d+(?:\.\d+)?) fps", salida)
+    if not m:
+        sys.exit("No leo los fps del vídeo.")
+    f = float(m.group(1))
+    for exacto in (24000 / 1001, 30000 / 1001, 60000 / 1001):
+        if abs(f - exacto) < 0.01:
+            f = exacto
+    FPS = f
 
 
 def segundos(texto):
@@ -209,7 +237,8 @@ class EscritorMp4:
     """Escribe un .mp4 H.264 por tubería a ffmpeg (el VideoWriter de OpenCV
     con mp4v no lo abren todos los reproductores)."""
 
-    def __init__(self, ruta, ancho, alto, fps=FPS):
+    def __init__(self, ruta, ancho, alto, fps=None):
+        fps = fps or FPS
         self.tam = (ancho, alto)
         cmd = [ffmpeg(), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
                "-s", f"{ancho}x{alto}", "-r", f"{fps:.6f}", "-i", "-",
@@ -263,7 +292,7 @@ def orden_hoja(args):
     for n, img in leer_cuadros(args.video, n0, n1):
         if (n - n0) % cada:
             continue
-        img = img.copy()
+        img = realzar(img.copy(), args.gamma)
         if args.rejilla:
             for x in range(100, ANCHO, 100):
                 cv2.line(img, (x, 0), (x, ALTO), (0, 200, 255) if x % 500 == 0 else (0, 120, 160), 1)
@@ -367,6 +396,17 @@ def imagen_mp(bgr):
     return mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
 
+def realzar(img, gamma):
+    """Aclara las sombras (gamma < 1): la primera misión es de noche y en la
+    penumbra MediaPipe pierde brazos y piernas. Solo cambia lo que se ve,
+    no las medidas."""
+    if not gamma or gamma == 1.0:
+        return img
+    import cv2
+    tabla = (255.0 * (np.arange(256) / 255.0) ** gamma).clip(0, 255).astype(np.uint8)
+    return cv2.LUT(img, tabla)
+
+
 def recortar(img, cx, cy, lado, salida=LADO_RECORTE):
     """El cuadrado de centro (cx, cy) y lado `lado`, a salida x salida; lo
     que cae fuera del cuadro sale negro."""
@@ -378,7 +418,7 @@ def recortar(img, cx, cy, lado, salida=LADO_RECORTE):
                           borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
 
 
-def localizar(video, n0, n1, paso=3):
+def localizar(video, n0, n1, paso=3, gamma=1.0):
     """Cajas de todas las personas que ve MediaPipe en el cuadro entero,
     uno de cada `paso` cuadros (y el último)."""
     from mediapipe.tasks.python import vision
@@ -387,7 +427,7 @@ def localizar(video, n0, n1, paso=3):
     for n, img in leer_cuadros(video, n0, n1):
         if (n - n0) % paso and n != n1 - 1:
             continue
-        res = lm.detect(imagen_mp(img))
+        res = lm.detect(imagen_mp(realzar(img, gamma)))
         cajas = []
         for pose in res.pose_landmarks:
             xs = np.array([p.x for p in pose]) * ANCHO
@@ -464,7 +504,7 @@ def camino_recorte(tr, n0, N, elegido, margen=1.55, minimo=192.0):
     return np.stack([cx, cy, np.clip(margen * tam, minimo, 1.15 * ALTO)], axis=1)
 
 
-def detectar(video, n0, n1, camino):
+def detectar(video, n0, n1, camino, gamma=1.0):
     """PoseLandmarker en modo VIDEO sobre el recorte de cada cuadro. Los 2D
     vuelven a píxeles del cuadro entero; los «world» son metros con el
     origen entre las caderas y los ejes de la cámara (x derecha, y abajo,
@@ -481,7 +521,7 @@ def detectar(video, n0, n1, camino):
     for n, img in leer_cuadros(video, n0, n1):
         i = n - n0
         cx, cy, lado = camino[i]
-        rec = recortar(img, cx, cy, lado)
+        rec = realzar(recortar(img, cx, cy, lado), gamma)
         res = lm.detect_for_video(imagen_mp(rec), int(round(i * 1000.0 / FPS)))
         gris = cv2.cvtColor(rec, cv2.COLOR_BGR2GRAY)
         c = LADO_RECORTE // 4
@@ -555,9 +595,10 @@ def imagenes_nuevas(dif):
 
 
 # ----------------------------------------------------------------- análisis
-def pasa_bajos(x, fc, fs=FPS, orden=2):
+def pasa_bajos(x, fc, fs=None, orden=2):
     """Butterworth de ida y vuelta (filtfilt): suaviza sin desfase."""
     from scipy.signal import butter, filtfilt
+    fs = fs or FPS
     x = np.asarray(x, float)
     if fc is None or fc <= 0 or len(x) < 12:
         return x.copy()
@@ -927,6 +968,169 @@ def fases_ciclo(series, tramos_izq, n_fases=20):
     return out
 
 
+def resumen_andar(cc, N):
+    """Lo propio del andar: cada pie pasa más de la mitad de la zancada en el
+    suelo y hay doble apoyo (los dos pies a la vez), no vuelo. Por método de
+    apoyos: apoyo, balanceo (del despegue al siguiente apoyo del mismo pie),
+    fracción de apoyo y doble apoyo."""
+    T = cc["periodo_autocorr"]
+    out = {}
+    for metodo, tramos in cc["metodos"].items():
+        pisa = {lado: np.zeros(N, bool) for lado in PIE}
+        r = {}
+        for lado in PIE:
+            ap = [b - a for a, b in tramos[lado]]
+            ini = [a for a, _ in tramos[lado]]
+            ba = []
+            for a, b in tramos[lado]:
+                pisa[lado][max(0, int(math.ceil(a))):min(N, int(math.ceil(b)))] = True
+                sig = [x for x in ini if x > b]
+                if sig and sig[0] - b < 1.2 * T:
+                    ba.append(sig[0] - b)
+            r[lado] = {"apoyo_s": round(float(np.mean(ap)) / FPS, 4) if ap else None,
+                       "balanceo_s": round(float(np.mean(ba)) / FPS, 4) if ba else None,
+                       "apoyo_fraccion": round(float(np.mean(ap)) / T, 3) if ap else None,
+                       "n": len(ap)}
+        # Doble apoyo: solo donde los dos pies tienen medidas.
+        cubre = [x for lado in PIE for t in tramos[lado] for x in t]
+        if cubre:
+            a, b = int(math.ceil(min(cubre))), int(math.floor(max(cubre)))
+            ambos = pisa["Left"][a:b] & pisa["Right"][a:b]
+            ninguno = ~pisa["Left"][a:b] & ~pisa["Right"][a:b]
+            r["doble_apoyo_fraccion"] = round(float(ambos.mean()), 3) if b > a else None
+            r["sin_apoyo_fraccion"] = round(float(ninguno.mean()), 3) if b > a else None
+        out[metodo] = r
+    return out
+
+
+def espectro_pico(x, fmin, fmax):
+    """Frecuencia dominante (Hz) y amplitud pico a pico (p95 - p5) de una
+    señal sin su tendencia lineal."""
+    x = np.asarray(x, float)
+    ok = np.isfinite(x)
+    if ok.sum() < 20:
+        return None, None
+    t = np.arange(len(x))
+    x = np.interp(t, t[ok], x[ok])
+    x = x - np.polyval(np.polyfit(t, x, 1), t)
+    F = np.abs(np.fft.rfft(x * np.hanning(len(x))))
+    f = np.fft.rfftfreq(len(x), d=1.0 / FPS)
+    banda = (f >= fmin) & (f <= fmax)
+    amp = float(np.percentile(x, 95) - np.percentile(x, 5))
+    if not banda.any():
+        return None, amp
+    return float(f[banda][np.argmax(F[banda])]), amp
+
+
+def analizar_reposo(Ws, Pr, I2s, s_px, rum, det, plano, cabeza, tronco):
+    """De pie y quieto: la pose media (marco del rumbo) y cuánto se aparta,
+    el reparto del peso, el balanceo, la respiración, las manos y la cabeza."""
+    ok = det.copy()
+    if ok.sum() < 10:
+        return {"aviso": "pocos cuadros detectados"}
+    out = {"duracion_s": round(len(Ws) / FPS, 3), "cuadros_validos": int(ok.sum())}
+    media, desv = {}, {}
+    for k, v in rum.items():
+        m = np.nanmean(v[ok], axis=0)
+        m = m / np.linalg.norm(m)
+        media[k] = [round(float(c), 3) for c in m]
+        ang_ = np.degrees(np.arccos(np.clip(v[ok] @ m, -1, 1)))
+        desv[k] = round(float(np.nanpercentile(ang_, 90)), 1)
+    out["pose_media_rumbo"] = media
+    out["desviacion_p90_grados"] = desv
+    # Peso: dónde cae la pelvis entre los dos tobillos, de lado a lado.
+    xi, xd = Pr[ok, 27, 0], Pr[ok, 28, 0]
+    reparto = (0.0 - xi) / np.where(np.abs(xd - xi) > 1e-3, xd - xi, np.nan)
+    rod = {}
+    for L, (c, r, t) in (("Left", (23, 25, 27)), ("Right", (24, 26, 28))):
+        a = Ws[ok, c] - Ws[ok, r]
+        b = Ws[ok, t] - Ws[ok, r]
+        cosang = np.sum(a * b, 1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))
+        rod[L] = round(float(180 - np.degrees(np.nanmedian(np.arccos(np.clip(cosang, -1, 1))))), 1)
+    out["peso"] = {"reparto_hacia_derecha": round(float(np.nanmedian(reparto)), 3),
+                   "nota": "0 = todo sobre el pie izquierdo, 0,5 = centrado, 1 = todo sobre el derecho "
+                           "(posición lateral de la pelvis entre los tobillos)",
+                   "separacion_pies_m": round(float(np.nanmedian(np.abs(xd - xi))), 3),
+                   "flexion_rodilla_grados": rod}
+    # Balanceo: la pelvis en la imagen respecto al punto medio de los
+    # tobillos (así no cuenta si la cámara se mueve un poco), en metros.
+    esc = np.where(np.isfinite(s_px) & (s_px > 1), s_px, np.nan)
+    pel = (I2s[:, 23, :2] + I2s[:, 24, :2]) / 2
+    pies = (I2s[:, 27, :2] + I2s[:, 28, :2]) / 2
+    rel = (pel - pies) / esc[:, None]
+    rel[~ok] = np.nan
+    fx, ax = espectro_pico(rel[:, 0], 0.05, 1.0)
+    fy, ay = espectro_pico(-rel[:, 1], 0.05, 1.0)
+    out["balanceo"] = {"lateral_pp_m": round(ax, 4) if ax is not None else None,
+                       "lateral_hz": round(fx, 3) if fx else None,
+                       "vertical_pp_m": round(ay, 4) if ay is not None else None,
+                       "vertical_hz": round(fy, 3) if fy else None,
+                       "nota": "en la imagen: lateral = de lado a lado de la imagen (en un plano de "
+                               "lado es delante-atrás del cuerpo); pp = pico a pico (p95-p5)"}
+    # Respiración: la distancia vertical hombros-pelvis en la imagen.
+    hom = (I2s[:, 11, 1] + I2s[:, 12, 1]) / 2
+    resp = (pel[:, 1] - hom) / esc
+    resp[~ok] = np.nan
+    fr, ar = espectro_pico(resp, 0.15, 0.7)
+    out["respiracion"] = {"hz": round(fr, 3) if fr else None,
+                          "por_minuto": round(60 * fr, 1) if fr else None,
+                          "amplitud_pp_m": round(ar, 4) if ar is not None else None,
+                          "nota": "subida de los hombros respecto a la pelvis en la imagen; por debajo "
+                                  "de ~5 mm es ruido del modelo, no respiración"}
+    # Manos: dónde quedan respecto a la pelvis (marco del rumbo, metros).
+    manos = {}
+    for L, (w, e, sh) in (("Left", (15, 13, 11)), ("Right", (16, 14, 12))):
+        pos = Pr[ok, w]
+        a = Ws[ok, sh] - Ws[ok, e]
+        b = Ws[ok, w] - Ws[ok, e]
+        cosang = np.sum(a * b, 1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))
+        manos[L] = {"muneca_rumbo_m": [round(float(c), 3) for c in np.nanmedian(pos, 0)],
+                    "muneca_pp_m": round(float(np.nanmax(np.nanpercentile(pos, 95, 0)
+                                                         - np.nanpercentile(pos, 5, 0))), 3),
+                    "flexion_codo_grados": round(float(180 - np.degrees(np.nanmedian(
+                        np.arccos(np.clip(cosang, -1, 1))))), 1)}
+    out["manos"] = manos
+    g = cabeza["giro"][ok]
+    out["cabeza"] = {"giro_medio": round(float(np.nanmedian(g)), 1),
+                     "giro_pp": round(float(np.nanpercentile(g, 95) - np.nanpercentile(g, 5)), 1),
+                     "cabeceo_medio": round(float(np.nanmedian(cabeza["cabeceo"][ok])), 1)}
+    lado = ok & plano["de_lado"]
+    out["tronco"] = {"inclinacion_delante_rumbo": round(float(np.nanmedian(tronco["inclinacion_delante"][ok])), 1),
+                     "inclinacion_delante_2d_de_lado": round(float(np.nanmedian(plano["tronco"][lado])), 1)
+                     if lado.sum() > 10 else None,
+                     "inclinacion_lado": round(float(np.nanmedian(tronco["inclinacion_lado"][ok])), 1)}
+    return out
+
+
+def medir_giro(vista, det):
+    """Giros del cuerpo sobre sí mismo o al andar: el rumbo respecto a la
+    cámara (de las caderas), desenrollado y suavizado. Devuelve los giros de
+    más de 30° con su duración y velocidad máxima."""
+    ok = det & np.isfinite(vista)
+    if ok.sum() < 10:
+        return []
+    t = np.arange(len(vista))
+    psi = np.degrees(np.unwrap(np.radians(np.interp(t, t[ok], vista[ok]))))
+    psi = pasa_bajos(psi, 2.0)
+    vel = np.gradient(psi) * FPS
+    gira = np.abs(vel) > 40.0
+    giros, i = [], 0
+    while i < len(gira):
+        if not gira[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(gira) and gira[j]:
+            j += 1
+        total = float(psi[min(j, len(psi) - 1)] - psi[i])
+        if abs(total) >= 30:
+            giros.append({"desde_i": int(i), "hasta_i": int(j), "grados": round(total, 1),
+                          "duracion_s": round((j - i) / FPS, 3),
+                          "vel_max_grados_s": round(float(np.max(np.abs(vel[i:j]))), 1)})
+        i = j
+    return giros
+
+
 def fisica_salto(tr, n0, N, I2s, s_px, mats, cam_ok, quieto, estatura, desp, ater):
     """Del despegue al aterrizaje: tiempo en el aire y, si la cámara está
     casi quieta (o se puede estabilizar), la altura de la cadera en la imagen
@@ -1095,11 +1299,13 @@ def analizar(crudo, tr, mats, cam_ok):
     contacto = {"Left": np.zeros(N, bool), "Right": np.zeros(N, bool)}
     ciclo = None
     plano = plano_imagen(I2s, det)
-    if tr["tipo"] == "ciclo":
+    if tr["tipo"] in ("ciclo", "andar"):
         cc = contactos_carrera(Pr, tr.get("vista"))
         if cc is not None:
             contacto, eventos = cc["pisa"], cc["eventos"]
         ciclo = medir_ciclo(Pr, cc, fiab)
+        if cc is not None and tr["tipo"] == "andar":
+            ciclo["andar"] = resumen_andar(cc, N)
         if cc is not None:
             izq = cc["metodos"][cc["principal"]]["Left"]
             sag = lambda v: np.degrees(np.arctan2(v[:, 2], -v[:, 1]))
@@ -1125,6 +1331,10 @@ def analizar(crudo, tr, mats, cam_ok):
                 ciclo["fases_plano"] = fases_ciclo(s2, izq)
         if tr.get("lenta"):
             ciclo["aviso_lenta"] = "a cámara lenta: cadencia y tiempos no son los reales"
+    reposo = None
+    if tr["tipo"] == "reposo":
+        reposo = analizar_reposo(Ws, Pr, I2s, s_px_f, rum, cubierto, plano, cabeza, tronco)
+    giros = medir_giro(ang(fh[:, 0], fh[:, 2]), cubierto)
     t_abs = np.array([tiempo_de(n0 + i) for i in range(N)])
     manuales = {}
     for t_ev, tipo in tr["eventos"]:
@@ -1155,6 +1365,7 @@ def analizar(crudo, tr, mats, cam_ok):
         "contacto": contacto, "eventos": eventos, "ciclo": ciclo, "fisica": fisica,
         "volteado": volteado, "cruce": cruce, "comprobacion": comprobacion,
         "vista_cam": ang(fh[:, 0], fh[:, 2]), "V": V, "plano": plano,
+        "reposo": reposo, "giros": giros,
         "nueva": imagenes_nuevas(np.array(crudo.get("dif_cuadro", [1.0] * N), float)),
     }
 
@@ -1331,6 +1542,7 @@ def dibujar(video, n0, n1, camino, an, tr, carpeta):
             eventos_en.setdefault(k, []).append(e["tipo"] + (" " + e["pie"][0] if "pie" in e else ""))
     for n, img in leer_cuadros(video, n0, n1):
         i = n - n0
+        img = realzar(img, tr.get("gamma", 1.0))
         cx, cy, lado = camino[i]
         vis = an["V"][i] if an["det"][i] else np.zeros(33)
         full = img.copy()
@@ -1475,6 +1687,8 @@ def pose_json(nombre, tr, crudo, an):
         "contacto": {k: [bool(x) for x in v] for k, v in an["contacto"].items()},
         "eventos": an["eventos"],
         "ciclo": an["ciclo"],
+        "reposo": an["reposo"],
+        "giros": an["giros"],
         "fisica": an["fisica"],
         "posiciones_rumbo": {"nombres": NOMBRES, "xyz": lista(an["Pr"], 4)},
         "calidad": {
@@ -1506,11 +1720,11 @@ def procesar(nombre, args):
         print(f"[{nombre}] {reloj(t0)}-{reloj(t1)}: {N} cuadros")
         elegido = {}
         if not tr.get("cajas"):
-            muestras = localizar(args.video, n0, n1)
+            muestras = localizar(args.video, n0, n1, gamma=tr.get("gamma", 1.0))
             elegido = elegir(muestras, tr["semilla"])
             print(f"[{nombre}] localizado en {len(elegido)}/{len(muestras)} muestras")
         camino = camino_recorte(tr, n0, N, elegido)
-        img2d, mundo, vis, pres, nit = detectar(args.video, n0, n1, camino)
+        img2d, mundo, vis, pres, nit = detectar(args.video, n0, n1, camino, tr.get("gamma", 1.0))
         mats, cam_ok, dif = movimiento_camara(args.video, n0, n1, camino)
         det = ~np.isnan(mundo[:, 0, 0])
         crudo = {
@@ -1553,6 +1767,18 @@ def procesar(nombre, args):
         for m, d in c["por_pie_otros_metodos"].items():
             resumen += (f"\n     {m}: apoyo I {d['Left']['apoyo_medio_s']} D {d['Right']['apoyo_medio_s']}"
                         f" vuelo I {d['Left']['vuelo_medio_s']} D {d['Right']['vuelo_medio_s']}")
+    if q["ciclo"] and "andar" in q["ciclo"]:
+        for m, d in q["ciclo"]["andar"].items():
+            resumen += (f"\n     andar[{m}]: apoyo I {d['Left']['apoyo_s']} ({d['Left']['apoyo_fraccion']}) "
+                        f"D {d['Right']['apoyo_s']} ({d['Right']['apoyo_fraccion']}) balanceo I "
+                        f"{d['Left']['balanceo_s']} D {d['Right']['balanceo_s']} doble {d.get('doble_apoyo_fraccion')}")
+    if q["reposo"]:
+        r = q["reposo"]
+        resumen += (f"\n   reposo: peso->der {r.get('peso', {}).get('reparto_hacia_derecha')} "
+                    f"balanceo {r.get('balanceo')} respiracion {r.get('respiracion', {}).get('por_minuto')}/min "
+                    f"{r.get('respiracion', {}).get('amplitud_pp_m')} m")
+    for g in q["giros"]:
+        resumen += f"\n   giro: {g}"
     for f in q["fisica"]:
         resumen += (f"\n   salto: aire {f['t_aire_s']} s, cámara quieta {f['camara_quieta']} "
                     f"({f['camara_quieta_frac']:.0%})"
@@ -1671,9 +1897,95 @@ def definir_tramos():
 definir_tramos()
 
 
+def definir_tramos_connor():
+    """Tramos de la primera misión de Connor (andar, reposo, arrancar,
+    parar, girar). Tiempos mirados en las hojas de connor/_exploracion/ y
+    sin cruzar los cortes de plano (`cortes`). El piso está a oscuras: gamma
+    0,55 aclara el recorte antes de MediaPipe."""
+    a = dict(tipo="andar", clips=["caminar"], gamma=0.55)
+    tramo("andar_cocina", t=("8:26.95", "8:33.10"), vista="espalda", **a,
+          nota="Cruza la cocina junto a la mesa larga, de espaldas y tres cuartos, cuerpo "
+          "entero, bien iluminado; el mejor andar.")
+    tramo("andar_pasillo", t=("0:27.40", "0:29.30"), vista="espalda", **a,
+          nota="Entra por el pasillo del piso, de espaldas, cuerpo entero, mediano.")
+    tramo("andar_frente", t=("0:58.95", "1:00.60"), vista="frente", **a,
+          nota="Viene hacia la cámara por el salón, de frente, cuerpo entero.")
+    tramo("andar_acuario", t=("1:02.95", "1:07.90"), vista="espalda", **a,
+          nota="Junto al acuario, de espaldas y tres cuartos, cuerpo entero, pequeño.")
+    tramo("andar_puerta", t=("12:53.40", "12:59.90"), **a,
+          nota="Hacia la jardinera de espaldas, se da la vuelta y viene de frente, y vuelve "
+          "de espaldas: andar y giros.")
+    tramo("andar_terraza", t=("14:13.40", "14:20.00"), vista="espalda", **a,
+          nota="Avanza despacio por la terraza hacia el divergente; noche, oscuro.")
+    tramo("arrancar_acuario", t=("2:03.07", "2:09.30"), tipo="andar", clips=["arrancar", "caminar"],
+          gamma=0.55, nota="De pie frente al acuario, gira y echa a andar, de espaldas.")
+    r = dict(tipo="reposo", clips=["idle"], gamma=0.55)
+    tramo("reposo_dormitorio", t=("3:32.65", "3:36.05"), **r,
+          nota="De pie en el dormitorio, de lado y tres cuartos, cuerpo entero, cámara quieta: "
+          "el mejor reposo.")
+    tramo("reposo_acuario", t=("1:50.56", "1:56.10"), **r,
+          nota="De pie mirando el acuario, de espaldas y de lado, cuerpo entero.")
+    tramo("reposo_fregadero", t=("8:38.85", "8:40.30"), **r,
+          nota="De pie ante el fregadero, de espaldas, cuerpo entero, pequeño.")
+
+
+def definir_tramos_hank():
+    """Connor en casa de Hank (fuente principal del andar y del reposo): más
+    luz que la primera misión y planos largos con la cámara detrás o fija."""
+    a = dict(tipo="andar", clips=["caminar"])
+    tramo("andar_jardin_1", t=("0:07.60", "0:21.00"), vista="espalda", **a,
+          nota="Jardín zen, de espaldas, cuerpo entero, pequeño; cámara que lo sigue; "
+          "13 s de andar sin cortes.")
+    tramo("andar_jardin_2", t=("0:29.10", "0:51.20"), vista="espalda", **a,
+          nota="Jardín zen, segundo tramo, de espaldas y tres cuartos, cuerpo entero, pequeño.")
+    tramo("andar_pasillo_hank", t=("10:25.70", "10:35.40"), clips=["caminar", "girar", "parar",
+          "arrancar"], tipo="andar", nota="Pasillo con la cámara FIJA: se aleja hasta la "
+          "puerta, se da la vuelta y vuelve hacia la cámara.")
+    tramo("andar_entrada", t=("9:52.00", "9:55.20"), clips=["caminar", "parar"], tipo="andar",
+          nota="Entra por la puerta del salón hacia la cámara, de frente, y se para.")
+    r = dict(tipo="reposo", clips=["idle"])
+    tramo("reposo_salon", t=("9:55.30", "9:58.10"), **r,
+          nota="De pie junto a la puerta mirando la tele, tres cuartos, cuerpo entero.")
+    tramo("reposo_habitacion", t=("9:58.40", "10:04.00"), **r,
+          nota="De pie en el salón, de frente, cuerpo entero; gira la cabeza y el cuerpo.")
+    tramo("agachado_mirar", t=("11:16.95", "11:21.40"), clips=["agachado"],
+          nota="Se agacha a mirar algo del suelo y se levanta.")
+
+
+def definir_tramos_kara():
+    """Kara (andar, reposo, sigilo y carrera de una mujer). Casa de Todd de
+    noche, en penumbra: gamma 0,6. Con Todd o Alice en el cuadro, semilla."""
+    a = dict(tipo="andar", clips=["caminar"], gamma=0.6, quien="kara")
+    tramo("andar_cocina", t=("0:40.50", "0:48.35"), vista="espalda", **a,
+          nota="De la cocina al comedor, de espaldas, cuerpo entero; 8 s seguidos.")
+    tramo("andar_escalera", t=("4:04.25", "4:07.00"), vista="espalda", **a,
+          nota="Hacia la escalera, de espaldas, cuerpo entero.")
+    tramo("andar_pasillo_arriba", t=("4:14.40", "4:16.80"), vista="espalda", **a,
+          nota="Pasillo de arriba hacia el cuarto de Alice, de espaldas.")
+    r = dict(tipo="reposo", clips=["idle"], gamma=0.6, quien="kara")
+    tramo("reposo_mesa_1", t=("0:52.80", "0:59.50"), semilla=(630, 300), **r,
+          nota="De pie junto a la mesa mientras Todd y Alice cenan, de frente, cuerpo entero.")
+    tramo("reposo_mesa_2", t=("1:01.35", "1:07.35"), semilla=(640, 280), **r,
+          nota="De pie junto a la mesa, de frente, cuerpo entero, pequeña.")
+    tramo("reposo_mesa_3", t=("1:28.45", "1:35.90"), cajas=[("1:28.45", 760, 290, 420), ("1:35.90", 760, 290, 420)], **r,
+          nota="De pie junto a la mesa, de frente, cuerpo entero, cámara quieta; 7,5 s.")
+    tramo("reposo_manos", t=("1:37.85", "1:39.95"), **r,
+          nota="De pie de frente con las manos juntas delante, cuerpo entero.")
+    tramo("reposo_mesa_4", t=("1:45.95", "1:54.10"), cajas=[("1:45.95", 760, 290, 420), ("1:54.10", 760, 290, 420)], **r,
+          nota="De pie junto a la mesa mientras Todd habla, de frente; 8 s.")
+    tramo("huida_correr", t=("7:48.00", "7:53.00"), tipo="ciclo", vista="espalda",
+          semilla=(430, 380), gamma=0.6, quien="kara", clips=["correr"],
+          nota="Huye corriendo de la mano de Alice bajo la lluvia, de espaldas, oscuro; un "
+          "brazo ocupado.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--video", default=str(VIDEO))
+    ap.add_argument("--video", default=None)
+    ap.add_argument("--conjunto", choices=("persecucion", "connor", "hank", "kara"),
+                    default="persecucion",
+                    help="qué vídeo y qué tabla de tramos: la persecución o la primera "
+                         "misión de Connor (andar y reposo; sale en pose/connor/)")
     sub = ap.add_subparsers(dest="orden", required=True)
     h = sub.add_parser("hoja", help="hoja de contacto de un intervalo")
     h.add_argument("inicio")
@@ -1682,6 +1994,7 @@ def main():
     h.add_argument("--columnas", type=int, default=8)
     h.add_argument("--celda", type=int, default=320)
     h.add_argument("--rejilla", action="store_true")
+    h.add_argument("--gamma", type=float, default=1.0)
     h.add_argument("--nombre")
     c = sub.add_parser("cortes", help="cortes de plano de un intervalo")
     c.add_argument("inicio")
@@ -1698,6 +2011,22 @@ def main():
                        help="rehace el análisis y los dibujos desde puntos.json")
         p.add_argument("--sin-video", action="store_true")
     args = ap.parse_args()
+    global SALIDA
+    # Cada conjunto: su vídeo, su carpeta y su tabla de tramos. La casa de
+    # Hank escribe también en connor/ (es el mismo personaje).
+    conjuntos = {"connor": (VIDEO_CONNOR, "connor", definir_tramos_connor),
+                 "hank": (VIDEO_HANK, "connor", definir_tramos_hank),
+                 "kara": (VIDEO_KARA, "kara", definir_tramos_kara)}
+    if args.conjunto in conjuntos:
+        video, carpeta, definir = conjuntos[args.conjunto]
+        SALIDA = SALIDA / carpeta
+        TRAMOS.clear()
+        definir()
+        if args.video is None:
+            args.video = str(video)
+    if args.video is None:
+        args.video = str(VIDEO)
+    fijar_fps(args.video)
     if args.orden == "hoja":
         orden_hoja(args)
     elif args.orden == "cortes":

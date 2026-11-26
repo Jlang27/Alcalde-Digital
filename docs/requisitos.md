@@ -1,4 +1,4 @@
-# Alcalde Digital frente al enunciado del laboratorio
+# Nova Become Corrupt frente al enunciado del laboratorio
 
 Cada sección del documento del laboratorio («LABORATORIO — ALCALDE DIGITAL», Estructura de Datos II) con dónde se cumple: qué se ve en el juego y qué archivo lo hace. Sirve para la entrega final y para preparar la sustentación, donde a cualquiera de los cuatro le pueden preguntar cualquier parte.
 

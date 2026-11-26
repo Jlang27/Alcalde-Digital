@@ -21,7 +21,7 @@ def preguntas(p, npc):
 
 p = Partida(["periodista"], semilla=1)
 p.iniciar_dia(0)
-assert p.tiempo_total == 120 and p.tiempo_restante == 120   # de 6:30 a 8:30
+assert p.tiempo_total == 120 and p.tiempo_restante == 120
 assert ids_raiz(p) == {"compartir", "ignorar"}, ids_raiz(p)
 # el rumor baja un nivel por el grafo cada RONDAS_POR_NIVEL charlas y no pasa por ti
 from contenido import RONDAS_POR_NIVEL as R
@@ -63,49 +63,47 @@ assert p.compartidos == compartidos + 450            # hablar no sale gratis
 assert len(p.creyentes()) > creyentes_antes         # el rumor avanzo por el grafo
 assert "rafa_alboroto" not in preguntas(p, "cajero")  # lo del alboroto ya esta contado
 
-# la cadena: Hernan conoce el grupo, el celular conecta bots con el origen
-assert p.descubrir("hernan_saludo")[0]
-assert p.descubrir("hernan_quien")[0]
+# El perfil y los comentarios completan la cadena que empezó con Rafa.
 assert p.descubrir("perfil")[0]
-assert "d_rastreo" not in ids_raiz(p)
 assert p.descubrir("cuenta")[0]
+assert "d_rastreo" not in ids_raiz(p)
+assert p.descubrir("comentarios")[0]
 assert "d_rastreo" in ids_raiz(p)
 assert p.red_conocida.camino("tu", "nova") == ["tu", "cajero", "grupo", "bot1", "nova"]
 
 # los bots: la hora solo se mira despues de los comentarios
-assert p.descubrir("comentarios")[0] and p.descubrir("fecha")[0]
+assert p.descubrir("fecha")[0]
 assert "d_bots" in ids_raiz(p)
 assert p.decisiones_descubiertas() == (7, 7)
-assert p.tiempo_restante == 40 - 5 * 3
+assert p.tiempo_restante == 120  # mirar consume minutos de la mañana
 
-# 5 charlas: aun queda una. La sexta agota la manana.
-assert p.rondas == 5 and not p.manana_agotada()
+# Quedan cinco minutos para la reunión. La última charla agota la mañana.
+assert p.rondas == 5.5 and not p.manana_agotada()
 assert p.descubrir("sofia_saludo")[0]
 assert p.manana_agotada() and p.hora() == "8:30"
 assert p.preguntas_de("sofia") == [] and p.preguntas_de("hernan") == []
 
-# llegar tarde recorta solo lo bueno: a las 8:30 ya lo creen los 8 vecinos
-assert len(p.creyentes()) == 8
-assert abs(p.factor_tardanza() - 0.4) < 1e-9
+# Al cierre han pasado dos oleadas de tres rondas y quedan dos vecinos por proteger.
+assert len(p.creyentes()) == 6
+assert abs(p.factor_tardanza() - 0.6) < 1e-9
 efectos, recorto = p._con_tardanza({"desinformacion": -12, "confianza": 8,
                                      "conflictos": 6})
-assert recorto and efectos == {"desinformacion": -5, "confianza": 3, "conflictos": 6}
+assert recorto and efectos == {"desinformacion": -7, "confianza": 5, "conflictos": 6}
 
 # el expediente: lo que se supo hablando y mirando
-assert {"ospina_remodelar", "ospina_plata", "ruiz_acta", "medina_calla"} <= p.expediente
+assert {"ospina_remodelar", "ruiz_acta", "medina_calla"} <= p.expediente
 assert "sabe_ruiz_acta" in p.banderas
 sabidos, faltan = p.expediente_de("Juan Pineda")
 assert sabidos == [] and faltan == 2                  # Pineda solo cae decidiendo
 
-# repetir una pista no hace nada
-assert not p.descubrir("perfil")[0]
-
-# sin margen de tiempo no se puede mirar
+# Una pista repetida no consume minutos. Después de la reunión las nuevas se cierran.
 q = Partida(["ciudadano"], semilla=2)
 q.iniciar_dia(0)
-q.tiempo_restante = 4.0
-assert q.descubrir("perfil") == (False, "No queda tiempo para mirar esto.")
+assert q.descubrir("perfil")[0]
+assert not q.descubrir("perfil")[0] and q.minutos == 5
 assert q.factor_tardanza() == 1.0                     # sin charlas, sin castigo
+q.rondas = MAX_RONDAS
+assert not q.descubrir("cuenta")[0]
 
 # cerrar sin investigar: el diagrama recibe las ramas escondidas, marcadas
 r = Partida(["influencer"], semilla=3)
@@ -158,13 +156,14 @@ assert compartio.resultado_eleccion()[0][2] == max(compartio.porcentajes().value
 rastreo = jugar(["d_rastreo"], pistas=("rafa_saludo", "hernan_saludo", "hernan_quien",
                                        "perfil", "cuenta"))
 assert "bravo_nova" in rastreo.expediente
+assert "ospina_plata" in rastreo.expediente             # se lo contó Hernán
 assert rastreo.encuesta["Juan Pineda"] < 22
 rastreo.iniciar_dia(1)
-assert rastreo.arbol_decision.buscar("b_nova") is not None    # memoria entre dias
+assert "portero_amigo" in rastreo.heredado()                  # memoria entre dias
 assert "bravo_nova" in rastreo.expediente                     # el expediente dura
 
 # los demas dias no se investiga
 q.iniciar_dia(1)
-assert q.decisiones_descubiertas() is None and len(q.opciones()) >= 4
+assert q.decisiones_descubiertas() is None and q.sigilo is not None
 
 print("probar_dia1: todo en orden")

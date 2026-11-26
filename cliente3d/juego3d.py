@@ -1,4 +1,4 @@
-"""Alcalde Digital - cliente 3D.
+"""Nova Become Corrupt - cliente 3D.
 
 Capa visual en Ursina sobre la logica que ya existe: no duplica reglas,
 solo las dibuja. La partida sigue viviendo entera en juego.Partida.
@@ -400,7 +400,7 @@ def abrir_capitulos(seleccion=0):
     cl.capitulo_sel = seleccion
     p = cl.pantalla
     p.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
-    p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.462), E.TEXTO_TENUE,
+    p.append(E.pequena("NOVA BECOME CORRUPT", (-0.84, 0.462), E.TEXTO_TENUE,
                        escala=0.56))
     p.append(E.titular("Capítulos", (-0.84, 0.405), 2.4, E.TEXTO))
     p.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
@@ -472,7 +472,7 @@ def abrir_minijuegos(seleccion=0):
     cl.minijuego_sel = seleccion
     p = cl.pantalla
     p.append(E.banda(2.4, 1.20, (0, 0), E.tinta(243), z=E.Z_FONDO))
-    p.append(E.pequena("ALCALDE DIGITAL", (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
+    p.append(E.pequena("NOVA BECOME CORRUPT", (-0.84, 0.462), E.TEXTO_TENUE, escala=0.56))
     p.append(E.titular("Minijuegos", (-0.84, 0.405), 2.4, E.TEXTO))
     p.append(E.regla(1.70, (-0.85, 0.336), 0.0030, E.luz(70)))
     for i, (_clave, cap, titulo, que) in enumerate(MINIJUEGOS):
@@ -1289,6 +1289,9 @@ def poner_personaje(rol):
     if cl.actor is not None:
         mundo.retirar_protagonista(cl.actor)
     cl.actor = mundo.protagonista(cl.mundo, rol)
+    # El contrato de los clips (clips_persecucion.json) va por modelo: asi el
+    # mezclador de explorar lee la v_diseno de «caminar» de este personaje.
+    cl.actor.modelo_animador = os.path.splitext(os.path.basename(mundo.ruta_personaje(rol)))[0]
     cl.rol_actor = rol
     cl.jugador = None
     animar("idle")
@@ -3532,8 +3535,9 @@ def elegir_pregunta(i):
     # Gesto, no solo texto: el que pregunta asiente y al que le
     # preguntan le cambia la cara. Si el personaje no tiene ese clip,
     # reaccionar() no hace nada y se queda hablando como antes.
-    mundo.reaccionar(cl.actor, random.choice(("asentir", "asentir2")))
-    mundo.reaccionar(cl.npcs.get(cl.con_quien), "sentado_dudar")
+    if cl.con_quien != CELULAR:
+        mundo.reaccionar(cl.actor, random.choice(("asentir", "asentir2")))
+        mundo.reaccionar(cl.npcs.get(cl.con_quien), "sentado_dudar")
     # cada charla son diez minutos: el reloj se oye avanzar
     audio.efecto("pasa_tiempo")
     # Si no abrio decision, igual se anota: la red crece o el dato queda.
@@ -3754,7 +3758,7 @@ def _cifra(clave, p):
 
 def _arriba(p):
     titulo, _dias, lugar = capitulo_de(p.dia_actual)
-    return (f"ALCALDE DIGITAL   ·   DÍA 0{p.dia_actual + 1}   ·   "
+    return (f"NOVA BECOME CORRUPT   ·   DÍA 0{p.dia_actual + 1}   ·   "
             f"{p.nombre_protagonista.upper()}")
 
 
@@ -4833,7 +4837,7 @@ def main():
     x, y, ancho, alto, completa = A.geometria_ventana()
     if completa:
         loadPrcFileData("", "fullscreen 1")
-    app = Ursina(title="Alcalde Digital", borderless=False, vsync=True,
+    app = Ursina(title="Nova Become Corrupt", borderless=False, vsync=True,
                  fullscreen=False, size=(ancho, alto), position=(x, y))
     window.color = color.Color(*mundo.CIELO)
     E.cargar_fuentes()           # antes de crear cualquier texto

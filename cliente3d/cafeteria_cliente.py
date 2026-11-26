@@ -514,8 +514,12 @@ class Reto:
         self.validas = validas
         self.mano_x = []
         mano = est["mano"]
+        # Con el pozo la mano llega a 11 fichas: se juntan para que quepan
+        # siempre en pantalla (a 0,10 de paso, de 12 en adelante se salian).
+        paso = min(0.10, 1.40 / max(1, len(mano)))
+        self.cursor = min(getattr(self, "cursor", 0), max(0, len(mano) - 1))
         for i, (a, b) in enumerate(mano):
-            x = (i - (len(mano) - 1) / 2) * 0.10
+            x = (i - (len(mano) - 1) / 2) * paso
             y = -0.27 + (0.03 if i in validas else 0)
             e = self._ficha(a, b, False, self.LADO_MANO, (x, y))
             if est["mi_turno"] and i not in validas:
@@ -523,9 +527,18 @@ class Reto:
             if self.sel == i:
                 v(E.banda(self.LADO_MANO + 0.02, 0.006, (x, y - self.LADO_MANO - 0.016),
                           E.LLERAS, z=-0.02))
+            elif est["mi_turno"] and self.sel is None and self.cursor == i:
+                # el cursor de las flechas (para las que no tienen numero)
+                v(E.banda(self.LADO_MANO + 0.02, 0.004, (x, y - self.LADO_MANO - 0.016),
+                          E.TEXTO, z=-0.02))
             self.mano_x.append(x)
-            if i < 9:
-                self.vivas += E.tecla(str(i + 1), "", x - 0.016, -0.43, escala=0.8, z=-0.02)[0]
+            # 1-9 y el 0 para la décima; de la undécima en adelante, las flechas
+            if i < 10:
+                self.vivas += E.tecla(str((i + 1) % 10), "", x - 0.016, -0.43, escala=0.8,
+                                      z=-0.02)[0]
+        if est["mi_turno"] and self.sel is None and len(mano) > 1:
+            v(E.pequena("← → eligen ficha  ·  Enter la pone", (0, -0.49),
+                        E.TEXTO_TENUE, escala=0.55, origen=(0, 0)))
         # las puntas, si la ficha elegida cabe en las dos
         if self.sel is not None and self.puntas_x:
             for lado, x, flecha in (("izq", self.puntas_x[0], "←"), ("der", self.puntas_x[1], "→")):
@@ -558,13 +571,27 @@ class Reto:
         if not self.est["mi_turno"]:
             return
         i = None
-        if k.isdigit() and k != "0":
-            i = int(k) - 1
+        mano_x = getattr(self, "mano_x", [])
+        if k.isdigit():
+            i = 9 if k == "0" else int(k) - 1            # el 0 es la décima
+        elif k in ("left arrow", "a", "right arrow", "d") and self.sel is None and mano_x:
+            # Sin ficha elegida, las flechas mueven el cursor por la mano:
+            # asi se llega a todas, tambien a las que no tienen numero.
+            paso = -1 if k in ("left arrow", "a") else 1
+            self.cursor = (getattr(self, "cursor", 0) + paso) % len(mano_x)
+            self.firma = None
+            audio.efecto("mover")
+            return
+        elif k in ("enter", "space") and self.sel is None and mano_x:
+            i = getattr(self, "cursor", 0)
         elif k == "left mouse down":
             mx, my = _raton()
-            for j, x in enumerate(getattr(self, "mano_x", [])):
-                if abs(mx - x) < 0.04 and -0.36 < my < -0.16:
-                    i = j
+            # la mas cercana al clic (juntas, el margen fijo de antes se
+            # solapaba entre vecinas)
+            cerca = [(abs(mx - x), j) for j, x in enumerate(mano_x)
+                     if abs(mx - x) < self.LADO_MANO * 0.6 and -0.36 < my < -0.16]
+            if cerca:
+                i = min(cerca)[1]
             if i is None and self.sel is not None and self.puntas_x and abs(my - 0.02) < 0.1:
                 k = "left arrow" if abs(mx - self.puntas_x[0]) < abs(mx - self.puntas_x[1]) \
                     else "right arrow"

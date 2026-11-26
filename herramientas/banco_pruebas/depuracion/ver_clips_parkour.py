@@ -40,7 +40,8 @@ SALIDA = os.path.join(banco.CAPTURAS, "equipo", "clips", "video")
 os.makedirs(SALIDA, exist_ok=True)
 CONTRATO = os.path.join(RAIZ, "assets", "personajes", "clips_persecucion.json")
 PEDIDOS = [a for a in sys.argv[1:] if not a.startswith("--")]
-MODELOS = ("alcalde",) if "--alcalde" in sys.argv else ("ciudadano",) if "--un-modelo" in sys.argv else ("ciudadano", "alcalde")
+_PEDIDOS_M = next((a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("--modelos=")), None)
+MODELOS = tuple(_PEDIDOS_M) if _PEDIDOS_M else ("alcalde",) if "--alcalde" in sys.argv else ("ciudadano",) if "--un-modelo" in sys.argv else ("ciudadano", "alcalde")
 FPS = 30
 
 juego.Partida._estado_plaza = lambda self: "pacifica"
@@ -156,7 +157,13 @@ VISTAS = {
     "lado": (Vec3(5.6, 1.0, 0.25), 0.9, 40),
     "frente": (Vec3(0.6, 1.2, 6.5), 0.9, 34),
     "tres_cuartos": (Vec3(3.8, 1.35, 4.0), 0.9, 38),
+    "detras": (Vec3(0.5, 1.25, -6.0), 0.9, 34),
 }
+_VISTAS = next((a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("--vistas=")), None)
+if _VISTAS:
+    VISTAS = {k: v for k, v in VISTAS.items() if k in _VISTAS}
+else:
+    VISTAS.pop("detras")
 DERECHA = Vec3(-RUMBO.z, 0, RUMBO.x)   # derecha del personaje si mira a RUMBO
 
 
@@ -242,7 +249,7 @@ def grabar(modelo, clip, datos):
         shutil.rmtree(tmp)
     # hoja de contacto: una fila por vista
     cols = 9
-    an, al = 300, hojas["lado"][0][1].height
+    an, al = 300, next(iter(hojas.values()))[0][1].height
     filas = sum((len(v) + cols - 1) // cols for v in hojas.values())
     hoja = Image.new("RGB", (an * cols, (al + 16) * filas), (10, 10, 12))
     dib = ImageDraw.Draw(hoja)

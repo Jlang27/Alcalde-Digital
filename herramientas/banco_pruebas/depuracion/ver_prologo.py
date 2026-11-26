@@ -13,12 +13,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from banco import *          # noqa: E402,F403
 from banco import J, CAPTURAS  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
+from panda3d.core import Filename  # noqa: E402
 
 import intro                 # noqa: E402
+import mundo                 # noqa: E402
 import prologo               # noqa: E402
 
 SALIDA = os.path.join(CAPTURAS, "equipo", "prologo")
 os.makedirs(SALIDA, exist_ok=True)
+
+
+def guardar(ruta):
+    assert base.win.saveScreenshot(Filename.fromOsSpecific(ruta)), ruta
+
 
 arrancar()
 assert J.cl.menu.opciones[J.cl.menu.seleccion] == "Un jugador"
@@ -35,7 +42,7 @@ for plano, despues in (("avenida", 3.0), ("vida_abel", 1.2), ("vida_jh777", 1.2)
         pasar(frames=1)
     assert ap.fase == "antes", (plano, ap.fase)
     ruta = os.path.join(SALIDA, f"{plano}.png")
-    base.win.saveScreenshot(ruta)        # noqa: F405
+    guardar(ruta)
     hoja.append((ruta, f"{plano} · intro {ap.t:.1f} s"))
 # Luego el paseo de Abel, justo antes de los capitulos
 while ap.fase == "antes":
@@ -50,7 +57,7 @@ for cuando, nombre in MOMENTOS:
     while ap.paseo < cuando and ap.fase == "paseo":
         pasar(frames=1)
     ruta = os.path.join(SALIDA, f"{nombre}.png")
-    base.win.saveScreenshot(ruta)        # noqa: F405
+    guardar(ruta)
     hoja.append((ruta, f"{nombre} · paseo {ap.paseo:.1f} s"))
 # Y la intro de siempre otra vez: un capitulo, los telefonos y el titulo
 planos = []
@@ -60,17 +67,21 @@ for plano, despues in (("cap_3", 1.5), ("peatones", 3.0), ("final", 3.5)):
     while ap.t < objetivo and estado() == "intro":
         vio.append(ap.t)
         pasar(frames=1)
+    # Tras el paseo aún quedan vehículos en el sur. Acortar aquí la
+    # avenida los teletransporta al espacio ocupado por otro vehículo.
+    assert mundo._ACTUAL.get("limites_trafico") == prologo.TRAFICO_PASEO
     # los finales no pueden aparecer: de cap_5 se salta a peatones
     for k in intro.FINALES_INTRO:
         a = inicio["fin_" + k]
         assert not any(a + 0.2 < t < a + intro.SEGUNDOS_RECORRIDO - 0.2 for t in vio), (
             "se vio el plano del final", k)
     ruta = os.path.join(SALIDA, f"{plano}.png")
-    base.win.saveScreenshot(ruta)        # noqa: F405
+    guardar(ruta)
     hoja.append((ruta, f"{plano} · intro {ap.t:.1f} s"))
 # Que termine sola y empiece el dia 1
 assert hasta_estado("rotulo", 40), estado()
 assert J.cl.intro is None
+assert "limites_trafico" not in mundo._ACTUAL
 print("prologo: llego al rotulo del dia 1")
 
 w = 480

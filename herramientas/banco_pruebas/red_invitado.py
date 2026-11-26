@@ -149,7 +149,8 @@ elif MODO == "persecucion":
     import math
     from ursina import held_keys
     assert V["obj"].get("sospechoso") is not None, "no estoy junto a la tarima con la mochila"
-    assert V["espera"] is not None
+    # El anfitrión puede haber dado la salida durante la foto de espera.
+    # Al recibir p_ini, el HUD de carrera sustituye la tarjeta.
     espera(lambda: V["fase"] == "huida", 120, "que me vea")
     h = V["obj"]["huida"]
     g = h["jugador"]

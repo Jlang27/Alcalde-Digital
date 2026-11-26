@@ -1,4 +1,4 @@
-"""Multijugador en red de Alcalde Digital (dos PC por sockets TCP).
+"""Multijugador en red de Nova Become Corrupt (dos PC por sockets TCP).
 
 protocolo.py  el cable: mensajes JSON con longitud, anfitrion y cliente
 sala.py       la sala de espera: nombres, roles y «listo»

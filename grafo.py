@@ -1,5 +1,5 @@
 """
-ALCALDE DIGITAL - Grafo social de Ciudad Nova
+NOVA BECOME CORRUPT - Grafo social de Ciudad Nova
 Universidad del Norte - Estructura de Datos II - Segunda entrega
 
 Igual que estructuras.py: UNICAMENTE la estructura de datos, sin framework

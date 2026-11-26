@@ -28,6 +28,7 @@ import estilo as E
 import kombat as K
 import kombat_vfx
 import mundo
+import posar
 
 # Si el modelo trae estos clips, se usan en vez de la pose por huesos.
 # Contrato con los .glb de los luchadores (ver CLAUDE.md).
@@ -42,15 +43,15 @@ CLIPS_PELEA = {"guardia": "guardia", "andar": "guardia_andar", "puno": "puno",
 # La guardia de un juego de lucha (referencia: Mortal Kombat X): de lado,
 # piernas abiertas y rodillas dobladas (la cadera baja BAJA_GUARDIA), la
 # pierna y el puno izquierdos delante, el de delante a la altura de la cara
-# y el de atras en la barbilla con el codo pegado.
+# y el de atras por delante de la barbilla con el codo pegado.
 # Con peso: rodillas a ~135 grados, el pie de atras lejos, abierto y con
 # el talon levantado (RightFoot), el puno de delante a la altura de la
-# nariz y el de atras pegado a la mejilla con el codo contra las costillas.
+# nariz y el de atras protegiendo la mejilla con el codo contra las costillas.
 # El codo de atras, delante de las costillas y no pegado al costado: con el
 # brazo casi vertical (0,35 hacia delante) el antebrazo subia POR DENTRO
 # de la sudadera de JH777 y el brazo derecho se veia cortado en el codo.
-GUARDIA = {"LeftArm": (-0.05, -0.6, 0.8), "LeftForeArm": (0.05, 0.95, 0.3),
-           "RightArm": (0.12, -0.76, 0.64), "RightForeArm": (-0.32, 0.8, 0.5),
+GUARDIA = {"LeftArm": (-0.12, -0.68, 0.74), "LeftForeArm": (0.03, 0.9, 0.51),
+           "RightArm": (0.12, -0.68, 0.77), "RightForeArm": (0.03, 0.8, 1.0),
            "LeftUpLeg": (-0.2, -0.6, 0.78), "LeftLeg": (0.0, -0.96, -0.22),
            "RightUpLeg": (0.25, -0.82, -0.5), "RightLeg": (0.05, -0.62, -0.78),
            "LeftFoot": (-0.1, -0.45, 0.88), "RightFoot": (0.35, -0.7, 0.6)}
@@ -69,8 +70,8 @@ CARGA_PATADA = dict(GUARDIA, RightUpLeg=(0.05, -0.55, 0.5), RightLeg=(0.0, -1.0,
 PATADA = dict(GUARDIA, RightUpLeg=(0.0, 0.15, 1.0), RightLeg=(0.0, 0.35, 1.0),
               RightArm=(0.4, -0.7, -0.3), RightForeArm=(0.2, 0.5, 0.3))
 # Cubrirse: los dos antebrazos de pie delante de la cara, cruzados.
-BLOQUEO = dict(GUARDIA, RightArm=(0.3, -0.3, 0.9), RightForeArm=(-0.3, 0.95, 0.12),
-               LeftArm=(-0.3, -0.3, 0.9), LeftForeArm=(0.3, 0.95, 0.12))
+BLOQUEO = dict(GUARDIA, RightArm=(0.15, -0.34, 0.94), RightForeArm=(-0.12, 0.95, 0.55),
+               LeftArm=(-0.15, -0.34, 0.94), LeftForeArm=(0.12, 0.95, 0.55))
 # El golpe recibido (como en MK): cabeza y pecho atras (INCLINA), los brazos
 # despedidos hacia atras y un paso atras con la pierna de detras.
 # No una tabla: la cadera atras y abajo (avance y baja en _escalares), la
@@ -211,7 +212,6 @@ ANTICIPA = -0.45               # la carga: el giro y la inclinacion al reves del
 SOBREPASO = 0.22               # lo que la extension se pasa de la pose del golpe
 SOSTENER = 0.3                 # parte de la recuperacion que el golpe se queda fuera
 TUMBADO = 82.0                 # grados que se va hacia atras al caer
-PUNO_DOBLAR = {1: 70.0, 2: 95.0, 3: 70.0}
 # Derribado, cada extremidad llega a la pose con su retraso (factor de la
 # rapidez de mezcla): el torso se pliega primero y brazos y piernas le
 # siguen tarde y cada uno a su ritmo, no el cuerpo entero como un bloque.
@@ -233,6 +233,7 @@ MANOS = {"RightHand": ("RightHandMiddle1", "RightForeArm"),
 # Los pies, solo peleando y solo en las poses que los nombran: plantados
 # (direccion de mundo) o de puntillas; en las demas siguen a la espinilla.
 PIES = {"RightFoot": ("RightToeBase", "RightLeg"), "LeftFoot": ("LeftToeBase", "LeftLeg")}
+GIRO_BRAZO_POR_SEGUNDO = 720.0
 
 
 def _agachado(l):
@@ -265,7 +266,7 @@ def _base_mov(mov):
 class Cuerpo:
     """Anima a un luchador a partir del estado de su Luchador logico."""
 
-    def __init__(self, actor):
+    def __init__(self, actor, pelea=False):
         self.actor = actor
         self.clips = set(actor.getAnimNames())
         self.usa_clips = {"guardia", "puno", "patada"} <= self.clips
@@ -287,7 +288,21 @@ class Cuerpo:
         self.cierre = 1.0                  # 1 = punos cerrados, 0 = manos abiertas
         self.falanges = []
         self.desde, self.mov_ant, self.t_ant = None, None, 0.0
+        self.brazos = None
+        self.ejes_brazo = {}
+        self.giros_brazo = {}
         if not self.usa_clips:
+            if pelea:
+                disponibles = {j.getName().split(":")[-1] for j in actor.getJoints()}
+                requeridos = {lado + n for lado, _ in posar.LADOS for n in
+                              ("Arm", "ForeArm", "Hand", "HandMiddle1", "HandMiddle2",
+                               "HandMiddle3")}
+                if requeridos <= disponibles:
+                    self.brazos = posar.medir(actor, solo_brazos=True)
+                    for lado, _ in posar.LADOS:
+                        self.ejes_brazo[f"{lado}Arm"] = self.brazos.hA[lado]
+                        self.ejes_brazo[f"{lado}ForeArm"] = self.brazos.hF[lado]
+                        self.ejes_brazo[f"{lado}Hand"] = self.brazos.nH[lado]
             self._tomar()
 
     # --- huesos ---------------------------------------------------------
@@ -343,25 +358,31 @@ class Cuerpo:
 
     def _cerrar_punos(self, huesos):
         """Los dos punos cerrados: las tres falanges de cada dedo dobladas
-        hacia la palma (P positivo en estos esqueletos Mixamo, medido con
-        depuracion/ver_dedos.py) y el pulgar recogido sobre ellas (H
-        negativo). Abiertos (la pose de reposo) y cerrados se guardan: al
+        hacia la palma (P positivo en estos esqueletos Mixamo) y el pulgar
+        recogido sobre ellas. Abiertos y cerrados se guardan: al
         recibir y al salir volando se abren las manos (self.cierre)."""
         self.dedos = []
         self.falanges = []                 # (ctrl, hpr abierto, hpr cerrado)
         for lado in ("Right", "Left"):
+            giros_pulgar = self.brazos.pulgar[lado] if self.brazos else ()
+            pulgar_medido = any(any(giro) for giro in giros_pulgar)
             for dedo in ("Index", "Middle", "Ring", "Pinky", "Thumb"):
                 for k in (1, 2, 3):
                     n = huesos.get(f"{lado}Hand{dedo}{k}")
                     if n is None:
                         continue
                     ctrl = self.actor.controlJoint(None, "modelRoot", n.getName())
-                    ctrl.setMat(LMatrix4f(n.getTransformState().getMat()))
+                    ctrl.setMat(LMatrix4f(n.getDefaultValue() if self.brazos else
+                                          n.getTransformState().getMat()))
                     h, p, r = ctrl.getHpr()
                     if dedo == "Thumb":
-                        cerrado = (h - 40.0, p + 20.0, r) if k > 1 else (h, p, r)
+                        if pulgar_medido:
+                            dh, dp, dr = giros_pulgar[k - 1]
+                            cerrado = (h + dh, p + dp, r + dr)
+                        else:
+                            cerrado = (h - 40.0, p + 20.0, r) if k > 1 else (h, p, r)
                     else:
-                        cerrado = (h, p + PUNO_DOBLAR[k], r)
+                        cerrado = (h, p + posar.DOBLAR[k], r)
                     ctrl.setHpr(*cerrado)
                     self.falanges.append((ctrl, (h, p, r), cerrado))
                     self.dedos.append(n.getName())
@@ -402,7 +423,25 @@ class Cuerpo:
             ctrl.setMat(base)
             ctrl.setHpr(h + dh, p + dp, r)
 
-    def _aplicar(self, mira):
+    def _suavizar_giro_brazo(self, nombre, rotacion, d, padre, dt):
+        """Limita el giro axial al cambiar de plano de flexión durante un golpe."""
+        eje = self.ejes_brazo[nombre]
+        direccion = padre.xformVec(d).normalized()
+        normal = padre.xformVec(rotacion.xform(eje)).normalized()
+        anterior = self.giros_brazo.get(nombre)
+        if anterior is not None:
+            d0, n0 = anterior
+            traslado = LMatrix3f()
+            rotate_to(traslado, LVector3f(d0), LVector3f(direccion))
+            grados = math.degrees(posar._angulo(normal, traslado.xform(n0), direccion))
+            exceso = max(0.0, abs(grados) - GIRO_BRAZO_POR_SEGUNDO * dt)
+            if exceso > 0.0:
+                rotacion *= posar._giro(d, math.copysign(exceso, grados))
+                normal = padre.xformVec(rotacion.xform(eje)).normalized()
+        self.giros_brazo[nombre] = (direccion, normal)
+        return rotacion
+
+    def _aplicar(self, mira, dt=0.0):
         a = self.actor
         # La columna va primero y se fuerza la actualizacion: los brazos se
         # orientan desde el hombro, que cuelga de ella; si no, iban un
@@ -414,6 +453,21 @@ class Cuerpo:
         ejes = (Vec3(math.cos(yaw), 0, -math.sin(yaw)), Vec3(0, 1, 0),
                 Vec3(math.sin(yaw), 0, math.cos(yaw)))
         arriba = a.getTop()
+
+        def direccion(k):
+            d = ejes[0] * k[0] + ejes[1] * k[1] + ejes[2] * k[2]
+            return a.getRelativeVector(arriba, d).normalized()
+
+        codos = {}
+        if self.brazos:
+            for lado, _ in posar.LADOS:
+                brazo, antebrazo = f"{lado}Arm", f"{lado}ForeArm"
+                normal = direccion(self.dirs[brazo]).cross(direccion(self.dirs[antebrazo]))
+                # La bisagra marca el giro de la manga. Cerca de la extensión,
+                # la normal pierde definición y se conserva el giro de reposo.
+                mezcla = _suave(normal.length() / 0.25)
+                if normal.normalize():
+                    codos[brazo] = codos[antebrazo] = (normal, mezcla)
         hechos = {}
         for corto, _nombre, ctrl, base, hacia, visto in self.huesos:
             m_padre = hechos[visto] if isinstance(visto, str) else visto.getMat(a)
@@ -424,12 +478,19 @@ class Cuerpo:
             if k is None:
                 hechos[corto] = base * m_padre
                 continue
-            d = ejes[0] * k[0] + ejes[1] * k[1] + ejes[2] * k[2]
-            d = a.getRelativeVector(arriba, d).normalized()
+            d = inversa.xformVec(direccion(k)).normalized()
             giro = LMatrix3f()
-            rotate_to(giro, LVector3f(hueso), LVector3f(inversa.xformVec(d).normalized()))
+            rotate_to(giro, LVector3f(hueso), LVector3f(d))
+            rotacion = base.getUpper3() * giro
+            if corto in codos:
+                normal, mezcla = codos[corto]
+                eje = self.ejes_brazo[corto]
+                angulo = posar._angulo(rotacion.xform(eje), inversa.xformVec(normal), d)
+                rotacion *= posar._giro(d, math.degrees(angulo) * mezcla)
+            if corto in self.ejes_brazo:
+                rotacion = self._suavizar_giro_brazo(corto, rotacion, d, m_padre, dt)
             m = LMatrix4f(base)
-            m.setUpper3(base.getUpper3() * giro)
+            m.setUpper3(rotacion)
             ctrl.setMat(m)
             hechos[corto] = m * m_padre
 
@@ -481,7 +542,7 @@ class Cuerpo:
         # La pose se calcula de pie (las direcciones son del cuerpo, no del
         # mundo) y luego se tumba el cuerpo entero.
         self.actor.setP(0)
-        self._aplicar(l.mira)
+        self._aplicar(l.mira, dt)
         self.actor.setP(-self.tumbar)
 
     def _pesos(self, l):
@@ -642,8 +703,9 @@ class Cuerpo:
         # guardia que respira: los puños suben y bajan un poco
         s = math.sin(reloj * 2.2) * 0.05
         pose = dict(GUARDIA)
-        pose["RightForeArm"] = (-0.45, 0.8 + s, 0.35)
-        pose["LeftForeArm"] = (0.1, 0.75 + s, 0.65)
+        for hueso in ("RightForeArm", "LeftForeArm"):
+            lateral, altura, frente = GUARDIA[hueso]
+            pose[hueso] = (lateral, altura + s, frente)
         return pose, 12.0
 
     def _por_clips(self, l):
@@ -1283,8 +1345,8 @@ class Combate:
         dependen los carteles de ganar y perder."""
         self.pelea = pelea
         self.yo = yo
-        self.santi = Cuerpo(actor_santi)
-        self.nodo = Cuerpo(actor_nodo)
+        self.santi = Cuerpo(actor_santi, pelea=True)
+        self.nodo = Cuerpo(actor_nodo, pelea=True)
         self.mascara = None
         self.camara = Camara()
         self.contorno = Contorno(actor_santi, actor_nodo)

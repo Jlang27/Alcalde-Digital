@@ -1,5 +1,5 @@
 """
-ALCALDE DIGITAL - Estructuras de datos
+NOVA BECOME CORRUPT - Estructuras de datos
 Universidad del Norte - Estructura de Datos II - Primera entrega
 
 Este modulo contiene UNICAMENTE las estructuras de datos. No importa ningun

@@ -1,6 +1,6 @@
 # Prólogo de Abel
 
-Prototipo independiente de la apertura de *Alcalde Digital*. Se puede ver completo en [vista_previa.mp4](vista_previa.mp4) o ejecutar en el motor desde la raíz del proyecto.
+Prototipo independiente de la apertura de *Nova Become Corrupt*. Se puede ver completo en [vista_previa.mp4](vista_previa.mp4) o ejecutar en el motor desde la raíz del proyecto.
 
 ```bash
 .venv/bin/python prototipos/prologo_abel/prologo.py

@@ -295,9 +295,9 @@ PLANOS_SALIDA = (
     # Se para y le vibra el telefono.
     ("vibra", 3.0, Vec3(12.7, 1.5, ZF - 4.4), Vec3(12.9, 1.5, ZF - 4.1),
      Vec3(14.0, 1.4, Z_ACERA), Vec3(14.0, 1.45, Z_ACERA), 44),
-    # Primer plano: lo lee. Ella a la izquierda, el mensaje a la derecha.
-    ("mensaje", 14.0, Vec3(13.75, 1.55, ZF - 3.0), Vec3(13.85, 1.55, ZF - 2.6),
-     Vec3(14.2, 1.5, Z_ACERA), Vec3(14.2, 1.5, Z_ACERA), 38),
+    # La cara y la mano que sostiene el teléfono quedan sobre las opciones.
+    ("mensaje", 14.0, Vec3(13.1, 1.75, ZF - 4.5), Vec3(13.2, 1.72, ZF - 4.35),
+     Vec3(14.42, 1.35, Z_ACERA), Vec3(14.42, 1.35, Z_ACERA), 50),
 )
 INICIOS_SALIDA = [sum(p[1] for p in PLANOS_SALIDA[:i]) for i in range(len(PLANOS_SALIDA))]
 CAMINO_SALIDA = ((21.5, Z_ACERA), PARADA, 0.62)

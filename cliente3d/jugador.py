@@ -28,7 +28,10 @@ import persecucion as F
 
 RADIO = 0.34                 # el bulto del personaje visto desde arriba
 
-VELOCIDAD = 2.7              # metros por segundo
+# Andar a 1,6 m/s: el «caminar» calcado de Connor (herramientas/animar_parkour.py)
+# pisa a ~1,4-1,55 m/s con su cadencia de 116 pasos/min; a 2,7 los pies
+# patinaban un 35 % (el ciclo de andar no baja de 0,85 s). Decidido el 18 nov.
+VELOCIDAD = 1.6              # metros por segundo
 VELOCIDAD_CORRER = 5.2       # Shift
 VELOCIDAD_AGACHADO = 1.3     # Ctrl: lento a proposito, es el precio del sigilo
 VELOCIDAD_GIRO = 10.0        # suavizado del giro del personaje
@@ -50,8 +53,14 @@ GRACIA_PARADA = 0.07
 # a los clips en bucle de siempre. Solo donde juego3d lo permite
 # (suave_permitido): no en el sigilo ni en la plaza caotica.
 EXPLORAR_SUAVE = os.environ.get("ALCALDE_EXPLORAR", "1") != "0"
-ARRANQUE_EXPLORAR = 0.4      # s hasta el 95 % de la velocidad pedida
-FRENADA_EXPLORAR = 0.3       # s hasta casi parado
+# Medido en Connor (casa de Hank, docs/animacion_explorar.md): arranca hasta
+# el 90 % en 0,65 s, frena en 0,6-0,75 s y gira 90 grados en ~1,0 s. Se aplica
+# moderado (realista no puede ser torpe al mando): 0,55 / 0,5 y el giro de
+# GIRO_EXPLORAR (90 grados en ~0,6 s). Solo explorando con EXPLORAR_SUAVE: la
+# persecucion y el sigilo siguen con lo de antes. 18 nov.
+ARRANQUE_EXPLORAR = 0.55     # s hasta el 95 % de la velocidad pedida
+FRENADA_EXPLORAR = 0.5       # s hasta casi parado
+GIRO_EXPLORAR = 5.0          # como VELOCIDAD_GIRO: 95 % del giro en 3/5 = 0,6 s
 FUNDIDO_LOCOMOCION = 0.16    # lo que tarda cada peso en seguir a la velocidad
 SENSIBILIDAD = 42.0
 
@@ -1997,7 +2006,7 @@ class Jugador:
         hacia = d if d is not None else (Vec3(self._vx_exp, 0, self._vz_exp) if v > 0.3 else None)
         if hacia is not None:
             objetivo = 180.0 - math.degrees(math.atan2(hacia.x, hacia.z))
-            self.rumbo += _angulo_corto(self.rumbo, objetivo) * min(1.0, VELOCIDAD_GIRO * dt)
+            self.rumbo += _angulo_corto(self.rumbo, objetivo) * min(1.0, GIRO_EXPLORAR * dt)
             self.actor.setH(self.rumbo)
         if self.agachado:
             self._animar("agachado_andar" if v > 0.05 else "agachado")

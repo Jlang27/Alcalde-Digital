@@ -1,4 +1,4 @@
-# Proyecto: Alcalde Digital
+# Proyecto: Nova Become Corrupt
 
 ## Qué es
 Videojuego educativo sobre el uso responsable de las redes sociales, con estructura de **Detroit: Become Human** (cada día un protagonista, decisiones con consecuencias, diagrama de flujo al cerrar el día). Proyecto de **Estructura de Datos II, Universidad del Norte**; se presenta en la **Feria Gamer**. Cliente 3D: **Ursina + Panda3D (simplepbr)**.

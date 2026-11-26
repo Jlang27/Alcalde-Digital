@@ -179,7 +179,7 @@ class Medidas:
     de enlace en ejes del cuerpo, las bisagras, la palma, y el volumen del
     cuerpo y de las manos en la malla."""
 
-    def __init__(self, actor):
+    def __init__(self, actor, solo_brazos=False):
         bundle = actor.getPartBundle("modelRoot")
         self.juntas, self.padre, self.orden = {}, {}, []
 
@@ -226,8 +226,9 @@ class Medidas:
                 self.R0[k] = self.Rl0[k] * self.R0[p]
                 self.p0[k] = self.R0[p].xform(self.off[k]) + self.p0[p]
         self._brazos(actor)
-        self._piernas(actor)
-        self._malla(actor)
+        if not solo_brazos:
+            self._piernas(actor)
+            self._malla(actor)
 
     # --- las cadenas ---------------------------------------------------
     def _bisagra(self, actor, arriba, abajo, punta, clips, reserva):
@@ -519,10 +520,10 @@ def _huella(actor):
     return tuple(filas), geoms, len(juntas)
 
 
-def medir(actor):
-    clave = _huella(actor)
+def medir(actor, solo_brazos=False):
+    clave = (_huella(actor), solo_brazos)
     if clave not in _MEDIDAS:
-        _MEDIDAS[clave] = Medidas(actor)
+        _MEDIDAS[clave] = Medidas(actor, solo_brazos)
     return _MEDIDAS[clave]
 
 

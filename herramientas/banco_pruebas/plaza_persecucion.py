@@ -7,8 +7,9 @@ pasa), deslizarse bajo la persiana, saltar el hueco entre plataformas y
 subir la escalinata. Luego la persecucion: lo mira, echa a correr y Mateo
 lo sigue por la ruta hasta acorralarlo; pasan las cinco fases, se avisa
 antes de cada obstaculo, cae lo que tiene que caer, vuela lo que se lanza
-y E lo atrapa (secuencia y dialogo). Con «escapa», Mateo se queda quieto y
-el sospechoso se pierde.
+y E lo atrapa (secuencia y dialogo). El cierre lleva a la cinematica
+final, que se omite con Enter para comprobar el escrutinio. Con «escapa»,
+Mateo se queda quieto y el sospechoso se pierde.
 
     .venv/bin/python herramientas/banco_pruebas/plaza_persecucion.py [escapa]
 """
@@ -197,8 +198,26 @@ pasar(3.0)
 foto("persecucion_cierre")
 
 assert J.cl.jugador.pasillo is None and J.cl.jugador.rail is None   # al acabar se abre
-J.volver_al_menu()
-pasar(0.5)
+if ESCAPA:
+    J.volver_al_menu()
+    pasar(0.5)
+else:
+    for _ in range(8):
+        if estado() == "escena":
+            break
+        tecla("enter", 0.2)
+    assert isinstance(J.cl.escena, J.cine_final.FinalCiudad), estado()
+    tecla("enter", 0.05)
+    fin = J.cl.escena.fin
+    tecla("enter", 0.05)
+    assert J.cl.escena.fin == fin, "volver a pulsar Enter reinició el fundido"
+    assert hasta_estado("final", 2), estado()
+    assert J.cl.escena is None and "final" not in plaza._PLAZA
+    assert any(getattr(e, "text", "") == "ESCRUTINIO FINAL · 100 % DE LAS MESAS"
+               for e in J.cl.diagrama)
+    foto("persecucion_escrutinio")
+    tecla("enter", 0.5)
+assert estado() == "menu"
 assert J.cl.hud_persecucion is None and not J.cl.persigue
 informe()
 print("plaza_persecucion: todo bien")

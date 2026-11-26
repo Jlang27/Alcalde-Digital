@@ -1,4 +1,4 @@
-"""Montaje independiente de la apertura de Alcalde Digital. Enter salta la secuencia."""
+"""Montaje independiente de la apertura de Nova Become Corrupt. Enter salta la secuencia."""
 
 import math
 import random
@@ -80,17 +80,8 @@ def prolongar_avenida(ciudad):
     mundo._edificios_ciudad(ciudad, azar, manzanas)
 
 
-def preparar_trafico(ciudad):
+def preparar_trafico():
     mundo._ACTUAL["limites_trafico"] = TRAFICO_PASEO
-    # El bus de la panorámica original solo tiene carrocería. En el plano
-    # bajo se ve el hueco hasta el suelo. Lleva neumáticos con tapacubos lisos.
-    goma = mundo._material((0.013, 0.014, 0.018, 1), rugosidad=0.9)
-    metal = mundo._material((0.21, 0.22, 0.24, 1), rugosidad=0.43, metalico=0.65)
-    for bus in ciudad.findAllMatches("bus"):
-        for z in (-3.55, 3.7):
-            for lado in (-1, 1):
-                mundo._pieza(bus, "sphere", goma, (0.38, 1.06, 1.06), (lado * 1.27, 0.53, z))
-                mundo._pieza(bus, "sphere", metal, (0.08, 0.58, 0.58), (lado * 1.42, 0.53, z))
     # El bus atraviesa el cuadro entre el segundo y el tercer presagio.
     for _ in range(100):
         mundo.mover_trafico(1 / 30)
@@ -286,7 +277,7 @@ def abrir(ventana="onscreen", tamano=None):
     ajustes.cargar()
     # intro.py comparte el convenio RGBA de 8 bits de juego3d.main.
     color.rgba = color.rgba32
-    app = Ursina(title="Alcalde Digital · Prólogo de Abel", window_type=ventana,
+    app = Ursina(title="Nova Become Corrupt · Prólogo de Abel", window_type=ventana,
                  fullscreen=False, borderless=False, development_mode=False,
                  size=tamano or ajustes.geometria_ventana(False)[2:4])
     window.update_aspect_ratio()
@@ -300,7 +291,7 @@ def abrir(ventana="onscreen", tamano=None):
     raiz, abel = mundo.crear("ciudad", "candidato")
     ciudad = raiz.find("escenario_ciudad")
     prolongar_avenida(ciudad)
-    preparar_trafico(ciudad)
+    preparar_trafico()
     ajustes.aplicar_brillo()
     apertura = AperturaAbel(abel)
     # La carga de la ciudad puede durar varios segundos. El primer dt del

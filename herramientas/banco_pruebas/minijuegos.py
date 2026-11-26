@@ -9,6 +9,8 @@ para comprobar que, al acabar, se vuelve a la lista y no al cierre del dia.
 """
 from banco import *
 from banco import J
+from panda3d.core import PNMImage, Point2, Point3, TransparencyAttrib
+from ursina import application
 
 
 def abrir_lista():
@@ -51,6 +53,34 @@ def pausa_y_vuelta(nombre, medir):
     assert estado() == antes, (nombre, estado())
 
 
+def comprobar_bolas():
+    """Comprueba que cada bola cambia los píxeles del paño bajo su centro."""
+    app = application.base
+    bolas = J.cl.billar.vista.bolas
+    imagenes = (PNMImage(), PNMImage())
+    for bola in bolas.values():
+        assert bola.enabled and not bola.isHidden()
+        assert bola.find("**/+GeomNode"), "la bola existe pero perdió su malla"
+        assert bola.model.getTransparency() == TransparencyAttrib.M_none
+    for visibles, imagen in zip((True, False), imagenes):
+        for bola in bolas.values():
+            bola.show() if visibles else bola.hide()
+        app.graphicsEngine.renderFrame()
+        app.graphicsEngine.renderFrame()
+        assert app.win.getScreenshot(imagen)
+    puestas, retiradas = imagenes
+    for numero, bola in bolas.items():
+        bola.show()
+        centro = Point2()
+        assert app.camLens.project(app.cam.getRelativePoint(bola, Point3(0)), centro)
+        x = round((1 + centro.x) * (puestas.getXSize() - 1) / 2)
+        y = round((1 - centro.y) * (puestas.getYSize() - 1) / 2)
+        # Un reflejo o una letra del aviso puede tapar el centro exacto.
+        pixeles = sum((puestas.getXel(i, j) - retiradas.getXel(i, j)).length() > 0.04
+                      for i in range(x - 5, x + 6) for j in range(y - 5, y + 6))
+        assert pixeles >= 10, ("bola invisible", numero, x, y, pixeles)
+
+
 arrancar()
 abrir_lista()
 foto("minijuegos_lista")
@@ -58,6 +88,25 @@ tecla("down arrow", 0.2)
 tecla("up arrow", 0.2)
 tecla("escape", 0.5)
 assert estado() == "menu", estado()
+
+# En un proceso recién abierto, la primera esfera puede ser un cerro de
+# la azotea. Fundirlo vaciaba el modelo de todas las bolas posteriores.
+arrancar_minijuego("kombat", ("aviso_papel",))
+tecla("enter", 3.5)
+arrancar_minijuego("billar", ("aviso_papel",))
+tecla("enter", 2.0)
+billar = J.cl.billar
+assert billar.p.colocar_blanca(-0.8, 0)
+billar.tirar_ya(1.5708, 0.16)       # a la banda, sin tocar el rombo
+for _ in range(240):
+    pasar(frames=1)
+    if any(rotulo.text == "FALTA TUYA" for rotulo in billar.hud.tmp):
+        break
+else:
+    raise AssertionError("faltó el aviso de falta")
+pasar(0.3)                          # el rótulo ya terminó de entrar
+comprobar_bolas()
+foto("minijuegos_billar_falta_tras_kombat")
 
 # --- el tablero del capitulo 1, con la mañana investigada ---
 arrancar_minijuego("tablero", ("juego", "aviso_papel"))
@@ -84,11 +133,15 @@ foto("minijuegos_billar_reglas")
 tecla("enter", 1.0)
 assert estado() == "billar" and J.cl.billar is not None, estado()
 pasar(1.5)
+comprobar_bolas()
 foto("minijuegos_billar")
 pausa_y_vuelta("billar", lambda: J.cl.billar.p.reloj)
+vista_billar = J.cl.billar.vista
 
 # --- el duelo y la persecucion: la misma plaza, en sus dos estados ---
 arrancar_minijuego("duelo", ("aviso_papel",))
+assert all(pieza.isEmpty() for pieza in vista_billar.piezas_taco)
+assert all(guia.isEmpty() and guia.q.isEmpty() for guia in vista_billar.guias)
 assert J.cl.partida.estado_plaza == "pacifica" and J.cl.partida.duelo is not None
 tecla("enter", 1.0)
 assert estado() == "duelo", estado()
@@ -125,6 +178,13 @@ assert estado() == "minijuegos" and J.cl.partida is None or estado() == "minijue
 assert J.cl.minijuego is None and not J.cl.dia_cerrado
 assert [m[0] for m in J.MINIJUEGOS][J.cl.minijuego_sel] == "kombat"
 foto("minijuegos_vuelta")
+arrancar_minijuego("billar", ("aviso_papel",))
+tecla("enter", 2.0)
+assert estado() == "billar", estado()
+comprobar_bolas()
+foto("minijuegos_billar_despues_de_kombat")
+J.volver_al_menu()
+abrir_lista()
 tecla("escape", 0.5)
 assert estado() == "menu"
 informe()
