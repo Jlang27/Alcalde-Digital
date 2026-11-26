@@ -1361,7 +1361,12 @@ class AvisoPapel:
         a(E.banda(0.92, 0.50, (0, 0.0), E.PAPEL, z=E.Z_TARJETA))
         a(E.banda(0.92, 0.010, (0, 0.245), E.LLERAS, z=E.Z_ADORNO_MODAL))
         a(E.pequena(rotulo, (-0.42, 0.215), E.TINTA_TENUE, escala=0.56))
-        a(E.titular(titulo, (-0.42, 0.185), 1.6, E.TINTA))
+        encabezado = E.titular(titulo, (-0.42, 0.185), 1.6, E.TINTA)
+        # El nombre del vecino puede alargar el titulo mas que la tarjeta.
+        ancho_titulo = encabezado.width * encabezado.scale_x
+        if ancho_titulo > 0.84:
+            encabezado.scale *= 0.84 / ancho_titulo
+        a(encabezado)
         a(E.entradilla(cuerpo, (-0.42, 0.105), 0.80, E.TINTA_TENUE, ancho=50))
         self.piezas += _boton_papel("PULSA ENTER PARA CONTINUAR", (0, -0.190))
 
